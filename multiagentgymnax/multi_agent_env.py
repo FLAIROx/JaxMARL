@@ -42,7 +42,7 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         #out = jax.lax.cond(states_st.ep_done, self.reset_env, lambda x: x,  ) TODO
         
         #jax.debug.print('ep done {d} {s} ', d=states_st.ep_done, s=states_st)
-        obs_re, states_re = self.reset_env(state.pos.shape[0], key_reset, params)  
+        obs_re, states_re = self.reset_env(state.pos.shape[0], key_reset)  
         # Auto-reset environment based on termination
         state = jax.tree_map(
             lambda x, y: jax.lax.select(states_st.ep_done, x, y), states_re, states_st

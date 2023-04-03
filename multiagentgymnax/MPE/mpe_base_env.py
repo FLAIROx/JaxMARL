@@ -29,7 +29,7 @@ key qs
 
 landmarks.. 
 can be added to list of agents?
-
+and then just zero out the action for them?
 
 """
 
@@ -61,16 +61,19 @@ class MPEParams:
     
 
 
-class SimpleMPEEnv(MultiAgentEnv):
+class MPEBaseEnv(MultiAgentEnv):
     
     def __init__(self, num_agents, num_landmarks=1):
-        # list of agents and entities (can change at execution-time!)
-        #self.agents = []
+
+        # Agent and entity constants
         self.num_agents = num_agents
         self.num_landmarks = num_landmarks
         self.num_entities = num_agents + num_landmarks
+        self.agent_range = jnp.arange(num_agents)
+        self.entity_range = jnp.arange(self.num_entities)
         
         # NOTE this should all be initalised with a config file
+        # Agent parameters
         self.rad = jnp.concatenate([jnp.full((num_agents), 0.1),
                                     jnp.full((num_landmarks), 0.2)])
         self.moveable = jnp.concatenate([jnp.full((num_agents), True),
@@ -79,34 +82,19 @@ class SimpleMPEEnv(MultiAgentEnv):
         self.mass = jnp.full((self.num_entities), 1)
         self.max_speed = jnp.concatenate([jnp.full((num_agents), 0.5),
                                           jnp.full((num_landmarks), 0.0)])
-        self.a_colour = [(225, 225, 0)] * num_agents + [(225, 225, 255)] * num_landmarks
+        self.colour = [(225, 225, 0)] * num_agents + [(225, 225, 255)] * num_landmarks
         
-        self.u_noise = jnp.concatenate([jnp.full((num_agents), 1),  # set to 0 if no noise
-                                        jnp.full((num_landmarks), 0)])
+        self.u_noise = jnp.full((num_agents), 1) 
         self.c_noise = jnp.concatenate([jnp.full((num_agents), 1),  # set to 0 if no noise
                                         jnp.full((num_landmarks), 0)])
         
-        #self.l_pos: chex.Array 
-        #self.l_rad: chex.Array
-        #self.l_moveable: chex.Array
-        
-        
-        self.agent_range = jnp.arange(num_agents)
-        self.entity_range = jnp.arange(self.num_entities)
-        
-        # communication channel dimensionality
-        self.dim_c = 3
-        # position dimensionality
-        self.dim_p = 2
-        # color dimensionalit
-        # y
-        self.dim_color = 3
-        # simulation timestep
-        self.dt = 0.1
-        # physical damping
-        self.damping = 0.25
-        # contact response parameters
-        self.contact_force = 1e2
+        # World parameters
+        self.dim_c = 3  # communication channel dimensionality
+        self.dim_p = 2  # position dimensionality
+        self.dim_color = 3  # color dimensionality
+        self.dt = 0.1  # simulation timestep
+        self.damping = 0.25  # physical damping
+        self.contact_force = 1e2  # contact response parameters
         self.contact_margin = 1e-3
 
         # PLOTTING
@@ -120,12 +108,13 @@ class SimpleMPEEnv(MultiAgentEnv):
         )'''
         self.renderOn = False
 
+    @partial(jax.jit, static_argnums=[0])  
     def step_env(self, key, state, actions):
         
         u, c = self._set_action(self.agent_range, actions)
         print('u ', u, 'c', c)
         
-        p_pos, p_vel, c = self.world_step(key, state, u)
+        p_pos, p_vel, c = self._world_step(key, state, u)
         
         state = State(
             p_pos=p_pos,
@@ -138,11 +127,11 @@ class SimpleMPEEnv(MultiAgentEnv):
         
         # TODO Rewards
         
-        
+    @partial(jax.jit, static_argnums=[0])
     def reset_env(self):
         
         state = State(
-        p_pos=jnp.array([[1.0, 1.0], [0.0, 0.0], [-1.0, 0.0], [0.5, 0.5]]),
+        p_pos=jnp.array([[1.0, 1.0], [0.0, 0.5], [-1.0, 0.0], [0.5, 0.5]]),
         p_vel=jnp.zeros((self.num_entities, 2)),
         s_c=jnp.zeros((self.num_entities, 2)),
         u=jnp.zeros((self.num_entities, 2)),
@@ -172,62 +161,59 @@ class SimpleMPEEnv(MultiAgentEnv):
     # return all entities in the world
     @property
     def entities(self):
-        return self.agents + self.landmarks
+        return self.entity_range
 
-
-
-
-    def world_step(self, key, state, u):
+    def _world_step(self, key, state, u):
         
+        # could do less computation if we only update the agents and not landmarks
+        
+        #u = jnp.append(u, u[0][None], axis=0)
         p_force = jnp.zeros((self.num_agents, 2))  # TODO entities
         
         # apply agent physical controls
-        key_noise = jax.random.split(key, self.num_entities)
-        p_force = self.apply_action_force(key_noise, p_force, u, self.u_noise, self.moveable)
-        print('p_force post apply action force', p_force)
+        key_noise = jax.random.split(key, self.num_agents)
+        p_force = self._apply_action_force(key_noise, p_force, u, self.u_noise, self.moveable[:self.num_agents])
         
         # apply environment forces
-        p_force = self.apply_environment_force(p_force, state)
+        p_force = jnp.concatenate([p_force, jnp.zeros((self.num_landmarks, 2))])
+        p_force = self._apply_environment_force(p_force, state)
         print('p_force post apply env force', p_force)
         
         # integrate physical state
-        p_pos, p_vel = self.integrate_state(p_force, state.p_pos, state.p_vel, self.mass, self.max_speed)
+        p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, self.mass, self.moveable, self.max_speed)
         
         # c = self.comm_action() TODO
         c = None
         return p_pos, p_vel, c
         
         
-    def comm_action(self, key, c, c_noise, silent):
+    def _comm_action(self, key, c, c_noise, silent):
         silence = jnp.zeros(c.shape)
         noise = jax.random.normal(key, shape=c.shape) * c_noise
         return jax.lax.select(silent, c + noise, silence)
         
     # gather agent action forces
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0])
-    def apply_action_force(self, key, p_force, u, u_noise, moveable):
+    def _apply_action_force(self, key, p_force, u, u_noise, moveable):
         noise = jax.random.normal(key, shape=u.shape) * u_noise * 0.0 #NOTE temp
         return jax.lax.select(moveable, u + noise, p_force)
 
-    # gather physical forces acting on entities
-    #@partial(jax.vmap, in_axes=[None, 0, 0])
-    def apply_environment_force(self, p_force_all, state):
-        # could do this with two vmaps
-        # but the has outputs affecting all agents, thus must return a pforce of num_agent size
+    def _apply_environment_force(self, p_force_all, state):
+        """ gather physical forces acting on entities """
         
-        @partial(jax.vmap, in_axes=[0, 0])
-        def _env_force_outer(idx, p_force):
+        @partial(jax.vmap, in_axes=[0])
+        def __env_force_outer(idx):
             
-            @partial(jax.vmap, in_axes=[None, None, 0, 0])
-            def _env_force_inner(idx_a, p_force_a, idx_b, p_force_b):
+            @partial(jax.vmap, in_axes=[None, 0])
+            def __env_force_inner(idx_a, idx_b):
 
                 l = idx_b <= idx_a 
                 l_a = jnp.zeros((2, 2))
                 
-                cf = self.get_collision_force(idx_a, idx_b, state) 
-                return jax.lax.select(l, l_a, cf)
+                collision_force = self._get_collision_force(idx_a, idx_b, state) 
+                return jax.lax.select(l, l_a, collision_force)
             
-            p_force_t = _env_force_inner(idx, p_force, self.agent_range, p_force_all)
+            p_force_t = __env_force_inner(idx, self.entity_range)
 
             #print('p force t s', p_force_t.shape)
 
@@ -238,32 +224,29 @@ class SimpleMPEEnv(MultiAgentEnv):
 
             return p_force_o
         
-        p_forces = _env_force_outer(self.agent_range, p_force_all)
+        p_forces = __env_force_outer(self.entity_range)
         p_forces = jnp.sum(p_forces, axis=0)  
-            
-        return p_forces + p_force_all
         
-        # [force_a with every agent, force from a on every agent]
+        return p_forces + p_force_all        
         
+    @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0, 0])
+    def _integrate_state(self, p_force, p_pos, p_vel, mass, moveable, max_speed):
+        """ integrate physical state """
         
-    # integrate physical state
-    @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0])
-    def integrate_state(self, p_force, p_pos, p_vel, mass, max_speed):
-        # TODO add moveable constraint and max speed 
-        #def _moveable():
         p_vel = p_vel * (1 - self.damping)
         
-        p_vel += (p_force / mass) * self.dt
+        p_vel += (p_force / mass) * self.dt * moveable
         
         speed = jnp.sqrt(
                     jnp.square(p_vel[0]) + jnp.square(p_vel[1])
-        )
+        )        
         over_max = (p_vel / jnp.sqrt(jnp.square(p_vel[0]) + jnp.square(p_vel[1])) * max_speed)
-                    
+        
+        p_vel = jax.lax.select(speed > max_speed, over_max, p_vel)
         p_pos += p_vel * self.dt  
         return p_pos, p_vel  
         
-    def update_agent_state(self, agent):
+    def _update_agent_state(self, agent): # TODO
         # set communication state (directly for now)
         if agent.silent:
             agent.state.c = jnp.zeros(self.dim_c)
@@ -277,7 +260,7 @@ class SimpleMPEEnv(MultiAgentEnv):
             
             
     # get collision forces for any contact between two agents # TODO entities
-    def get_collision_force(self, idx_a, idx_b, state):
+    def _get_collision_force(self, idx_a, idx_b, state):
         
         dist_min = self.rad[idx_a] + self.rad[idx_b]
         delta_pos = state.p_pos[idx_a] - state.p_pos[idx_b]
@@ -290,18 +273,16 @@ class SimpleMPEEnv(MultiAgentEnv):
         force_b = -force * self.moveable[idx_b]
         force = jnp.array([force_a, force_b])
             
-        
         c = ~self.collide[idx_a] |  ~self.collide[idx_b]
-        c_force = jnp.zeros((2, 2)) # TODO update dimensions
+        c_force = jnp.zeros((2, 2)) 
         return jax.lax.select(c, c_force, force)
         
-    
+    ### === PLOTTING === ###
     def enable_render(self, mode="human"):
         if not self.renderOn and mode == "human":
             pygame.init()
             self.screen = pygame.display.set_mode(self.screen.get_size())
             self.renderOn = True 
-        
         
     def render(self, state):
 
@@ -310,8 +291,7 @@ class SimpleMPEEnv(MultiAgentEnv):
         self.draw(state)
         pygame.display.flip()
         return
-        
-        
+           
     def draw(self, state):
         # clear screen
         self.screen.fill((255, 255, 255))
@@ -323,7 +303,7 @@ class SimpleMPEEnv(MultiAgentEnv):
         # update geometry and text positions
         text_line = 0
         #for e, entity in enumerate(self.world.entities):
-        for i in range(self.num_agents):
+        for i in range(self.num_entities):
             # geometry
             x, y = state.p_pos[i]
             y *= (
@@ -335,9 +315,8 @@ class SimpleMPEEnv(MultiAgentEnv):
             y = (y / cam_range) * self.height // 2 * 0.9
             x += self.width // 2
             y += self.height // 2
-            print(' x y', (x, y))
             pygame.draw.circle(
-                self.screen, (255, 255, 0), (float(x), float(y)), float(self.rad[i]) * 350  # NOTE colour argument changed
+                self.screen, self.colour[i], (float(x), float(y)), float(self.rad[i]) * 350  # NOTE colour argument changed
             )  # 350 is an arbitrary scale factor to get pygame to render similar sizes as pyglet
             pygame.draw.circle(
                 self.screen, (0, 0, 0), (float(x), float(y)), float(self.rad[i]) * 350, 1
@@ -388,7 +367,7 @@ if __name__=="__main__":
     num_agents = 3
     key = jax.random.PRNGKey(0)
     
-    env = SimpleMPEEnv(num_agents)
+    env = MPEBaseEnv(num_agents)
     state = env.reset_env()
     
     
@@ -400,8 +379,8 @@ if __name__=="__main__":
     
     
     print('state', state)
-    for _ in range(5):
+    for _ in range(50):
         state = env.step_env(key, state, actions)
         print('state', state)
         env.render(state)
-        pygame.time.wait(300)
+        pygame.time.wait(30)
