@@ -38,14 +38,14 @@ from typing import Tuple, Optional
 from functools import partial
 import os
 @struct.dataclass
-class State:
+class MPEState:
     p_pos: chex.Array # [n, [x, y]]
     p_vel: chex.Array # [n, [x, y]]
     s_c: chex.Array # communication state
     u: chex.Array # physical action
     c: chex.Array  # communication action
 
-@struct.dataclass
+'''@struct.dataclass
 class MPEParams:
     
     a_rad: chex.Array
@@ -58,12 +58,32 @@ class MPEParams:
     l_pos: chex.Array 
     l_rad: chex.Array
     l_moveable: chex.Array
-    
+    '''
 
+
+def set_agent_parameter(value, default):
+    """ Return default value if None, else ensure shape is correct."""
+    if value is None:
+        return default
+    else:
+        assert value.shape[0] == default.shape[0], f"Value shape {value.shape} does not match default shape {default.shape}"
+        return value
 
 class MPEBaseEnv(MultiAgentEnv):
     
-    def __init__(self, num_agents, num_landmarks=1):
+    def __init__(self, 
+                 num_agents, 
+                 num_landmarks=1,
+                 rad=None,
+                 moveable=None,
+                 silent=None,
+                 collide=None,
+                 mass=None,
+                 accel=None,
+                 max_speed=None,
+                 colour=None,
+                 dim_c=3,
+                 dim_p=2,):
 
         # Agent and entity constants
         self.num_agents = num_agents
@@ -72,25 +92,29 @@ class MPEBaseEnv(MultiAgentEnv):
         self.agent_range = jnp.arange(num_agents)
         self.entity_range = jnp.arange(self.num_entities)
         
-        # NOTE this should all be initalised with a config file
         # Agent parameters
-        self.rad = jnp.concatenate([jnp.full((num_agents), 0.1),
-                                    jnp.full((num_landmarks), 0.2)])
-        self.moveable = jnp.concatenate([jnp.full((num_agents), True),
-                                           jnp.full((num_landmarks), False)])
-        self.collide = jnp.full((self.num_entities), True)
-        self.mass = jnp.full((self.num_entities), 1)
-        self.max_speed = jnp.concatenate([jnp.full((num_agents), 0.5),
-                                          jnp.full((num_landmarks), 0.0)])
-        self.colour = [(225, 225, 0)] * num_agents + [(225, 225, 255)] * num_landmarks
+        self.rad = set_agent_parameter(rad, jnp.concatenate([jnp.full((num_agents), 0.1),
+                                                             jnp.full((num_landmarks), 0.2)]))
+        self.moveable = set_agent_parameter(moveable, jnp.concatenate([jnp.full((num_agents), True),
+                                                                       jnp.full((num_landmarks), False)]))
+        self.silent = set_agent_parameter(silent, jnp.full((num_agents), 0))
+        self.collide = set_agent_parameter(collide, jnp.full((self.num_entities), True))
+        self.mass = set_agent_parameter(mass, jnp.full((self.num_entities), 1))
+        self.accel = set_agent_parameter(accel, jnp.full((num_agents), 5.0))
+        self.max_speed = set_agent_parameter(max_speed,
+                                            jnp.concatenate([jnp.full((num_agents), 0.5),
+                                                             jnp.full((num_landmarks), 0.0)]))
+        
+        
+        self.colour = colour if colour is not None else [(225, 225, 0)] * num_agents + [(225, 225, 255)] * num_landmarks
         
         self.u_noise = jnp.full((num_agents), 1) 
-        self.c_noise = jnp.concatenate([jnp.full((num_agents), 1),  # set to 0 if no noise
-                                        jnp.full((num_landmarks), 0)])
+        self.c_noise = jnp.full((num_agents), 1) 
+        self.u_space_dim = 5
         
         # World parameters
-        self.dim_c = 3  # communication channel dimensionality
-        self.dim_p = 2  # position dimensionality
+        self.dim_c = dim_c  # communication channel dimensionality
+        self.dim_p = dim_p  # position dimensionality
         self.dim_color = 3  # color dimensionality
         self.dt = 0.1  # simulation timestep
         self.damping = 0.25  # physical damping
@@ -112,25 +136,29 @@ class MPEBaseEnv(MultiAgentEnv):
     def step_env(self, key, state, actions):
         
         u, c = self._set_action(self.agent_range, actions)
-        print('u ', u, 'c', c)
         
-        p_pos, p_vel, c = self._world_step(key, state, u)
+        key, key_w = jax.random.split(key)
+        p_pos, p_vel = self._world_step(key_w, state, u)
         
-        state = State(
+        key_c = jax.random.split(key, self.num_agents)
+        c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
+        
+        state = MPEState(
             p_pos=p_pos,
             p_vel=p_vel,
             s_c=state.s_c,
             u=u,
             c=c,
         )
+        
         return state
         
         # TODO Rewards
         
     @partial(jax.jit, static_argnums=[0])
-    def reset_env(self):
+    def reset_env(self, key=None):
         
-        state = State(
+        state = MPEState(
         p_pos=jnp.array([[1.0, 1.0], [0.0, 0.5], [-1.0, 0.0], [0.5, 0.5]]),
         p_vel=jnp.zeros((self.num_entities, 2)),
         s_c=jnp.zeros((self.num_entities, 2)),
@@ -139,23 +167,28 @@ class MPEBaseEnv(MultiAgentEnv):
         )
         
         return state
+    
+    def observations(self, state: MPEState):
+        raise NotImplementedError
         
     @partial(jax.vmap, in_axes=[None, 0, 0])
-    def _set_action(self, a_idx, action):
-        
+    def _set_action(self, a_idx, action: chex.Array):
+        """ Extract u and c actions from action array."""
+        # NOTE only for continuous action space currently
         #u = jnp.zeros(self.dim_p)
         #u[0] += action[0][1] - action[0][2]
         #u[1] += action[0][3] - action[0][4]
         
         u = jnp.array([
-            action[0][1] - action[0][2],
-            action[0][3] - action[0][4]
+            action[1] - action[2],
+            action[3] - action[4]
         ])
-        
-        # TODO add sensitivity
-        # TODO add moveable & silence 
-        
-        c = action[1]
+        print('action', action)
+        u = u * self.accel[a_idx] * self.moveable[a_idx]
+        print('u shape', u.shape, 'u', u)
+        jax.debug.print('u {u}', u=u)
+        print('silent', self.silent[a_idx])
+        c = action[5:] * ~self.silent[a_idx]
         return u, c
 
     # return all entities in the world
@@ -183,11 +216,10 @@ class MPEBaseEnv(MultiAgentEnv):
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, self.mass, self.moveable, self.max_speed)
         
         # c = self.comm_action() TODO
-        c = None
-        return p_pos, p_vel, c
+        return p_pos, p_vel
         
-        
-    def _comm_action(self, key, c, c_noise, silent):
+    @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0])
+    def _apply_comm_action(self, key, c, c_noise, silent):
         silence = jnp.zeros(c.shape)
         noise = jax.random.normal(key, shape=c.shape) * c_noise
         return jax.lax.select(silent, c + noise, silence)
@@ -195,7 +227,9 @@ class MPEBaseEnv(MultiAgentEnv):
     # gather agent action forces
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0])
     def _apply_action_force(self, key, p_force, u, u_noise, moveable):
-        noise = jax.random.normal(key, shape=u.shape) * u_noise * 0.0 #NOTE temp
+        
+        noise = jax.random.normal(key, shape=u.shape) * u_noise * 0.0 #NOTE temp zeroing
+        print('p force shape', p_force.shape, 'noise shape', noise.shape, 'u shape', u.shape)
         return jax.lax.select(moveable, u + noise, p_force)
 
     def _apply_environment_force(self, p_force_all, state):
@@ -279,78 +313,29 @@ class MPEBaseEnv(MultiAgentEnv):
         
     ### === PLOTTING === ###
     def enable_render(self, mode="human"):
-        if not self.renderOn and mode == "human":
-            pygame.init()
-            self.screen = pygame.display.set_mode(self.screen.get_size())
-            self.renderOn = True 
+        import matplotlib.pyplot as plt 
+        plt.ion()
+        plt.subplots(figsize=(10, 8))
         
     def render(self, state):
-
-        self.enable_render(self.render_mode)
-
-        self.draw(state)
-        pygame.display.flip()
-        return
-           
-    def draw(self, state):
-        # clear screen
-        self.screen.fill((255, 255, 255))
-
-        # update bounds to center around agent
-        all_poses =  state.p_pos #[entity.state.p_pos for entity in self.world.entities]
-        cam_range = jnp.max(jnp.abs(jnp.array(all_poses)))
-
-        # update geometry and text positions
-        text_line = 0
-        #for e, entity in enumerate(self.world.entities):
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Circle
+        
+        ax_lim = 5
+        
+        fig = plt.gcf()
+        fig.clf()
+        ax = fig.gca()
+        ax.set_xlim([-ax_lim, ax_lim])
+        ax.set_ylim([-ax_lim, ax_lim])
         for i in range(self.num_entities):
-            # geometry
-            x, y = state.p_pos[i]
-            y *= (
-                -1
-            )  # this makes the display mimic the old pyglet setup (ie. flips image)
-            x = (
-                (x / cam_range) * self.width // 2 * 0.9
-            )  # the .9 is just to keep entities from appearing "too" out-of-bounds
-            y = (y / cam_range) * self.height // 2 * 0.9
-            x += self.width // 2
-            y += self.height // 2
-            pygame.draw.circle(
-                self.screen, self.colour[i], (float(x), float(y)), float(self.rad[i]) * 350  # NOTE colour argument changed
-            )  # 350 is an arbitrary scale factor to get pygame to render similar sizes as pyglet
-            pygame.draw.circle(
-                self.screen, (0, 0, 0), (float(x), float(y)), float(self.rad[i]) * 350, 1
-            )  # borders
-            assert (
-                0 < x < self.width and 0 < y < self.height
-            ), f"Coordinates {(x, y)} are out of bounds."
+            c = Circle(state.p_pos[i], self.rad[i], color=onp.array(self.colour[i])/255)
+            ax.add_patch(c)
+            
+        plt.draw()
 
-            # text
-            '''if isinstance(entity, Agent):
-                if entity.silent:
-                    continue
-                if np.all(entity.state.c == 0):
-                    word = "_"
-                elif self.continuous_actions:
-                    word = (
-                        "[" + ",".join([f"{comm:.2f}" for comm in entity.state.c]) + "]"
-                    )
-                else:
-                    word = alphabet[np.argmax(entity.state.c)]
+        fig.canvas.flush_events()            
 
-                message = entity.name + " sends " + word + "   "
-                message_x_pos = self.width * 0.05
-                message_y_pos = self.height * 0.95 - (self.height * 0.05 * text_line)
-                self.game_font.render_to(
-                    self.screen, (message_x_pos, message_y_pos), message, (0, 0, 0)
-                )
-                text_line += 1'''
-
-    def close(self):
-        if self.renderOn:
-            pygame.event.pump()
-            pygame.display.quit()
-            self.renderOn = False
 
 """
 
@@ -371,16 +356,17 @@ if __name__=="__main__":
     state = env.reset_env()
     
     
-    mock_action = jnp.array([[1.0, 1.0, 0.1, 0.1]])
+    mock_action = jnp.array([[1.0, 1.0, 0.1, 0.1, 0.0]])
     
-    actions = jnp.repeat(mock_action[None], repeats=num_agents, axis=0)
+    actions = jnp.repeat(mock_action[None], repeats=num_agents, axis=0).squeeze()
     print('actions', actions.shape)
     
+    env.enable_render()
     
-    
+
     print('state', state)
     for _ in range(50):
         state = env.step_env(key, state, actions)
         print('state', state)
         env.render(state)
-        pygame.time.wait(30)
+        #pygame.time.wait(300)
