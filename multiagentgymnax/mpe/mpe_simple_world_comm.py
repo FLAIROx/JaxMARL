@@ -4,6 +4,7 @@ import chex
 import pygame
 from functools import partial
 from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, MPEState
+from gymnax.environments.spaces import Box
 
 # TODO leader mechanic (colour different)
 
@@ -33,6 +34,9 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         self.leader = jnp.insert(jnp.zeros((num_agents-1)), 0, 1)
         self.leader_idx = 0
         
+        action_spaces = {i: Box(-1.0, 1.0, (5,)) for i in range(num_agents)}
+        action_spaces[self.leader_idx] = Box(-1.0, 1.0, (9,))
+        
         rad = jnp.concatenate([jnp.full((num_adversaries), 0.075),
                                jnp.full((num_good_agents), 0.045),
                                jnp.full((num_obs), 0.2),
@@ -52,8 +56,9 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         colour = [(243, 115, 115)] * num_adversaries + [(115, 243, 115)] * num_good_agents + \
             [(64, 64, 64)] * num_obs + [(39, 39, 166)] * num_food + [(153, 230, 153)] * num_forests
         
-        super().__init__(num_agents, 
-                         num_landmarks,
+        super().__init__(num_agents=num_agents, 
+                         num_landmarks=num_landmarks,
+                         action_spaces=action_spaces,
                          dim_c=dim_c,
                          rad=rad,
                          silent=silent,
