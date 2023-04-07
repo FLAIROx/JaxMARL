@@ -11,7 +11,9 @@ from typing import Tuple, Optional
 
 @struct.dataclass
 class State:
-    pass 
+    done: chex.Array
+    step: int
+     
 
 
 class MultiAgentEnv(object):  # NOTE use abc base calss
@@ -45,7 +47,7 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         obs_re, states_re = self.reset_env(state.pos.shape[0], key_reset)  
         # Auto-reset environment based on termination
         state = jax.tree_map(
-            lambda x, y: jax.lax.select(states_st.ep_done, x, y), states_re, states_st
+            lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
         )
         obs = jax.lax.select(states_re.ep_done, obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
         return obs, state, rewards, states_st.done, infos

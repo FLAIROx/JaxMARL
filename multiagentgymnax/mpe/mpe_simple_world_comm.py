@@ -16,8 +16,10 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                  num_adversaries=3, 
                  num_obs=1,
                  num_food=2,
-                 num_forests=2,):
+                 num_forests=2,
+                 max_steps=25,):
         
+        # Fixed parameters
         dim_c = 4
         
         # NOTE for now using continuous action space
@@ -77,13 +79,16 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             s_c=jnp.zeros((self.num_entities, self.dim_c)),
             u=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_entities, self.dim_c)),
+            done=jnp.full((self.num_agents), False),
+            step=0
         )
         
         return state
     
-        
+    @partial(jax.vmap, in_axes=[None, 0, None])
     def observation(self, aidx, state):
         # NOTE have padded out the obs to all be the same size cause jax and differing array sizes.
+        # a little clunky so could be tided
         
         @partial(jax.vmap, in_axes=(0,))
         def __in_forest(idx) -> chex.Array:
@@ -145,30 +150,99 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         
         return jax.lax.cond(aidx<self.num_adversaries, _adversary, _good)
 
+    @partial(jax.vmap, in_axes=[None, 0, None])
+    def reward(self, aidx, state):
+        return jax.lax.cond(aidx<self.num_adversaries, self.adversary_reward, self.agent_reward, *(aidx, state))
 
-def test_policy(key, obs):
-    
-    o = obs[:3, 20:22]
-    print('o', o.shape, o)        
+    #@partial(jax.vmap, in_axes=[None, 0, None])
+    def agent_reward(self, aidx, state):
         
-    r = jax.random.uniform(key, (2, 5))
+        @partial(jax.vmap, in_axes=(0,))
+        def _bound_rew(x):
+            w = x < 0.9
+            m = x < 1.0
+            mr = (x - 0.9) * 10
+            br = jnp.min(jnp.array([jnp.exp(2* x - 2), 10]))
+            
+            return jax.lax.select(m, mr, br) * ~w
+        
+        rew = 0
+        # check collision, -5 for each collision with adversary 
+        ac = self._collision(state.p_pos[aidx], self.rad[aidx], state.p_pos[:self.num_adversaries], self.rad[:self.num_adversaries])
+        rew -= jnp.sum(ac) * 5
+        
+        # check map bounds,  
+        rew -= 2 * jnp.sum(_bound_rew(jnp.abs(state.p_pos[aidx])))
+        
+        # check food collisions
+        fc = self._collision(state.p_pos[aidx], self.rad[aidx], state.p_pos[-(self.num_food+self.num_forests):-self.num_forests], self.rad[-(self.num_food+self.num_forests):-self.num_forests])
+        rew += jnp.sum(fc) * 2
+        
+        # reward for being near food
+        rew -= 0.05 * jnp.min(jnp.linalg.norm(state.p_pos[-(self.num_food+self.num_forests):-self.num_forests] - state.p_pos[aidx], axis=1))
+        return rew
+    
+    #@partial(jax.vmap, in_axes=[None, 0, None])
+    def adversary_reward(self, aidx, state):
+        
+        @partial(jax.vmap, in_axes=[0, 0, None, None])
+        def vcollision(apos, arad, opos, orad):
+            return self._collision(apos, arad, opos, orad)
+        
+        rew = 0
+        
+        rew -= 0.1 * jnp.min(jnp.linalg.norm(state.p_pos[self.num_adversaries:self.num_agents] - state.p_pos[aidx], axis=1))
+        
+        # for each agent, add collision bonus 
+        rew += 5 * jnp.sum(vcollision(state.p_pos[self.num_adversaries:self.num_agents], self.rad[self.num_adversaries:self.num_agents], state.p_pos[:self.num_adversaries], self.rad[:self.num_adversaries]))
+        return rew
+        
+        
+    @partial(jax.vmap, in_axes=(None, None, None, 0, 0))
+    def _collision(self, apos, arad, opos, orad):
+        deltas = opos - apos
+        size = arad + orad
+        dist = jnp.sqrt(jnp.sum(deltas ** 2))
+        return dist < size
+
+def test_policy(key, state):
+    # adversarys hunt the first good agent
+    pos = state.p_pos[3]
+        
+    act = jnp.zeros((5, 9))
+    
+    o = pos - state.p_pos[:3]
+    act = act.at[:3, 1].set(o[:, 0])
+    act = act.at[:3, 3].set(o[:, 1])
+        
+    r = jax.random.uniform(key, (2, 9))
+    act = act.at[3:].set(r)
+    return act
+    
 
 if __name__=="__main__":
     key = jax.random.PRNGKey(0)
 
     env = SimpleWorldCommEnv()
     
-    state = env.reset_env(key)
+    key, key_r = jax.random.split(key)
+    state = env.reset_env(key_r)
     
-    obs = env.observation(0, state)
-    print('obs', obs.shape, obs)
+    #obs = env.observation(0, state)
+    #print('obs', obs.shape, obs)
     
     mock_action = jnp.array([[0.0, 0.0, 1.0, 0.1, 0.1, 0.0, 0.0, 0.0, 0.0]])
     
     actions = jnp.repeat(mock_action[None], repeats=env.num_agents, axis=0).squeeze()
     
+    env.enable_render()
+    
     print('state', state)
     for _ in range(50):
-        state = env.step_env(key, state, actions)
-        print('state', state)
-        env.draw2(state)
+        key, key_a, key_s = jax.random.split(key, 3)
+        actions = test_policy(key_a, state)
+        #print('actions', actions)
+        obs, state, rew, _ = env.step_env(key_s, state, actions)
+        env.render(state)
+        #print('rew', rew)
+

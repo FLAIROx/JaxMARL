@@ -8,6 +8,7 @@ import numpy as onp
 from multiagentgymnax import MultiAgentEnv
 import chex
 import pygame
+from gymnax.environments.spaces import Box
 """
 has both a physical and communication action
 
@@ -23,13 +24,20 @@ gymnax uses params
 NOTE only continuous actions fo rnow
 
 key qs
-- how to id agents, I think just index makes the most sense
-- how to deal with different action spaces... 
+- how to id agents, I think just index makes the most sense - yep
+- how to deal with different action spaces...  - TODO 
+    currently very hacky. Likely best option is some form of dict mapping from idx to action space
+    then when actions passed in. But this means actions must be passed in as a list, or dict. Dict likely best for this
+    That is also a little clunky. But likely best option.
+    
+    Like you would have a dict for the action and then a dict for the action space... 
 
 
 landmarks.. 
 can be added to list of agents?
 and then just zero out the action for them?
+
+terminates after a set number of steps
 
 """
 
@@ -44,6 +52,8 @@ class MPEState:
     s_c: chex.Array # communication state
     u: chex.Array # physical action
     c: chex.Array  # communication action
+    done: chex.Array # [bool,]
+    step: int
 
 '''@struct.dataclass
 class MPEParams:
@@ -72,8 +82,10 @@ def set_agent_parameter(value, default):
 class MPEBaseEnv(MultiAgentEnv):
     
     def __init__(self, 
-                 num_agents, 
+                 num_agents=1, 
                  num_landmarks=1,
+                 action_spaces=None,
+                 max_steps=25,
                  rad=None,
                  moveable=None,
                  silent=None,
@@ -91,6 +103,13 @@ class MPEBaseEnv(MultiAgentEnv):
         self.num_entities = num_agents + num_landmarks
         self.agent_range = jnp.arange(num_agents)
         self.entity_range = jnp.arange(self.num_entities)
+        
+        # Action space
+        if action_spaces is None:
+            self.action_spaces = {i: Box(-1, 1, (5,)) for i in range(num_agents)}
+        else:
+            assert len(action_spaces.keys()) == num_agents, f"Number of action spaces {len(action_spaces.keys())} does not match number of agents {num_agents}"
+            self.action_spaces = action_spaces
         
         # Agent parameters
         self.rad = set_agent_parameter(rad, jnp.concatenate([jnp.full((num_agents), 0.1),
@@ -113,6 +132,7 @@ class MPEBaseEnv(MultiAgentEnv):
         self.u_space_dim = 5
         
         # World parameters
+        self.max_steps = max_steps  # max steps per episode
         self.dim_c = dim_c  # communication channel dimensionality
         self.dim_p = dim_p  # position dimensionality
         self.dim_color = 3  # color dimensionality
@@ -143,17 +163,27 @@ class MPEBaseEnv(MultiAgentEnv):
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
         
+        done = jnp.full((self.num_agents), state.step+1>=self.max_steps)
+        
         state = MPEState(
             p_pos=p_pos,
             p_vel=p_vel,
             s_c=state.s_c,
             u=u,
             c=c,
+            done=done,
+            step=state.step+1
         )
         
-        return state
+        reward = self.reward(self.agent_range, state)
         
-        # TODO Rewards
+        obs = self.observation(self.agent_range, state)
+        
+        info = {}
+        
+        return obs, state, reward, info
+        
+        
         
     @partial(jax.jit, static_argnums=[0])
     def reset_env(self, key=None):
@@ -164,17 +194,29 @@ class MPEBaseEnv(MultiAgentEnv):
         s_c=jnp.zeros((self.num_entities, 2)),
         u=jnp.zeros((self.num_entities, 2)),
         c=jnp.zeros((self.num_entities, 2)),
+        done=jnp.full((self.num_agents), False),
+        step=0,
         )
         
         return state
     
-    def observations(self, state: MPEState):
-        raise NotImplementedError
+    @partial(jax.vmap, in_axes=[None, 0, None])
+    def observation(self, aidx, state: MPEState):
+        
+        landmark_rel_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]
+        
+        return jnp.concatenate([state.p_vel[aidx].flatten(),
+                                landmark_rel_pos.flatten()])
+        
+    @partial(jax.vmap, in_axes=[None, 0, None])
+    def reward(self, aidx, state):
+        return -1*jnp.linalg.norm(state.p_pos[aidx] - state.p_pos[-1])  # NOTE assumes one landmark 
         
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _set_action(self, a_idx, action: chex.Array):
         """ Extract u and c actions from action array."""
         # NOTE only for continuous action space currently
+        
         #u = jnp.zeros(self.dim_p)
         #u[0] += action[0][1] - action[0][2]
         #u[1] += action[0][3] - action[0][4]
@@ -186,7 +228,7 @@ class MPEBaseEnv(MultiAgentEnv):
         print('action', action)
         u = u * self.accel[a_idx] * self.moveable[a_idx]
         print('u shape', u.shape, 'u', u)
-        jax.debug.print('u {u}', u=u)
+        #jax.debug.print('u {u}', u=u)
         print('silent', self.silent[a_idx])
         c = action[5:] * ~self.silent[a_idx]
         return u, c
@@ -315,13 +357,13 @@ class MPEBaseEnv(MultiAgentEnv):
     def enable_render(self, mode="human"):
         import matplotlib.pyplot as plt 
         plt.ion()
-        plt.subplots(figsize=(10, 8))
+        plt.subplots(figsize=(8, 8))
         
     def render(self, state):
         import matplotlib.pyplot as plt
         from matplotlib.patches import Circle
         
-        ax_lim = 5
+        ax_lim = 2
         
         fig = plt.gcf()
         fig.clf()
@@ -366,7 +408,7 @@ if __name__=="__main__":
 
     print('state', state)
     for _ in range(50):
-        state = env.step_env(key, state, actions)
+        obs, state, rew, _ = env.step_env(key, state, actions)
         print('state', state)
         env.render(state)
         #pygame.time.wait(300)
