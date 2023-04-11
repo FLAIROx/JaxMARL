@@ -39,6 +39,10 @@ and then just zero out the action for them?
 
 terminates after a set number of steps
 
+
+# ACTION SPACE
+need to be passed in as a dict to account for different action spaces. Similarly, obs should be outputted as a dict. How do we do this with vmap?
+
 """
 
 from flax import struct
@@ -182,8 +186,6 @@ class MPEBaseEnv(MultiAgentEnv):
         info = {}
         
         return obs, state, reward, info
-        
-        
         
     @partial(jax.jit, static_argnums=[0])
     def reset_env(self, key=None):
