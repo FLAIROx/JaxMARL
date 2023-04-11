@@ -82,13 +82,13 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             s_c=jnp.zeros((self.num_entities, self.dim_c)),
-            u=jnp.zeros((self.num_entities, self.dim_p)),
-            c=jnp.zeros((self.num_entities, self.dim_c)),
+            u=jnp.zeros((self.num_agents, self.dim_p)),
+            c=jnp.zeros((self.num_agents, self.dim_c)),
             done=jnp.full((self.num_agents), False),
             step=0
         )
         
-        return state
+        return self.observation(self.agent_range, state), state
     
     @partial(jax.vmap, in_axes=[None, 0, None])
     def observation(self, aidx, state):

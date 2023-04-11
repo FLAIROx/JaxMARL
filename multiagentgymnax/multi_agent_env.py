@@ -44,17 +44,19 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         #out = jax.lax.cond(states_st.ep_done, self.reset_env, lambda x: x,  ) TODO
         
         #jax.debug.print('ep done {d} {s} ', d=states_st.ep_done, s=states_st)
-        obs_re, states_re = self.reset_env(state.pos.shape[0], key_reset)  
+        print('reset env', self.reset_env(key_reset) )
+        obs_re, states_re = self.reset_env(key_reset)  
         # Auto-reset environment based on termination
+        print('states', states_st, '\n', states_re)
         state = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
         )
-        obs = jax.lax.select(states_re.ep_done, obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
+        obs = jax.lax.select(jnp.all(states_st.done), obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
         return obs, state, rewards, states_st.done, infos
     
     def reset_env(
         self, key
-    ):
+    ) -> Tuple[chex.Array, State]:
         raise NotImplementedError
     
     def step_env(

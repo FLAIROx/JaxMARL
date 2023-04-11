@@ -191,16 +191,18 @@ class MPEBaseEnv(MultiAgentEnv):
     def reset_env(self, key=None):
         
         state = MPEState(
-        p_pos=jnp.array([[1.0, 1.0], [0.0, 0.5], [-1.0, 0.0], [0.5, 0.5]]),
-        p_vel=jnp.zeros((self.num_entities, 2)),
-        s_c=jnp.zeros((self.num_entities, 2)),
-        u=jnp.zeros((self.num_entities, 2)),
-        c=jnp.zeros((self.num_entities, 2)),
-        done=jnp.full((self.num_agents), False),
-        step=0,
+            p_pos=jnp.array([[1.0, 1.0], [0.0, 0.5], [-1.0, 0.0], [0.5, 0.5]]),
+            p_vel=jnp.zeros((self.num_entities, 2)),
+            s_c=jnp.zeros((self.num_entities, 2)),
+            u=jnp.zeros((self.num_entities, 2)),
+            c=jnp.zeros((self.num_entities, 2)),
+            done=jnp.full((self.num_agents), False),
+            step=0,
         )
+
+        obs = self.observation(self.agent_range, state)
         
-        return state
+        return obs, state
     
     @partial(jax.vmap, in_axes=[None, 0, None])
     def observation(self, aidx, state: MPEState):
@@ -279,11 +281,11 @@ class MPEBaseEnv(MultiAgentEnv):
     def _apply_environment_force(self, p_force_all, state):
         """ gather physical forces acting on entities """
         
-        @partial(jax.vmap, in_axes=[0])
-        def __env_force_outer(idx):
+        @partial(jax.vmap, in_axes=[0, None])
+        def __env_force_outer(idx, state):
             
-            @partial(jax.vmap, in_axes=[None, 0])
-            def __env_force_inner(idx_a, idx_b):
+            @partial(jax.vmap, in_axes=[None, 0, None])
+            def __env_force_inner(idx_a, idx_b, state):
 
                 l = idx_b <= idx_a 
                 l_a = jnp.zeros((2, 2))
@@ -291,7 +293,7 @@ class MPEBaseEnv(MultiAgentEnv):
                 collision_force = self._get_collision_force(idx_a, idx_b, state) 
                 return jax.lax.select(l, l_a, collision_force)
             
-            p_force_t = __env_force_inner(idx, self.entity_range)
+            p_force_t = __env_force_inner(idx, self.entity_range, state)
 
             #print('p force t s', p_force_t.shape)
 
@@ -302,7 +304,7 @@ class MPEBaseEnv(MultiAgentEnv):
 
             return p_force_o
         
-        p_forces = __env_force_outer(self.entity_range)
+        p_forces = __env_force_outer(self.entity_range, state)
         p_forces = jnp.sum(p_forces, axis=0)  
         
         return p_forces + p_force_all        
