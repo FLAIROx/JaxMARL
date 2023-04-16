@@ -98,14 +98,6 @@ class MPEBaseEnv(MultiAgentEnv):
                  num_agents=1, 
                  num_landmarks=1,
                  action_spaces=None,
-                 max_steps=25,
-                 rad=None,
-                 moveable=None,
-                 silent=None,
-                 collide=None,
-                 mass=None,
-                 accel=None,
-                 max_speed=None,
                  colour=None,
                  dim_c=3,
                  dim_p=2,):
@@ -149,7 +141,7 @@ class MPEBaseEnv(MultiAgentEnv):
         self.u_space_dim = 5'''
         
         # World parameters
-        self.max_steps = max_steps  # max steps per episode
+        #self.max_steps = max_steps  # max steps per episode
         self.dim_c = dim_c  # communication channel dimensionality
         self.dim_p = dim_p  # position dimensionality
         self.dim_color = 3  # color dimensionality
@@ -187,7 +179,6 @@ class MPEBaseEnv(MultiAgentEnv):
             contact_margin=1e-3,
             dt=0.1,
         )
-
         return params
 
     @partial(jax.jit, static_argnums=[0])
@@ -221,7 +212,8 @@ class MPEBaseEnv(MultiAgentEnv):
         reward = self.reward(self.agent_range, state)
         
         obs = self.observation(self.agent_range, state)
-        
+        obs = {a: obs[i] for i, a in enumerate(self.agents)}
+
         info = {}
         
         return obs, state, reward, info
@@ -456,7 +448,7 @@ if __name__=="__main__":
     print('state', state)
     for _ in range(50):
         obs, state, rew, _ = env.step_env(key, state, actions, params)
-        print('state', state)
+        print('state', obs)
         env.render(state, params)
         #raise
         #pygame.time.wait(300)

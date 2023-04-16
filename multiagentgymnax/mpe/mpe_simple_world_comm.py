@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 import pygame
 from functools import partial
-from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State
+from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State, EnvParams
 from gymnax.environments.spaces import Box
 
 # TODO leader mechanic (colour different)
@@ -17,8 +17,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                  num_adversaries=3, 
                  num_obs=1,
                  num_food=2,
-                 num_forests=2,
-                 max_steps=25,):
+                 num_forests=2,):
         
         # Fixed parameters
         dim_c = 4
@@ -37,22 +36,6 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         action_spaces = {i: Box(-1.0, 1.0, (5,)) for i in range(num_agents)}
         action_spaces[self.leader_idx] = Box(-1.0, 1.0, (9,))
         
-        rad = jnp.concatenate([jnp.full((num_adversaries), 0.075),
-                               jnp.full((num_good_agents), 0.045),
-                               jnp.full((num_obs), 0.2),
-                               jnp.full((num_food), 0.03),
-                               jnp.full((num_forests), 0.3)])
-        
-        silent = jnp.insert(jnp.ones((num_agents-1)), 0, 0).astype(jnp.int32)
-
-        accel = jnp.concatenate([jnp.full((num_adversaries), 3.0),
-                                 jnp.full((num_good_agents), 4.0)])
-        max_speed = jnp.concatenate([jnp.full((num_adversaries), 1.0),
-                                 jnp.full((num_good_agents), 1.3),
-                                 jnp.full((num_landmarks), 0.0)])
-        collide = jnp.concatenate([jnp.full((num_agents+num_obs), True),
-                                   jnp.full(num_food+num_forests, False)])
-        
         colour = [(243, 115, 115)] * num_adversaries + [(115, 243, 115)] * num_good_agents + \
             [(64, 64, 64)] * num_obs + [(39, 39, 166)] * num_food + [(153, 230, 153)] * num_forests
         
@@ -60,14 +43,36 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                          num_landmarks=num_landmarks,
                          action_spaces=action_spaces,
                          dim_c=dim_c,
-                         rad=rad,
-                         silent=silent,
-                         collide=collide,
-                         accel=accel,
-                         max_speed=max_speed,
                          colour=colour)
         
-        
+    @property
+    def default_params(self) -> EnvParams:
+        params = EnvParams(
+            max_steps=25,
+            rad=jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
+                               jnp.full((self.num_good_agents), 0.045),
+                               jnp.full((self.num_obs), 0.2),
+                               jnp.full((self.num_food), 0.03),
+                               jnp.full((self.num_forests), 0.3)]),
+            moveable=jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
+            silent = jnp.insert(jnp.ones((self.num_agents-1)), 0, 0).astype(jnp.int32),
+            collide = jnp.concatenate([jnp.full((self.num_agents+self.num_obs), True),
+                                   jnp.full(self.num_food+self.num_forests, False)]),
+            mass=jnp.full((self.num_entities), 1),
+            accel = jnp.concatenate([jnp.full((self.num_adversaries), 3.0),
+                                 jnp.full((self.num_good_agents), 4.0)]),
+            max_speed = jnp.concatenate([jnp.full((self.num_adversaries), 1.0),
+                                 jnp.full((self.num_good_agents), 1.3),
+                                 jnp.full((self.num_landmarks), 0.0)]),
+            u_noise=jnp.full((self.num_agents), 1),
+            c_noise=jnp.full((self.num_agents), 1),
+            damping=0.25,  # physical damping
+            contact_force=1e2,  # contact response parameters
+            contact_margin=1e-3,
+            dt=0.1,
+        )
+        return params
+
     @partial(jax.jit, static_argnums=[0])
     def reset_env(self, key):
         
@@ -90,6 +95,21 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         
         return self.observation(self.agent_range, state), state
     
+    def observations(self, state, params: EnvParams) -> dict:
+        """ Returns observations of all agents """
+        
+        @partial(jax.vmap, in_axes=(0, None))
+        def __in_forest(idx: int, params: EnvParams) -> chex.Array:
+            """ Returns true if agent is in forest """
+            return jnp.linalg.norm(state.p_pos[-self.num_forests:] - state.p_pos[idx], axis=0) < params.rad[-self.num_forests:] 
+
+        @partial(jax.vmap, in_axes=(0,))
+        def _common_stats(aidx, state, params):
+
+
+
+
+
     @partial(jax.vmap, in_axes=[None, 0, None])
     def observation(self, aidx, state):
         # NOTE have padded out the obs to all be the same size cause jax and differing array sizes.
@@ -117,6 +137,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         other_pos = jnp.roll(other_pos, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
         other_vel = jnp.roll(other_vel, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
         
+        good = _good()
                 
         def _good():
             return jnp.concatenate([
