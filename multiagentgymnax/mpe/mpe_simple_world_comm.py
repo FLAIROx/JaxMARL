@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 import pygame
 from functools import partial
-from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, MPEState
+from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State
 from gymnax.environments.spaces import Box
 
 # TODO leader mechanic (colour different)
@@ -78,7 +78,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
         ])
         
-        state = MPEState(
+        state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             s_c=jnp.zeros((self.num_entities, self.dim_c)),

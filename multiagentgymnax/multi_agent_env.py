@@ -14,6 +14,9 @@ class State:
     done: chex.Array
     step: int
      
+@struct.dataclass
+class EnvParams:
+    max_steps: int
 
 
 class MultiAgentEnv(object):  # NOTE use abc base calss
@@ -24,11 +27,19 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         self.num_agents = num_agents
         self.observation_spaces = dict()
         self.action_spaces = dict() 
+
+    @property
+    def default_params(self) -> EnvParams:
+        return EnvParams()
         
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey):
-            
-        return self.reset_env(key)
+    def reset(
+        self, key: chex.PRNGKey, params: Optional[EnvParams] = None
+    ) -> Tuple[chex.Array, State]:
+        if params is None:
+            params = self.default_params
+
+        return self.reset_env(key, params)
     
     @partial(jax.jit, static_argnums=(0,))
     def step(
@@ -36,16 +47,17 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         key: chex.PRNGKey, 
         state: State, 
         actions: chex.Array, 
-    ):
+        params: Optional[EnvParams] = None,
+    ) -> Tuple[chex.Array, State, chex.Array, chex.Array, dict]:
         key, key_reset = jax.random.split(key)
         obs_st, states_st, rewards, infos = self.step_env(
-            key, state, actions
+            key, state, actions, params
         )
         #out = jax.lax.cond(states_st.ep_done, self.reset_env, lambda x: x,  ) TODO
         
         #jax.debug.print('ep done {d} {s} ', d=states_st.ep_done, s=states_st)
-        print('reset env', self.reset_env(key_reset) )
-        obs_re, states_re = self.reset_env(key_reset)  
+        print('reset env', self.reset_env(key_reset, params))
+        obs_re, states_re = self.reset_env(key_reset, params)  
         # Auto-reset environment based on termination
         print('states', states_st, '\n', states_re)
         state = jax.tree_map(
@@ -55,24 +67,24 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         return obs, state, rewards, states_st.done, infos
     
     def reset_env(
-        self, key
+        self, key: chex.PRNGKey, params: EnvParams
     ) -> Tuple[chex.Array, State]:
         raise NotImplementedError
     
     def step_env(
-        self, key: chex.PRNGKey, state: State, actions: chex.Array
-    ):
+        self, key: chex.PRNGKey, state: State, actions: chex.Array, Params: EnvParams
+    ) -> Tuple[chex.Array, State, chex.Array, dict]:
         raise NotImplementedError
     
-    def observation_space(self, agent):
+    def observation_space(self, agent: str):
         return self.observation_spaces[agent]
     
-    def action_space(self, agent):
+    def action_space(self, agent: str):
         return self.action_spaces[agent]
     
     # == PLOTTING ==
-    def render(self, state):
+    def render(self, state: State, params: EnvParams):
         raise NotImplementedError
     
-    def close(self, state):
+    def close(self, state: State, params: EnvParams):
         raise NotImplementedError
