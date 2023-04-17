@@ -49,21 +49,23 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         actions: chex.Array, 
         params: Optional[EnvParams] = None,
     ) -> Tuple[chex.Array, State, chex.Array, chex.Array, dict]:
+        if params is None:
+            params = self.default_params
         key, key_reset = jax.random.split(key)
         obs_st, states_st, rewards, infos = self.step_env(
             key, state, actions, params
         )
-        #out = jax.lax.cond(states_st.ep_done, self.reset_env, lambda x: x,  ) TODO
         
-        #jax.debug.print('ep done {d} {s} ', d=states_st.ep_done, s=states_st)
-        print('reset env', self.reset_env(key_reset, params))
         obs_re, states_re = self.reset_env(key_reset, params)  
+        
         # Auto-reset environment based on termination
-        print('states', states_st, '\n', states_re)
         state = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
         )
-        obs = jax.lax.select(jnp.all(states_st.done), obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
+        #obs = jax.lax.select(jnp.all(states_st.done), obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
+        obs = jax.tree_map(
+            lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), obs_re, obs_st
+        )
         return obs, state, rewards, states_st.done, infos
     
     def reset_env(

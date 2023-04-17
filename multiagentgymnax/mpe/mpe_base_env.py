@@ -18,30 +18,11 @@ landmarks are constant - params
 need to deal with action call back
 
 
-do we need params. like no we do not, brax just uses state
-gymnax uses params
-
 NOTE only continuous actions fo rnow
 
-key qs
-- how to id agents, I think just index makes the most sense - yep
-- how to deal with different action spaces...  - TODO 
-    currently very hacky. Likely best option is some form of dict mapping from idx to action space
-    then when actions passed in. But this means actions must be passed in as a list, or dict. Dict likely best for this
-    That is also a little clunky. But likely best option.
-    
-    Like you would have a dict for the action and then a dict for the action space... 
+TODO
+landmarks currently have a velocity kept within the state which is just always zero. This should be removed.
 
-
-landmarks.. 
-can be added to list of agents?
-and then just zero out the action for them?
-
-terminates after a set number of steps
-
-
-# ACTION SPACE
-need to be passed in as a dict to account for different action spaces. Similarly, obs should be outputted as a dict. How do we do this with vmap?
 
 """
 
@@ -53,8 +34,8 @@ import os
 class State:
     p_pos: chex.Array # [n, [x, y]]
     p_vel: chex.Array # [n, [x, y]]
-    s_c: chex.Array # communication state
-    u: chex.Array # physical action
+    #s_c: chex.Array # communication state
+    #u: chex.Array # physical action
     c: chex.Array  # communication action
     done: chex.Array # [bool,]
     step: int
@@ -96,8 +77,11 @@ class MPEBaseEnv(MultiAgentEnv):
     
     def __init__(self, 
                  num_agents=1, 
+                 agents=None,
                  num_landmarks=1,
+                 landmarks=None,
                  action_spaces=None,
+                 observation_spaces=None,
                  colour=None,
                  dim_c=3,
                  dim_p=2,):
@@ -111,44 +95,38 @@ class MPEBaseEnv(MultiAgentEnv):
         
         # Action space
         # TODO make this a seperate func for setting up agent list and action spaces? as this will be env dependent.
-        self.agents = [f"agent_{i}" for i in range(num_agents)]
+        if agents is None:
+            self.agents = [f"agent_{i}" for i in range(num_agents)]
+        else:
+            assert len(agents) == num_agents, f"Number of agents {len(agents)} does not match number of agents {num_agents}"
+            self.agents = agents
         self.a_to_i = {a: i for i, a in enumerate(self.agents)}
+
+        if landmarks is None:
+            self.landmarks = [f"landmark {i}" for i in range(num_landmarks)]
+        else:
+            assert len(landmarks) == num_landmarks, f"Number of landmarks {len(landmarks)} does not match number of landmarks {num_landmarks}"
+            self.landmarks = landmarks
+        self.l_to_i = {l: i+self.num_agents for i, l in enumerate(self.landmarks)}
+
         if action_spaces is None:
             self.action_spaces = {i: Box(-1, 1, (5,)) for i in self.agents}
         else:
-            # TODO some check with the names
+            # TODO some check with the names?
             assert len(action_spaces.keys()) == num_agents, f"Number of action spaces {len(action_spaces.keys())} does not match number of agents {num_agents}"
             self.action_spaces = action_spaces
-        
-        # Agent parameters
-        '''self.rad = set_agent_parameter(rad, jnp.concatenate([jnp.full((num_agents), 0.1),
-                                                             jnp.full((num_landmarks), 0.2)]))
-        self.moveable = set_agent_parameter(moveable, jnp.concatenate([jnp.full((num_agents), True),
-                                                                       jnp.full((num_landmarks), False)]))
-        self.silent = set_agent_parameter(silent, jnp.full((num_agents), 0))
-        self.collide = set_agent_parameter(collide, jnp.full((self.num_entities), True))
-        self.mass = set_agent_parameter(mass, jnp.full((self.num_entities), 1))
-        self.accel = set_agent_parameter(accel, jnp.full((num_agents), 5.0))
-        self.max_speed = set_agent_parameter(max_speed,
-                                            jnp.concatenate([jnp.full((num_agents), 0.5),
-                                                             jnp.full((num_landmarks), 0.0)]))'''
-        
+        if observation_spaces is None:
+            self.action_spaces = {i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.agents}
+        else:
+            assert len(observation_spaces.keys()) == num_agents, f"Number of observation spaces {len(observation_spaces.keys())} does not match number of agents {num_agents}"
+            self.observation_spaces = observation_spaces
         
         self.colour = colour if colour is not None else [(115, 243, 115)] * num_agents + [(64, 64, 64)] * num_landmarks
         
-        '''self.u_noise = jnp.full((num_agents), 1) 
-        self.c_noise = jnp.full((num_agents), 1) 
-        self.u_space_dim = 5'''
-        
-        # World parameters
-        #self.max_steps = max_steps  # max steps per episode
+        # World dimensions
         self.dim_c = dim_c  # communication channel dimensionality
         self.dim_p = dim_p  # position dimensionality
-        self.dim_color = 3  # color dimensionality
-        #self.dt = 0.1  # simulation timestep
-        #self.damping = 0.25  # physical damping
-        #self.contact_force = 1e2  # contact response parameters
-        #self.contact_margin = 1e-3
+        #self.dim_color = 3  # color dimensionality
 
         # PLOTTING
         self.render_mode = "human"
@@ -179,18 +157,16 @@ class MPEBaseEnv(MultiAgentEnv):
             contact_margin=1e-3,
             dt=0.1,
         )
+        
         return params
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, key: chex.PRNGKey, state: State, actions: dict, params: EnvParams):
         
-        a = dict(sorted(actions.items()))  # this does work with the string names
-        #print('a', a)
-        actions = jnp.array([a[i] for i in self.agents]).squeeze()
-        print('actions', actions)
+        #a = dict(sorted(actions.items()))  # this does work with the string names
 
-        u, c = self._set_action(self.agent_range, actions, params)
-        print('u shape', u.shape)
+        u, c = self.set_actions(actions, params)
+
         key, key_w = jax.random.split(key)
         p_pos, p_vel = self._world_step(key_w, state, u, params)
         
@@ -202,14 +178,14 @@ class MPEBaseEnv(MultiAgentEnv):
         state = State(
             p_pos=p_pos,
             p_vel=p_vel,
-            s_c=state.s_c,
-            u=u,
+            #s_c=state.s_c,
+            #u=u,
             c=c,
             done=done,
             step=state.step+1
         )
         
-        reward = self.reward(self.agent_range, state)
+        reward = self.reward(self.agent_range, state, params)
         
         obs = self.observation(self.agent_range, state)
         obs = {a: obs[i] for i, a in enumerate(self.agents)}
@@ -224,9 +200,9 @@ class MPEBaseEnv(MultiAgentEnv):
         state = State(
             p_pos=jnp.array([[1.0, 1.0], [0.0, 0.5], [-1.0, 0.0], [0.5, 0.5]]),
             p_vel=jnp.zeros((self.num_entities, 2)),
-            s_c=jnp.zeros((self.num_entities, 2)),
-            u=jnp.zeros((self.num_entities, 2)),
-            c=jnp.zeros((self.num_entities, 2)),
+            #s_c=jnp.zeros((self.num_entities, 2)),
+            #u=jnp.zeros((self.num_entities, 2)),
+            c=jnp.zeros((self.num_agents, 2)),
             done=jnp.full((self.num_agents), False),
             step=0,
         )
@@ -244,24 +220,29 @@ class MPEBaseEnv(MultiAgentEnv):
         return jnp.concatenate([state.p_vel[aidx].flatten(),
                                 landmark_rel_pos.flatten()])
         
-    @partial(jax.vmap, in_axes=[None, 0, None])
-    def reward(self, aidx, state):
+    @partial(jax.vmap, in_axes=[None, 0, None, None])
+    def reward(self, aidx, state, params):
         return -1*jnp.linalg.norm(state.p_pos[aidx] - state.p_pos[-1])  # NOTE assumes one landmark 
         
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
-    def _set_action(self, a_idx: str, action: dict, params: EnvParams):
-        """ Extract u and c actions from action array."""
+    #@partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def set_actions(self, actions: dict, params: EnvParams):
+        """ Extract u and c actions for all agents from actions dict."""
         # NOTE only for continuous action space currently
+        actions = jnp.array([actions[i] for i in self.agents]).squeeze()
 
-        u = jnp.array([
-            action[1] - action[2],
-            action[3] - action[4]
-        ])
-        print('u', u)
-        print('params moveable', params.moveable[a_idx])
-        u = u * params.accel[a_idx] * params.moveable[a_idx]
-        c = action[5:] * ~params.silent[a_idx]
-        return u, c
+        @partial(jax.vmap, in_axes=[0, 0, None])
+        def _set_action(a_idx, action, params):
+            u = jnp.array([
+                action[1] - action[2],
+                action[3] - action[4]
+            ])
+            #print('u', u)
+            #print('params moveable', params.moveable[a_idx])
+            u = u * params.accel[a_idx] * params.moveable[a_idx]
+            c = action[5:] * ~params.silent[a_idx]
+            return u, c
+
+        return _set_action(self.agent_range, actions, params)
 
     # return all entities in the world
     @property

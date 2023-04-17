@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import chex
 import pygame
+from typing import Tuple
 from functools import partial
 from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State, EnvParams
 from gymnax.environments.spaces import Box
@@ -14,7 +15,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
     
     def __init__(self, 
                  num_good_agents=2, 
-                 num_adversaries=3, 
+                 num_adversaries=4, 
                  num_obs=1,
                  num_food=2,
                  num_forests=2,):
@@ -30,18 +31,33 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         self.num_good_agents, self.num_adversaries = num_good_agents, num_adversaries
         self.num_obs, self.num_food, self.num_forests = num_obs, num_food, num_forests
         
-        self.leader = jnp.insert(jnp.zeros((num_agents-1)), 0, 1)
+        self.leader = "leadadversary_0"
+        self.adversaries = ["adversary_{}".format(i) for i in range(num_adversaries-1)]
+        self.good_agents = ["agent_{}".format(i) for i in range(num_good_agents)]
+        agents = [self.leader] + self.adversaries + self.good_agents
+
+        landmarks = ["landmark {}".format(i) for i in range(num_obs)] + \
+                    ["food {}".format(i) for i in range(num_food)] + \
+                    ["forest {}".format(i) for i in range(num_forests)]
+
+        self.leader_map = jnp.insert(jnp.zeros((num_agents-1)), 0, 1)
         self.leader_idx = 0
         
-        action_spaces = {i: Box(-1.0, 1.0, (5,)) for i in range(num_agents)}
-        action_spaces[self.leader_idx] = Box(-1.0, 1.0, (9,))
-        
+        action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
+        action_spaces[self.leader] = Box(0.0, 1.0, (9,))
+
+        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (34,)) for i in self.adversaries + [self.leader]}
+        observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (28,)) for i in self.good_agents})
+
         colour = [(243, 115, 115)] * num_adversaries + [(115, 243, 115)] * num_good_agents + \
             [(64, 64, 64)] * num_obs + [(39, 39, 166)] * num_food + [(153, 230, 153)] * num_forests
         
         super().__init__(num_agents=num_agents, 
+                         agents=agents,
                          num_landmarks=num_landmarks,
+                         landmarks=landmarks,
                          action_spaces=action_spaces,
+                         observation_spaces=observation_spaces,
                          dim_c=dim_c,
                          colour=colour)
         
@@ -74,7 +90,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         return params
 
     @partial(jax.jit, static_argnums=[0])
-    def reset_env(self, key):
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, State]:
         
         key_a, key_l = jax.random.split(key)        
         
@@ -86,14 +102,38 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
-            s_c=jnp.zeros((self.num_entities, self.dim_c)),
-            u=jnp.zeros((self.num_agents, self.dim_p)),
+            #s_c=jnp.zeros((self.num_entities, self.dim_c)),
+            #u=jnp.zeros((self.num_agents, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
             done=jnp.full((self.num_agents), False),
             step=0
         )
         
         return self.observation(self.agent_range, state), state
+    
+    def set_actions(self, actions: dict, params: EnvParams):
+        
+        @partial(jax.vmap, in_axes=[0, 0, None])
+        def _set_u(a_idx, action, params):
+            u = jnp.array([
+                action[1] - action[2],
+                action[3] - action[4]
+            ])
+            return u * params.accel[a_idx] * params.moveable[a_idx]
+
+        print('actions', actions)
+
+        lact = actions[self.leader]
+        aact = jnp.array([actions[a] for a in self.adversaries])
+        gact = jnp.array([actions[a] for a in self.good_agents])
+
+        u_acts = jnp.concatenate([lact[:5][None], aact, gact])
+        u = _set_u(self.agent_range, u_acts, params)
+
+        c = jnp.zeros((self.num_agents, self.dim_c))
+        c = c.at[self.leader_idx].set(lact[5:])
+
+        return u, c
     
     def observations(self, state, params: EnvParams) -> dict:
         """ Returns observations of all agents """
@@ -103,9 +143,15 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             """ Returns true if agent is in forest """
             return jnp.linalg.norm(state.p_pos[-self.num_forests:] - state.p_pos[idx], axis=0) < params.rad[-self.num_forests:] 
 
-        @partial(jax.vmap, in_axes=(0,))
+        @partial(jax.vmap, in_axes=(0, None, None))
         def _common_stats(aidx, state, params):
-
+            
+            landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
+        
+            forest = __in_forest(self.agent_range)  # [num_agents, num_forests]
+            in_forest = jnp.any(forest[aidx])  # True if ego agent in forest
+            same_forest = jnp.any(forest[aidx] * forest, axis=1)  # True if other and ego agent in same forest
+            no_forest = jnp.all(~forest, axis=1) & ~in_forest  # True if other not in a forest and ego agent not in forest
 
 
 
@@ -136,9 +182,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         # use jnp.roll to remove ego agent from other_pos and other_vel arrays
         other_pos = jnp.roll(other_pos, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
         other_vel = jnp.roll(other_vel, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
-        
-        good = _good()
-                
+                        
         def _good():
             return jnp.concatenate([
                 state.p_pos[aidx].flatten(),
@@ -159,7 +203,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                 other_pos.flatten(),
                 other_vel.flatten(),
                 jnp.any(forest[aidx])[None],
-                state.s_c[self.leader_idx][None].flatten()
+                state.c[self.leader_idx][None].flatten()
             ])
             
             leader = lambda : jnp.concatenate([
@@ -168,7 +212,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                 landmark_pos.flatten(), 
                 other_pos.flatten(),
                 other_vel.flatten(),
-                state.s_c[self.leader_idx][None].flatten(),
+                state.c[self.leader_idx][None].flatten(),
                 jnp.zeros((1))
             ])
             
@@ -176,12 +220,12 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         
         return jax.lax.cond(aidx<self.num_adversaries, _adversary, _good)
 
-    @partial(jax.vmap, in_axes=[None, 0, None])
-    def reward(self, aidx, state):
-        return jax.lax.cond(aidx<self.num_adversaries, self.adversary_reward, self.agent_reward, *(aidx, state))
+    @partial(jax.vmap, in_axes=[None, 0, None, None])
+    def reward(self, aidx, state, params):
+        return jax.lax.cond(aidx<self.num_adversaries, self.adversary_reward, self.agent_reward, *(aidx, state, params))
 
     #@partial(jax.vmap, in_axes=[None, 0, None])
-    def agent_reward(self, aidx, state):
+    def agent_reward(self, aidx, state, params: EnvParams):
         
         @partial(jax.vmap, in_axes=(0,))
         def _bound_rew(x):
@@ -194,14 +238,14 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         
         rew = 0
         # check collision, -5 for each collision with adversary 
-        ac = self._collision(state.p_pos[aidx], self.rad[aidx], state.p_pos[:self.num_adversaries], self.rad[:self.num_adversaries])
+        ac = self._collision(state.p_pos[aidx], params.rad[aidx], state.p_pos[:self.num_adversaries], params.rad[:self.num_adversaries])
         rew -= jnp.sum(ac) * 5
         
         # check map bounds,  
         rew -= 2 * jnp.sum(_bound_rew(jnp.abs(state.p_pos[aidx])))
         
         # check food collisions
-        fc = self._collision(state.p_pos[aidx], self.rad[aidx], state.p_pos[-(self.num_food+self.num_forests):-self.num_forests], self.rad[-(self.num_food+self.num_forests):-self.num_forests])
+        fc = self._collision(state.p_pos[aidx], params.rad[aidx], state.p_pos[-(self.num_food+self.num_forests):-self.num_forests], params.rad[-(self.num_food+self.num_forests):-self.num_forests])
         rew += jnp.sum(fc) * 2
         
         # reward for being near food
@@ -209,7 +253,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         return rew
     
     #@partial(jax.vmap, in_axes=[None, 0, None])
-    def adversary_reward(self, aidx, state):
+    def adversary_reward(self, aidx, state, params: EnvParams):
         
         @partial(jax.vmap, in_axes=[0, 0, None, None])
         def vcollision(apos, arad, opos, orad):
@@ -220,7 +264,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         rew -= 0.1 * jnp.min(jnp.linalg.norm(state.p_pos[self.num_adversaries:self.num_agents] - state.p_pos[aidx], axis=1))
         
         # for each agent, add collision bonus 
-        rew += 5 * jnp.sum(vcollision(state.p_pos[self.num_adversaries:self.num_agents], self.rad[self.num_adversaries:self.num_agents], state.p_pos[:self.num_adversaries], self.rad[:self.num_adversaries]))
+        rew += 5 * jnp.sum(vcollision(state.p_pos[self.num_adversaries:self.num_agents], params.rad[self.num_adversaries:self.num_agents], state.p_pos[:self.num_adversaries], params.rad[:self.num_adversaries]))
         return rew
         
         
@@ -247,28 +291,43 @@ def test_policy(key, state):
     
 
 if __name__=="__main__":
+    from pettingzoo.mpe import simple_world_comm_v2
+
+    ### Petting zoo env
+    zoo_env = simple_world_comm_v2.parallel_env(max_cycles=25, continuous_actions=True)
+    zoo_obs = zoo_env.reset()
+    actions = {agent: zoo_env.action_space(agent).sample() for agent in zoo_env.agents}
+
+    obs_space = {agent: zoo_env.observation_space(agent) for agent in zoo_env.agents}
+    act_space = {agent: zoo_env.action_space(agent) for agent in zoo_env.agents}
+    print('obs space', obs_space, '\n act space', act_space)
+    
     key = jax.random.PRNGKey(0)
 
     env = SimpleWorldCommEnv()
+    params = env.default_params
     
     key, key_r = jax.random.split(key)
-    state = env.reset_env(key_r)
+    obs, state = env.reset_env(key_r, params)
     
     #obs = env.observation(0, state)
     #print('obs', obs.shape, obs)
     
     mock_action = jnp.array([[0.0, 0.0, 1.0, 0.1, 0.1, 0.0, 0.0, 0.0, 0.0]])
-    
-    actions = jnp.repeat(mock_action[None], repeats=env.num_agents, axis=0).squeeze()
-    
+    #
+    #actions = jnp.repeat(mock_action[None], repeats=env.num_agents, axis=0).squeeze()
+    #actions = {agent: mock_action for agent in env.agents}
     env.enable_render()
     
     print('state', state)
     for _ in range(50):
         key, key_a, key_s = jax.random.split(key, 3)
-        actions = test_policy(key_a, state)
-        #print('actions', actions)
-        obs, state, rew, _ = env.step_env(key_s, state, actions)
-        env.render(state)
+        #actions = test_policy(key_a, state)
+        #actions = {agent: actions[i] for i, agent in enumerate(env.agents)}
+        print('actions', actions)
+        print('state', state)
+        obs, state, rew, _ = env.step_env(key_s, state, actions, params)
+        env.render(state, params)
+        print('obs', obs)
         #print('rew', rew)
 

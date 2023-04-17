@@ -13,11 +13,13 @@ num_envs = 70
 
 
 ### PETTING ZOO BENCHMARK
-env = simple_world_comm_v2.parallel_env(max_cycles=max_steps)
+env = simple_world_comm_v2.parallel_env(max_cycles=max_steps, continuous_actions=True)
 obs = env.reset()
 
 start_time = time.time()
 actions = {agent: env.action_space(agent).sample() for agent in env.agents} 
+print('actions', actions)
+raise
 #while env.agents:
     #step += 1
 for _ in range(max_steps):    
