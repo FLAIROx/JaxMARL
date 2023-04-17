@@ -63,6 +63,7 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
         )
         #obs = jax.lax.select(jnp.all(states_st.done), obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
+        print('obs', obs_st, obs_re)
         obs = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), obs_re, obs_st
         )

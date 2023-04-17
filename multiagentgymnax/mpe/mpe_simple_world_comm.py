@@ -109,7 +109,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             step=0
         )
         
-        return self.observation(self.agent_range, state), state
+        return self.observations(state, params), state
     
     def set_actions(self, actions: dict, params: EnvParams):
         
@@ -135,10 +135,10 @@ class SimpleWorldCommEnv(MPEBaseEnv):
 
         return u, c
     
-    def observations(self, state, params: EnvParams) -> dict:
+    def observations(self, state: State, params: EnvParams) -> dict:
         """ Returns observations of all agents """
         
-        @partial(jax.vmap, in_axes=(0, None))
+        '''@partial(jax.vmap, in_axes=(0, None))
         def __in_forest(idx: int, params: EnvParams) -> chex.Array:
             """ Returns true if agent is in forest """
             return jnp.linalg.norm(state.p_pos[-self.num_forests:] - state.p_pos[idx], axis=0) < params.rad[-self.num_forests:] 
@@ -151,7 +151,10 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             forest = __in_forest(self.agent_range)  # [num_agents, num_forests]
             in_forest = jnp.any(forest[aidx])  # True if ego agent in forest
             same_forest = jnp.any(forest[aidx] * forest, axis=1)  # True if other and ego agent in same forest
-            no_forest = jnp.all(~forest, axis=1) & ~in_forest  # True if other not in a forest and ego agent not in forest
+            no_forest = jnp.all(~forest, axis=1) & ~in_forest  # True if other not in a forest and ego agent not in forest'''
+
+        obs = self.observation(self.agent_range, state)
+        return {agent: obs[i] for i, agent in enumerate(self.agents)}
 
 
 

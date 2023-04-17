@@ -187,8 +187,7 @@ class MPEBaseEnv(MultiAgentEnv):
         
         reward = self.reward(self.agent_range, state, params)
         
-        obs = self.observation(self.agent_range, state)
-        obs = {a: obs[i] for i, a in enumerate(self.agents)}
+        obs = self.observations(state, params)
 
         info = {}
         
@@ -207,18 +206,25 @@ class MPEBaseEnv(MultiAgentEnv):
             step=0,
         )
 
-        obs = self.observation(self.agent_range, state)
-        obs = {a: obs[i] for i, a in enumerate(self.agents)}
+        obs = self.observations(state, params)
 
         return obs, state
     
-    @partial(jax.vmap, in_axes=[None, 0, None])
-    def observation(self, aidx, state: State):
-        """ Return observation for agent i."""
-        landmark_rel_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]
-        
-        return jnp.concatenate([state.p_vel[aidx].flatten(),
-                                landmark_rel_pos.flatten()])
+    @partial(jax.jit, static_argnums=[0])
+    def observations(self, state: State, params: EnvParams) -> dict:
+        """ Return dictionary of agent observations """
+
+        @partial(jax.vmap, in_axes=[0, None])
+        def _observation(aidx: int, state: State) -> jnp.ndarray:
+            """ Return observation for agent i."""
+            landmark_rel_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]
+            
+            return jnp.concatenate([state.p_vel[aidx].flatten(),
+                                    landmark_rel_pos.flatten()])
+
+        obs = _observation(self.agent_range, state)
+        return {a: obs[i] for i, a in enumerate(self.agents)}
+    
         
     @partial(jax.vmap, in_axes=[None, 0, None, None])
     def reward(self, aidx, state, params):
