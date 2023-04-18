@@ -136,10 +136,13 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         return u, c
     
     def observations(self, state: State, params: EnvParams) -> dict:
+        
+        # good [self vel, self pos, landmark rel pos, other agent rel pos, other aget vel, self in forest]
+        
         """ Returns observations of all agents """
         
-        '''@partial(jax.vmap, in_axes=(0, None))
-        def __in_forest(idx: int, params: EnvParams) -> chex.Array:
+        @partial(jax.vmap, in_axes=(0, None))
+        def _in_forest(idx: int, params: EnvParams) -> chex.Array:
             """ Returns true if agent is in forest """
             return jnp.linalg.norm(state.p_pos[-self.num_forests:] - state.p_pos[idx], axis=0) < params.rad[-self.num_forests:] 
 
@@ -148,19 +151,73 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
         
-            forest = __in_forest(self.agent_range)  # [num_agents, num_forests]
+            forest = _in_forest(self.agent_range, params)  # [num_agents, num_forests]
             in_forest = jnp.any(forest[aidx])  # True if ego agent in forest
             same_forest = jnp.any(forest[aidx] * forest, axis=1)  # True if other and ego agent in same forest
-            no_forest = jnp.all(~forest, axis=1) & ~in_forest  # True if other not in a forest and ego agent not in forest'''
+            no_forest = jnp.all(~forest, axis=1) & ~in_forest  # True if other not in a forest and ego agent not in forest
+            
+            leader = aidx == self.leader_idx
+            other_mask = jnp.logical_or(same_forest, no_forest) | leader  
+            
+            other_pos = (state.p_pos[:self.num_agents] - state.p_pos[aidx]) * other_mask[:, None]
+            other_vel = state.p_vel[:self.num_agents] * other_mask[:, None]
+            
+            # use jnp.roll to remove ego agent from other_pos and other_vel arrays
+            other_pos = jnp.roll(other_pos, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
+            other_vel = jnp.roll(other_vel, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
+            
+            return landmark_pos, other_pos, other_vel, forest[aidx]
+        
+        landmark_pos, other_pos, other_vel, forest = _common_stats(self.agent_range, state, params)
 
-        obs = self.observation(self.agent_range, state)
-        return {agent: obs[i] for i, agent in enumerate(self.agents)}
+        print('landmark pos', landmark_pos, 'other pos', other_pos)
+        
+        # NOTE some of the orderings differ to their docs
+        def _good(aidx):
+            return jnp.concatenate([
+                state.p_vel[aidx].flatten(), # 2
+                state.p_pos[aidx].flatten(), # 2
+                landmark_pos[aidx].flatten(), # 5, 2
+                other_pos[aidx].flatten(), # 5, 2
+                forest[aidx], # 2
+                other_vel[aidx,-1:].flatten(), # 2
+            ])
+            
+        def _leader():
+            return jnp.concatenate([
+                state.p_pos[self.leader_idx][None].flatten(),
+                state.p_vel[self.leader_idx][None].flatten(),
+                landmark_pos[self.leader_idx].flatten(), 
+                other_pos[self.leader_idx].flatten(),
+                other_vel[self.leader_idx, -2:].flatten(), # 2, 2
+                forest[self.leader_idx],  # NOTE this differs to their docs
+                state.c[self.leader_idx][None].flatten(), # 4
+            ])
+            
+        def _adversary(aidx):
+            return jnp.concatenate([
+                state.p_vel[aidx][None].flatten(),
+                state.p_pos[aidx][None].flatten(),
+                landmark_pos[aidx].flatten(), 
+                other_pos[aidx].flatten(),
+                other_vel[aidx, -2:].flatten(),
+                forest[aidx],
+                state.c[self.leader_idx][None].flatten()
+            ])
+            
+        obs = {self.leader: _leader()}
+        obs.update({a: _adversary(i+1) for i, a in enumerate(self.adversaries)})
+        obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
+        
+        return obs
+        #obs = self.observation(self.agent_range, state)
+        #return {agent: obs[i] for i, agent in enumerate(self.agents)}
 
 
 
 
     @partial(jax.vmap, in_axes=[None, 0, None])
-    def observation(self, aidx, state):
+    def observation_old(self, aidx, state):
         # NOTE have padded out the obs to all be the same size cause jax and differing array sizes.
         # a little clunky so could be tided
         
@@ -188,8 +245,8 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                         
         def _good():
             return jnp.concatenate([
-                state.p_pos[aidx].flatten(),
                 state.p_vel[aidx].flatten(),
+                state.p_pos[aidx].flatten(),
                 landmark_pos.flatten(), 
                 other_pos.flatten(),
                 other_vel.flatten(),
@@ -200,8 +257,8 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         def _adversary():
             
             standard = lambda : jnp.concatenate([
-                state.p_pos[aidx][None].flatten(),
                 state.p_vel[aidx][None].flatten(),
+                state.p_pos[aidx][None].flatten(),
                 landmark_pos.flatten(), 
                 other_pos.flatten(),
                 other_vel.flatten(),
@@ -223,9 +280,15 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         
         return jax.lax.cond(aidx<self.num_adversaries, _adversary, _good)
 
-    @partial(jax.vmap, in_axes=[None, 0, None, None])
-    def reward(self, aidx, state, params):
-        return jax.lax.cond(aidx<self.num_adversaries, self.adversary_reward, self.agent_reward, *(aidx, state, params))
+
+    def rewards(self, state, params) -> dict[str, float]:
+
+        @partial(jax.vmap, in_axes=[0, None, None])
+        def _reward(aidx, state, params):
+            return jax.lax.cond(aidx<self.num_adversaries, self.adversary_reward, self.agent_reward, *(aidx, state, params))
+        
+        r = _reward(self.agent_range, state, params)
+        return {agent: r[i] for i, agent in enumerate(self.agents)}
 
     #@partial(jax.vmap, in_axes=[None, 0, None])
     def agent_reward(self, aidx, state, params: EnvParams):
@@ -304,7 +367,7 @@ if __name__=="__main__":
     obs_space = {agent: zoo_env.observation_space(agent) for agent in zoo_env.agents}
     act_space = {agent: zoo_env.action_space(agent) for agent in zoo_env.agents}
     print('obs space', obs_space, '\n act space', act_space)
-    
+    #print('zoo obs', zoo_obs)
     key = jax.random.PRNGKey(0)
 
     env = SimpleWorldCommEnv()
@@ -327,10 +390,12 @@ if __name__=="__main__":
         key, key_a, key_s = jax.random.split(key, 3)
         #actions = test_policy(key_a, state)
         #actions = {agent: actions[i] for i, agent in enumerate(env.agents)}
-        print('actions', actions)
-        print('state', state)
+        #print('actions', actions)
+        #print('state', state)
         obs, state, rew, _ = env.step_env(key_s, state, actions, params)
+        actions = {agent: zoo_env.action_space(agent).sample() for agent in zoo_env.agents}
         env.render(state, params)
-        print('obs', obs)
+        print('obs', [o.shape for o in obs.values()])
+        raise
         #print('rew', rew)
 

@@ -35,7 +35,7 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
     @partial(jax.jit, static_argnums=(0,))
     def reset(
         self, key: chex.PRNGKey, params: Optional[EnvParams] = None
-    ) -> Tuple[chex.Array, State]:
+    ) -> Tuple[dict[str, chex.Array], State]:
         if params is None:
             params = self.default_params
 
@@ -46,9 +46,9 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         self, 
         key: chex.PRNGKey, 
         state: State, 
-        actions: chex.Array, 
+        actions: dict[str, chex.Array], 
         params: Optional[EnvParams] = None,
-    ) -> Tuple[chex.Array, State, chex.Array, chex.Array, dict]:
+    ) -> Tuple[dict[str, chex.Array], State, dict[str, float], chex.Array, dict]:
         if params is None:
             params = self.default_params
         key, key_reset = jax.random.split(key)

@@ -34,21 +34,17 @@ import os
 class State:
     p_pos: chex.Array # [n, [x, y]]
     p_vel: chex.Array # [n, [x, y]]
-    #s_c: chex.Array # communication state
-    #u: chex.Array # physical action
-    c: chex.Array  # communication action
+    c: chex.Array  # communication state
     done: chex.Array # [bool,]
     step: int
 
 @struct.dataclass
 class EnvParams:
     max_steps: int
-
     rad: chex.Array
     moveable: chex.Array
     silent: chex.Array
     collide: chex.Array
-    
     mass: chex.Array
     accel: chex.Array
     max_speed: chex.Array
@@ -58,10 +54,6 @@ class EnvParams:
     contact_force: float
     contact_margin: float
     dt: float
-    
-    #l_pos: chex.Array 
-    #l_rad: chex.Array
-    #l_moveable: chex.Array
     
 
 
@@ -126,17 +118,11 @@ class MPEBaseEnv(MultiAgentEnv):
         # World dimensions
         self.dim_c = dim_c  # communication channel dimensionality
         self.dim_p = dim_p  # position dimensionality
-        #self.dim_color = 3  # color dimensionality
 
         # PLOTTING
         self.render_mode = "human"
         self.width = 700
         self.height = 700
-        self.screen = pygame.Surface([self.width, self.height])
-        self.max_size = 1
-        '''self.game_font = pygame.freetype.Font(
-            os.path.join(os.path.dirname(__file__), "secrcode.ttf"), 24
-        )'''
         self.renderOn = False
 
     @property
@@ -185,7 +171,7 @@ class MPEBaseEnv(MultiAgentEnv):
             step=state.step+1
         )
         
-        reward = self.reward(self.agent_range, state, params)
+        reward = self.rewards(state, params)
         
         obs = self.observations(state, params)
 
@@ -225,12 +211,17 @@ class MPEBaseEnv(MultiAgentEnv):
         obs = _observation(self.agent_range, state)
         return {a: obs[i] for i, a in enumerate(self.agents)}
     
+     
+    def rewards(self, state: State, params: EnvParams) -> dict[str, float]:
+        """ Assign rewards for all agents """
         
-    @partial(jax.vmap, in_axes=[None, 0, None, None])
-    def reward(self, aidx, state, params):
-        return -1*jnp.linalg.norm(state.p_pos[aidx] - state.p_pos[-1])  # NOTE assumes one landmark 
+        @partial(jax.vmap, in_axes=[0, None])
+        def _reward(aidx, state):
+            return -1*jnp.linalg.norm(state.p_pos[aidx] - state.p_pos[-1])  # NOTE assumes one landmark 
         
-    #@partial(jax.vmap, in_axes=[None, 0, 0, None])
+        r = _reward(self.agent_range, state)
+        return {agent: r[i] for i, agent in enumerate(self.agents)}
+            
     def set_actions(self, actions: dict, params: EnvParams):
         """ Extract u and c actions for all agents from actions dict."""
         # NOTE only for continuous action space currently

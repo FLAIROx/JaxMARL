@@ -40,8 +40,6 @@ def np_state_to_jax(env_zoo, env_jax):
         l_idx = env_jax.l_to_i[landmark.name]
         print('name', landmark.name)
         p_pos[l_idx] = landmark.state.p_pos
-
-
         
     print('p_pos', p_pos)
 
@@ -55,7 +53,13 @@ def np_state_to_jax(env_zoo, env_jax):
     
     return State(**state)
 
+def assert_same_trans(obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
 
+    for agent in obs_zoo.keys():
+        assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"observations for agent {agent} do not match. zoo obs: {obs_zoo}, jax obs: {obs_jax}"
+        assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Reward values for agent {agent} do not match, zoo rew: {rew_zoo}, jax rew: {rew_jax}"
+        
+    assert np.alltrue(done_zoo == done_jax), "Done values do not match"
 
 
 def test_step(zoo_env_name):
@@ -74,6 +78,8 @@ def test_step(zoo_env_name):
             obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(actions)
             key, key_step = jax.random.split(key)
             obs_jax, state_jax, rew_jax, done_jax, _ = env_jax.step(key_step, state, actions)
+            
+            assert_same_trans(obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax)
             raise
 
 if __name__=="__main__":
