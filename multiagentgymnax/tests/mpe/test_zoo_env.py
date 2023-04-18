@@ -53,13 +53,13 @@ def np_state_to_jax(env_zoo, env_jax):
     
     return State(**state)
 
-def assert_same_trans(obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
+def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
 
     for agent in obs_zoo.keys():
-        assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"observations for agent {agent} do not match. zoo obs: {obs_zoo}, jax obs: {obs_jax}"
-        assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Reward values for agent {agent} do not match, zoo rew: {rew_zoo}, jax rew: {rew_jax}"
-        
-    assert np.alltrue(done_zoo == done_jax), "Done values do not match"
+        assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
+        assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
+        print('done zoo', done_zoo, 'done jax', done_jax)
+        assert np.alltrue(done_zoo[agent] == done_jax[agent]), f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
 
 
 def test_step(zoo_env_name):
@@ -68,10 +68,11 @@ def test_step(zoo_env_name):
     zoo_obs = env_zoo.reset()
     env_jax = SimpleWorldCommEnv()
     env_params = env_jax.default_params
-
+    key, key_reset = jax.random.split(key)
+    env_jax.reset(key_reset, env_params)
     for ep in range(num_episodes):
         obs = env_zoo.reset()
-
+        print('\n-- start of loop --')
         for s in range(num_steps):
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
             state = np_state_to_jax(env_zoo, env_jax)
@@ -79,8 +80,8 @@ def test_step(zoo_env_name):
             key, key_step = jax.random.split(key)
             obs_jax, state_jax, rew_jax, done_jax, _ = env_jax.step(key_step, state, actions)
             
-            assert_same_trans(obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax)
-            raise
+            assert_same_trans(s, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax)
+            
 
 if __name__=="__main__":
 

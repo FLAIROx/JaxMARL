@@ -52,11 +52,11 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         if params is None:
             params = self.default_params
         key, key_reset = jax.random.split(key)
-        obs_st, states_st, rewards, infos = self.step_env(
+        obs, state, rewards, infos = self.step_env(
             key, state, actions, params
         )
         
-        obs_re, states_re = self.reset_env(key_reset, params)  
+        '''obs_re, states_re = self.reset_env(key_reset, params)  
         
         # Auto-reset environment based on termination
         state = jax.tree_map(
@@ -66,8 +66,9 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         print('obs', obs_st, obs_re)
         obs = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), obs_re, obs_st
-        )
-        return obs, state, rewards, states_st.done, infos
+        )'''
+        dones = {a: state.done[i] for i, a in enumerate(self.agents)}
+        return obs, state, rewards, dones, infos
     
     def reset_env(
         self, key: chex.PRNGKey, params: EnvParams

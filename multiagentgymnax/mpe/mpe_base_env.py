@@ -271,7 +271,7 @@ class MPEBaseEnv(MultiAgentEnv):
     def _apply_comm_action(self, key, c, c_noise, silent):
         silence = jnp.zeros(c.shape)
         noise = jax.random.normal(key, shape=c.shape) * c_noise
-        return jax.lax.select(silent, c + noise, silence)
+        return jax.lax.select(silent, silence, c + noise)
         
     # gather agent action forces
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0])
