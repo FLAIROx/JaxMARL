@@ -27,8 +27,8 @@ def np_state_to_jax(env_zoo, env_jax):
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
     c = np.zeros((env_jax.num_entities, env_jax.dim_c))
-    print('--', env_zoo.aec_env.agents) # gives list of agent names
-    print('--', env_zoo.aec_env.env.world.agents)
+    #print('--', env_zoo.aec_env.agents) # gives list of agent names
+    #print('--', env_zoo.aec_env.env.world.agents)
     for agent in env_zoo.aec_env.env.world.agents:
         a_idx = env_jax.a_to_i[agent.name]
         p_pos[a_idx] = agent.state.p_pos
@@ -38,7 +38,7 @@ def np_state_to_jax(env_zoo, env_jax):
 
     for landmark in env_zoo.aec_env.env.world.landmarks:
         l_idx = env_jax.l_to_i[landmark.name]
-        print('name', landmark.name)
+        #print('name', landmark.name)
         p_pos[l_idx] = landmark.state.p_pos
         
     #print('p_pos', p_pos)
@@ -61,6 +61,15 @@ def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_j
         #print('done zoo', done_zoo, 'done jax', done_jax)
         assert np.alltrue(done_zoo[agent] == done_jax[agent]), f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
 
+def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
+
+    state_zoo = np_state_to_jax(env_zoo, env_jax)
+    
+    for k in state_zoo.keys():
+        jax_value = getattr(state_jax, k)
+        if k not in ["step"]:        
+            assert np.allclose(jax_value, state_zoo[k], atol=atol), f"State values do not match for key {k}, zoo value: {state_zoo[k]}, jax value: {jax_value}"
+
 
 def test_step(zoo_env_name):
     key = jax.random.PRNGKey(0)
@@ -82,6 +91,8 @@ def test_step(zoo_env_name):
             
             assert_same_trans(s, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax)
             
+            if not np.alltrue(done_zoo.values()):
+                assert_same_state(env_zoo, env_jax, state_jax)
 
 if __name__=="__main__":
 
