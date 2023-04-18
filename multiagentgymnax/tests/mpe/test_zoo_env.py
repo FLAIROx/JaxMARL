@@ -41,7 +41,7 @@ def np_state_to_jax(env_zoo, env_jax):
         print('name', landmark.name)
         p_pos[l_idx] = landmark.state.p_pos
         
-    print('p_pos', p_pos)
+    #print('p_pos', p_pos)
 
     state = {
         "p_pos": p_pos,
@@ -58,7 +58,7 @@ def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_j
     for agent in obs_zoo.keys():
         assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
         assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
-        print('done zoo', done_zoo, 'done jax', done_jax)
+        #print('done zoo', done_zoo, 'done jax', done_jax)
         assert np.alltrue(done_zoo[agent] == done_jax[agent]), f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
 
 

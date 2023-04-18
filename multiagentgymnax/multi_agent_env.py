@@ -4,6 +4,7 @@ Abstract base class for multi agent gym environments with JAX
 
 import jax 
 import jax.numpy as jnp
+from typing import Dict
 import chex 
 from functools import partial
 from flax import struct
@@ -35,7 +36,7 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
     @partial(jax.jit, static_argnums=(0,))
     def reset(
         self, key: chex.PRNGKey, params: Optional[EnvParams] = None
-    ) -> Tuple[dict[str, chex.Array], State]:
+    ) -> Tuple[Dict[str, chex.Array], State]:
         if params is None:
             params = self.default_params
 
@@ -46,29 +47,29 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         self, 
         key: chex.PRNGKey, 
         state: State, 
-        actions: dict[str, chex.Array], 
+        actions: Dict[str, chex.Array], 
         params: Optional[EnvParams] = None,
-    ) -> Tuple[dict[str, chex.Array], State, dict[str, float], chex.Array, dict]:
+    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], chex.Array, Dict]:
         if params is None:
             params = self.default_params
         key, key_reset = jax.random.split(key)
-        obs, state, rewards, infos = self.step_env(
+        obs_st, states_st, rewards, infos = self.step_env(
             key, state, actions, params
         )
         
-        '''obs_re, states_re = self.reset_env(key_reset, params)  
+        obs_re, states_re = self.reset_env(key_reset, params)  
         
         # Auto-reset environment based on termination
-        state = jax.tree_map(
+        states = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
         )
         #obs = jax.lax.select(jnp.all(states_st.done), obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
-        print('obs', obs_st, obs_re)
+        #print('obs', obs_st, obs_re)
         obs = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), obs_re, obs_st
-        )'''
-        dones = {a: state.done[i] for i, a in enumerate(self.agents)}
-        return obs, state, rewards, dones, infos
+        )
+        dones = {a: states_st.done[i] for i, a in enumerate(self.agents)}
+        return obs, states, rewards, dones, infos
     
     def reset_env(
         self, key: chex.PRNGKey, params: EnvParams

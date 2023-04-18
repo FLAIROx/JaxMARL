@@ -27,7 +27,7 @@ landmarks currently have a velocity kept within the state which is just always z
 """
 
 from flax import struct
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 from functools import partial
 import os
 @struct.dataclass
@@ -159,7 +159,7 @@ class MPEBaseEnv(MultiAgentEnv):
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, params.c_noise, params.silent)
         
-        done = jnp.full((self.num_agents), state.step+1>=params.max_steps)
+        done = jnp.full((self.num_agents), state.step>=params.max_steps)
         
         state = State(
             p_pos=p_pos,
@@ -212,7 +212,7 @@ class MPEBaseEnv(MultiAgentEnv):
         return {a: obs[i] for i, a in enumerate(self.agents)}
     
      
-    def rewards(self, state: State, params: EnvParams) -> dict[str, float]:
+    def rewards(self, state: State, params: EnvParams) -> Dict[str, float]:
         """ Assign rewards for all agents """
         
         @partial(jax.vmap, in_axes=[0, None])
@@ -222,8 +222,8 @@ class MPEBaseEnv(MultiAgentEnv):
         r = _reward(self.agent_range, state)
         return {agent: r[i] for i, agent in enumerate(self.agents)}
             
-    def set_actions(self, actions: dict, params: EnvParams):
-        """ Extract u and c actions for all agents from actions dict."""
+    def set_actions(self, actions: Dict, params: EnvParams):
+        """ Extract u and c actions for all agents from actions Dict."""
         # NOTE only for continuous action space currently
         actions = jnp.array([actions[i] for i in self.agents]).squeeze()
 
@@ -259,7 +259,7 @@ class MPEBaseEnv(MultiAgentEnv):
         # apply environment forces
         p_force = jnp.concatenate([p_force, jnp.zeros((self.num_landmarks, 2))])
         p_force = self._apply_environment_force(p_force, state, params)
-        print('p_force post apply env force', p_force)
+        #print('p_force post apply env force', p_force)
         
         # integrate physical state
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, params.mass, params.moveable, params.max_speed, params)
@@ -278,7 +278,7 @@ class MPEBaseEnv(MultiAgentEnv):
     def _apply_action_force(self, key, p_force, u, u_noise, moveable):
         
         noise = jax.random.normal(key, shape=u.shape) * u_noise * 0.0 #NOTE temp zeroing
-        print('p force shape', p_force.shape, 'noise shape', noise.shape, 'u shape', u.shape)
+        #print('p force shape', p_force.shape, 'noise shape', noise.shape, 'u shape', u.shape)
         return jax.lax.select(moveable, u + noise, p_force)
 
     def _apply_environment_force(self, p_force_all, state: State, params: EnvParams):
@@ -346,7 +346,7 @@ class MPEBaseEnv(MultiAgentEnv):
     def _get_collision_force(self, idx_a, idx_b, state, params):
         
         dist_min = params.rad[idx_a] + params.rad[idx_b]
-        print('state', state)
+        #print('state', state)
         delta_pos = state.p_pos[idx_a] - state.p_pos[idx_b]
                 
         dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
@@ -390,7 +390,7 @@ class MPEBaseEnv(MultiAgentEnv):
 """
 
 how to store agent 
-if it is changing, must be in the data struct. should we use index or dictionary
+if it is changing, must be in the data struct. should we use index or Dictionary
 index seems more intuitive but jax can also vmap over a dictionary right
 
 
