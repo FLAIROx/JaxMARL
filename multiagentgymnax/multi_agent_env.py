@@ -1,5 +1,7 @@
 """ 
 Abstract base class for multi agent gym environments with JAX
+Based on the Gymnax and PettingZoo APIs
+
 """
 
 import jax 
@@ -63,8 +65,6 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         states = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
         )
-        #obs = jax.lax.select(jnp.all(states_st.done), obs_re, obs_st) # BUG fix this, need to use tree map =-- or do we..?
-        #print('obs', obs_st, obs_re)
         obs = jax.tree_map(
             lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), obs_re, obs_st
         )
@@ -88,8 +88,11 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
         return self.action_spaces[agent]
     
     # == PLOTTING ==
-    def render(self, state: State, params: EnvParams):
+    def enable_render(self, state: State, params: EnvParams) -> None:
+        raise NotImplementedError
+
+    def render(self, state: State, params: EnvParams) -> None:
         raise NotImplementedError
     
-    def close(self, state: State, params: EnvParams):
+    def close(self, state: State, params: EnvParams) -> None:
         raise NotImplementedError

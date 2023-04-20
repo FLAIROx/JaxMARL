@@ -54,8 +54,6 @@ class EnvParams:
     contact_force: float
     contact_margin: float
     dt: float
-    
-
 
 def set_agent_parameter(value, default):
     """ Return default value if None, else ensure shape is correct."""
