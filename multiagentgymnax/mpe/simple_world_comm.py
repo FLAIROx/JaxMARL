@@ -1,13 +1,11 @@
 import jax 
 import jax.numpy as jnp
 import chex
-import pygame
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State, EnvParams
+from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
 from gymnax.environments.spaces import Box
 
-# TODO leader mechanic (colour different)
 
 # NOTE food and forests are part of world.landmarks
 
@@ -43,14 +41,15 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         self.leader_map = jnp.insert(jnp.zeros((num_agents-1)), 0, 1)
         self.leader_idx = 0
         
+        # Action and observation spaces
         action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
         action_spaces[self.leader] = Box(0.0, 1.0, (9,))
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (34,)) for i in self.adversaries + [self.leader]}
         observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (28,)) for i in self.good_agents})
 
-        colour = [(243, 115, 115)] * num_adversaries + [(115, 243, 115)] * num_good_agents + \
-            [(64, 64, 64)] * num_obs + [(39, 39, 166)] * num_food + [(153, 230, 153)] * num_forests
+        colour = [(115, 40, 40)] + [ADVERSARY_COLOUR] * (num_adversaries-1) + [AGENT_COLOUR] * num_good_agents + \
+            [OBS_COLOUR] * num_obs + [(39, 39, 166)] * num_food + [(153, 230, 153)] * num_forests
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -89,7 +88,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         )
         return params
 
-    @partial(jax.jit, static_argnums=[0])
+    '''@partial(jax.jit, static_argnums=[0])
     def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, State]:
         
         key_a, key_l = jax.random.split(key)        
@@ -102,14 +101,12 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
-            #s_c=jnp.zeros((self.num_entities, self.dim_c)),
-            #u=jnp.zeros((self.num_agents, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
             done=jnp.full((self.num_agents), False),
             step=0
         )
         
-        return self.observations(state, params), state
+        return self.observations(state, params), state'''
     
     def set_actions(self, actions: dict, params: EnvParams):
         
@@ -330,6 +327,6 @@ if __name__=="__main__":
         actions = {agent: zoo_env.action_space(agent).sample() for agent in zoo_env.agents}
         env.render(state, params)
         print('obs', [o.shape for o in obs.values()])
-        raise
+        #raise
         #print('rew', rew)
 

@@ -22,7 +22,7 @@ class EnvParams:
     max_steps: int
 
 
-class MultiAgentEnv(object):  # NOTE use abc base calss
+class MultiAgentEnv(object):  
     
     def __init__(self,
                  num_agents: int,
@@ -91,7 +91,7 @@ class MultiAgentEnv(object):  # NOTE use abc base calss
     def enable_render(self, state: State, params: EnvParams) -> None:
         raise NotImplementedError
 
-    def render(self, state: State, params: EnvParams) -> None:
+    def render(self, state: State, params: Optional[EnvParams] = None) -> None:
         raise NotImplementedError
     
     def close(self, state: State, params: EnvParams) -> None:

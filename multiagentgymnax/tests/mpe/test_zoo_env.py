@@ -5,7 +5,7 @@ import pettingzoo
 from pettingzoo.mpe import simple_world_comm_v2
 #from multiagentgymnax.u
 
-from multiagentgymnax.mpe.mpe_simple_world_comm import SimpleWorldCommEnv
+from multiagentgymnax.mpe.simple_world_comm import SimpleWorldCommEnv
 
 num_episodes, num_steps, tolerance = 10, 25, 1e-4
 

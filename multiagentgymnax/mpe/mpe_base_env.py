@@ -55,13 +55,9 @@ class EnvParams:
     contact_margin: float
     dt: float
 
-def set_agent_parameter(value, default):
-    """ Return default value if None, else ensure shape is correct."""
-    if value is None:
-        return default
-    else:
-        assert value.shape[0] == default.shape[0], f"Value shape {value.shape} does not match default shape {default.shape}"
-        return value
+AGENT_COLOUR = (115, 243, 115)
+ADVERSARY_COLOUR = (243, 115, 115)
+OBS_COLOUR = (64, 64, 64)
 
 class MPEBaseEnv(MultiAgentEnv):
     
@@ -176,23 +172,27 @@ class MPEBaseEnv(MultiAgentEnv):
         info = {}
         
         return obs, state, reward, info
-        
+    
     @partial(jax.jit, static_argnums=[0])
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams):
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, State]:
+        """ Initialise with random positions """
+        
+        key_a, key_l = jax.random.split(key)        
+        
+        p_pos = jnp.concatenate([
+            jax.random.uniform(key_a, (self.num_agents, 2), minval=-1, maxval=+1),
+            jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
+        ])
         
         state = State(
-            p_pos=jnp.array([[1.0, 1.0], [0.0, 0.5], [-1.0, 0.0], [0.5, 0.5]]),
-            p_vel=jnp.zeros((self.num_entities, 2)),
-            #s_c=jnp.zeros((self.num_entities, 2)),
-            #u=jnp.zeros((self.num_entities, 2)),
-            c=jnp.zeros((self.num_agents, 2)),
+            p_pos=p_pos,
+            p_vel=jnp.zeros((self.num_entities, self.dim_p)),
+            c=jnp.zeros((self.num_agents, self.dim_c)),
             done=jnp.full((self.num_agents), False),
-            step=0,
+            step=0
         )
-
-        obs = self.observations(state, params)
-
-        return obs, state
+        
+        return self.observations(state, params), state
     
     @partial(jax.jit, static_argnums=[0])
     def observations(self, state: State, params: EnvParams) -> dict:
@@ -358,16 +358,35 @@ class MPEBaseEnv(MultiAgentEnv):
         c = ~params.collide[idx_a] |  ~params.collide[idx_b]
         c_force = jnp.zeros((2, 2)) 
         return jax.lax.select(c, c_force, force)
+    
+    ### === UTILITIES === ###
+    def is_collision(self, a:int, b:int, state: State, params: EnvParams):
+        """ check if two entities are colliding """
+        dist_min = params.rad[a] + params.rad[b]
+        delta_pos = state.p_pos[a] - state.p_pos[b]
+        dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
+        return dist < dist_min
         
+    @partial(jax.vmap, in_axes=(None, 0))
+    def map_bounds_reward(self, x):
+        """ vmap over x, y coodinates"""
+        w = x < 0.9
+        m = x < 1.0
+        mr = (x - 0.9) * 10
+        br = jnp.min(jnp.array([jnp.exp(2* x - 2), 10]))
+        return jax.lax.select(m, mr, br) * ~w
+
     ### === PLOTTING === ###
     def enable_render(self, mode="human") -> None:
         import matplotlib.pyplot as plt 
         plt.ion()
         plt.subplots(figsize=(8, 8))
         
-    def render(self, state: State, params: EnvParams) -> None:
+    def render(self, state: State, params: Optional[EnvParams] = None) -> None:
         import matplotlib.pyplot as plt
         from matplotlib.patches import Circle
+        if params is None:
+            params = self.default_params
         
         ax_lim = 2
         

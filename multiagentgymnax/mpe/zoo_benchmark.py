@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from multiagentgymnax.mpe.mpe_simple_world_comm import SimpleWorldCommEnv
+from multiagentgymnax.mpe.simple_world_comm import SimpleWorldCommEnv
 from multiagentgymnax.mpe.train_utils import RolloutManager
 from pettingzoo.mpe import simple_world_comm_v2
 import time
@@ -21,6 +21,8 @@ actions = {agent: env.action_space(agent).sample() for agent in env.agents}
 for _ in range(max_steps):    
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  # this is where you would insert your policy
     observations, rewards, terminations, truncations, infos = env.step(actions)
+    print('terms', terminations)
+    raise
 zoo_time = time.time() - start_time
 
 
