@@ -7,7 +7,6 @@ import jax.numpy as jnp
 import numpy as onp
 from multiagentgymnax import MultiAgentEnv
 import chex
-import pygame
 from gymnax.environments.spaces import Box
 """
 has both a physical and communication action
