@@ -171,7 +171,10 @@ class MPEBaseEnv(MultiAgentEnv):
 
         info = {}
         
-        return obs, state, reward, info
+        dones = {a: done[i] for i, a in enumerate(self.agents)}
+        dones.update({"__all__": jnp.all(done)})
+        
+        return obs, state, reward, dones, info
     
     @partial(jax.jit, static_argnums=[0])
     def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, State]:
@@ -442,7 +445,7 @@ if __name__=="__main__":
 
     print('state', state)
     for _ in range(50):
-        obs, state, rew, _ = env.step_env(key, state, actions, params)
+        obs, state, rew, dones, _ = env.step_env(key, state, actions, params)
         print('state', obs)
         env.render(state, params)
         #raise

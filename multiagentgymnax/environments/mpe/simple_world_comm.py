@@ -323,7 +323,7 @@ if __name__=="__main__":
         #actions = {agent: actions[i] for i, agent in enumerate(env.agents)}
         #print('actions', actions)
         #print('state', state)
-        obs, state, rew, _ = env.step_env(key_s, state, actions, params)
+        obs, state, rew, dones, _ = env.step_env(key_s, state, actions, params)
         actions = {agent: zoo_env.action_space(agent).sample() for agent in zoo_env.agents}
         env.render(state, params)
         print('obs', [o.shape for o in obs.values()])

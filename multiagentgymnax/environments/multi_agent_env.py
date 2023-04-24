@@ -25,8 +25,11 @@ class EnvParams:
 class MultiAgentEnv(object):  
     
     def __init__(self,
-                 num_agents: int,
+                 num_agents: int,  
     ) -> None:
+        """
+            num_agents (int): maximum number of agents within the environment
+        """
         self.num_agents = num_agents
         self.observation_spaces = dict()
         self.action_spaces = dict() 
@@ -39,6 +42,7 @@ class MultiAgentEnv(object):
     def reset(
         self, key: chex.PRNGKey, params: Optional[EnvParams] = None
     ) -> Tuple[Dict[str, chex.Array], State]:
+        """Performs resetting of the environment."""
         if params is None:
             params = self.default_params
 
@@ -51,11 +55,12 @@ class MultiAgentEnv(object):
         state: State, 
         actions: Dict[str, chex.Array], 
         params: Optional[EnvParams] = None,
-    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], chex.Array, Dict]:
+    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+        """Performs step transitions in the environment."""
         if params is None:
             params = self.default_params
         key, key_reset = jax.random.split(key)
-        obs_st, states_st, rewards, infos = self.step_env(
+        obs_st, states_st, rewards, dones, infos = self.step_env(
             key, state, actions, params
         )
         
@@ -63,22 +68,21 @@ class MultiAgentEnv(object):
         
         # Auto-reset environment based on termination
         states = jax.tree_map(
-            lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), states_re, states_st
+            lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st
         )
         obs = jax.tree_map(
-            lambda x, y: jax.lax.select(jnp.all(states_st.done), x, y), obs_re, obs_st
+            lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
         )
-        dones = {a: states_st.done[i] for i, a in enumerate(self.agents)}
         return obs, states, rewards, dones, infos
     
     def reset_env(
         self, key: chex.PRNGKey, params: EnvParams
-    ) -> Tuple[chex.Array, State]:
+    ) -> Tuple[Dict[str, chex.Array], State]:
         raise NotImplementedError
     
     def step_env(
-        self, key: chex.PRNGKey, state: State, actions: chex.Array, Params: EnvParams
-    ) -> Tuple[chex.Array, State, chex.Array, dict]:
+        self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array], Params: EnvParams
+    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         raise NotImplementedError
     
     def observation_space(self, agent: str):
