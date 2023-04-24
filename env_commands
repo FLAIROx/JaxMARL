@@ -1,6 +1,9 @@
 
 conda create -n majax python=3.8
+
+# NOTE this installs jax for CUDA 12, if you have a different CUDA version or no GPU, see https://github.com/google/jax#installation
 pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
 conda install -c conda-forge flax chex tqdm wandb dotmap
 pip install gymnax evosax pettingzoo
 pip install -e .
