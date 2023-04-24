@@ -1,1 +1,0 @@
-from .simple_world_comm import SimpleWorldCommEnv

@@ -15,7 +15,7 @@ Below is an example of a simple environment loop, using random actions.
 """
 
 import jax 
-from multiagentgymnax.mpe import SimpleWorldCommEnv
+from multiagentgymnax.environments.mpe import SimpleWorldCommEnv
 
 # Parameters + random keys
 max_steps = 100
@@ -42,5 +42,6 @@ for _ in range(max_steps):
 
     # Step environment
     obs, state, rewards, dones, infos = env.step(key_s, state, actions)
-    
+
     env.render(state)
+    

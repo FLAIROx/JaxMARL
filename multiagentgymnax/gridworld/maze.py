@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 from .env import Environment
-import spaces
+from multiagentgymnax.environments import spaces
 from typing import Tuple, Optional
 import chex
 from flax import struct

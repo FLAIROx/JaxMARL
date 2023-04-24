@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.mpe.mpe_base_env import MPEBaseEnv, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
+from multiagentgymnax.environments.mpe.mpe_base_env import MPEBaseEnv, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
 from gymnax.environments.spaces import Box
 
 

@@ -2,10 +2,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pettingzoo
-from pettingzoo.mpe import simple_world_comm_v2
+from pettingzoo.mpe import simple_world_comm_v2, simple_tag_v2
 #from multiagentgymnax.u
 
-from multiagentgymnax.mpe.simple_world_comm import SimpleWorldCommEnv
+from multiagentgymnax.environments.mpe import SimpleTagEnv, SimpleWorldCommEnv
 
 num_episodes, num_steps, tolerance = 10, 25, 1e-4
 
@@ -22,7 +22,7 @@ state = State(
 
 def np_state_to_jax(env_zoo, env_jax):
 
-    from multiagentgymnax.mpe.mpe_base_env import State
+    from multiagentgymnax.environments.mpe.mpe_base_env import State
 
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
@@ -72,10 +72,16 @@ def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
 
 
 def test_step(zoo_env_name):
+    print(f'-- Testing {zoo_env_name} --')
     key = jax.random.PRNGKey(0)
-    env_zoo = simple_world_comm_v2.parallel_env(max_cycles=25, continuous_actions=True)
+    
+    env_zoo, env_jax = env_mapper[zoo_env_name]
+
+    env_zoo = env_zoo.parallel_env(max_cycles=25, continuous_actions=True)
     zoo_obs = env_zoo.reset()
-    env_jax = SimpleWorldCommEnv()
+    
+    env_jax = env_jax()
+    
     env_params = env_jax.default_params
     key, key_reset = jax.random.split(key)
     env_jax.reset(key_reset, env_params)
@@ -94,6 +100,13 @@ def test_step(zoo_env_name):
             if not np.alltrue(done_zoo.values()):
                 assert_same_state(env_zoo, env_jax, state_jax)
 
+
+env_mapper = {
+    "simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommEnv),
+    "simple_tag_v2": (simple_tag_v2, SimpleTagEnv),
+}
+
 if __name__=="__main__":
 
-    test_step("simple_world_comm_v2")
+    #test_step("simple_world_comm_v2")
+    test_step("simple_tag_v2")
