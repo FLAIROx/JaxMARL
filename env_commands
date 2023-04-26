@@ -8,3 +8,6 @@ conda install -c conda-forge flax chex tqdm wandb dotmap
 pip install gymnax evosax pettingzoo
 pip install -e .
 # tensorflow-probability
+
+# to run MPE tests, you will also need pygame
+# pip install pygame
