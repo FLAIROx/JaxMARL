@@ -2,9 +2,9 @@ import math
 
 import numpy as np
 
-from viz.window import Window
-import viz.grid_rendering as rendering
-from .common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
+from multiagentgymnax.viz.window import Window
+import multiagentgymnax.viz.grid_rendering as rendering
+from multiagentgymnax.gridworld.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
 
 
 INDEX_TO_COLOR = [k for k,v in COLOR_TO_INDEX.items()]

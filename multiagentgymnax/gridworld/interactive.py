@@ -6,8 +6,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .maze import Maze, Actions
-from .grid_viz import GridVisualizer 
+from multiagentgymnax.gridworld.maze import Maze, Actions
+from multiagentgymnax.gridworld.grid_viz import GridVisualizer 
 
 
 def redraw(state, obs, extras):
