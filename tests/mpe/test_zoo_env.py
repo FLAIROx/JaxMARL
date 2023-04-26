@@ -4,10 +4,11 @@ import numpy as np
 import pettingzoo
 from pettingzoo.mpe import simple_world_comm_v2, simple_tag_v2
 #from multiagentgymnax.u
+import tqdm
 
 from multiagentgymnax.environments.mpe import SimpleTagEnv, SimpleWorldCommEnv
 
-num_episodes, num_steps, tolerance = 10, 25, 1e-4
+num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
 
 """
@@ -33,6 +34,7 @@ def np_state_to_jax(env_zoo, env_jax):
         a_idx = env_jax.a_to_i[agent.name]
         p_pos[a_idx] = agent.state.p_pos
         p_vel[a_idx] = agent.state.p_vel
+        #print('communication state', agent.state.c)
         c[a_idx] = agent.state.c
 
 
@@ -56,6 +58,7 @@ def np_state_to_jax(env_zoo, env_jax):
 def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
 
     for agent in obs_zoo.keys():
+        #print(f'{agent}: obs zoo {obs_zoo[agent]} len {len(obs_zoo[agent])}, obs jax {obs_jax[agent]} len {len(obs_jax[agent])}')
         assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
         assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
         #print('done zoo', done_zoo, 'done jax', done_jax)
@@ -85,9 +88,8 @@ def test_step(zoo_env_name):
     env_params = env_jax.default_params
     key, key_reset = jax.random.split(key)
     env_jax.reset(key_reset, env_params)
-    for ep in range(num_episodes):
+    for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}", leave=True):
         obs = env_zoo.reset()
-        print('\n-- start of loop --')
         for s in range(num_steps):
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
             state = np_state_to_jax(env_zoo, env_jax)
@@ -100,6 +102,7 @@ def test_step(zoo_env_name):
             if not np.alltrue(done_zoo.values()):
                 assert_same_state(env_zoo, env_jax, state_jax)
 
+    print(f'-- {zoo_env_name} all tests passed --')
 
 env_mapper = {
     "simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommEnv),

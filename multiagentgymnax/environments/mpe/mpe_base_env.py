@@ -145,13 +145,14 @@ class MPEBaseEnv(MultiAgentEnv):
         #a = dict(sorted(actions.items()))  # this does work with the string names
 
         u, c = self.set_actions(actions, params)
+        if c.shape[1] < self.dim_c:  # This is due to the MPE code carrying around 0s for the communication channels
+            c = jnp.concatenate([c, jnp.zeros((self.num_agents, self.dim_c - c.shape[1]))], axis=1)
 
         key, key_w = jax.random.split(key)
         p_pos, p_vel = self._world_step(key_w, state, u, params)
         
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, params.c_noise, params.silent)
-        
         done = jnp.full((self.num_agents), state.step>=params.max_steps)
         
         state = State(
