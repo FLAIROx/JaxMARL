@@ -78,8 +78,7 @@ class MPEBaseEnv(MultiAgentEnv):
         self.agent_range = jnp.arange(num_agents)
         self.entity_range = jnp.arange(self.num_entities)
         
-        # Action space
-        # TODO make this a seperate func for setting up agent list and action spaces? as this will be env dependent.
+        # Setting, and sense checking, entity names and agent action spaces
         if agents is None:
             self.agents = [f"agent_{i}" for i in range(num_agents)]
         else:
@@ -167,7 +166,7 @@ class MPEBaseEnv(MultiAgentEnv):
         
         reward = self.rewards(state, params)
         
-        obs = self.observations(state, params)
+        obs = self.get_obs(state, params)
 
         info = {}
         
@@ -195,10 +194,10 @@ class MPEBaseEnv(MultiAgentEnv):
             step=0
         )
         
-        return self.observations(state, params), state
+        return self.get_obs(state, params), state
     
     @partial(jax.jit, static_argnums=[0])
-    def observations(self, state: State, params: EnvParams) -> dict:
+    def get_obs(self, state: State, params: EnvParams) -> dict:
         """ Return dictionary of agent observations """
 
         @partial(jax.vmap, in_axes=[0, None])

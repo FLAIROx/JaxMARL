@@ -72,7 +72,7 @@ class SimpleTagEnv(MPEBaseEnv):
         return params
     
 
-    def observations(self, state: State, params: EnvParams):
+    def get_obs(self, state: State, params: EnvParams):
 
         @partial(jax.vmap, in_axes=(0, None, None))
         def _common_stats(aidx, state, params):

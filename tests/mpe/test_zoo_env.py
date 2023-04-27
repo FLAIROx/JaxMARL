@@ -111,5 +111,5 @@ env_mapper = {
 
 if __name__=="__main__":
 
-    #test_step("simple_world_comm_v2")
+    test_step("simple_world_comm_v2")
     test_step("simple_tag_v2")

@@ -23,6 +23,7 @@ class EnvParams:
 
 
 class MultiAgentEnv(object):  
+    """Jittable abstract base class for all SMAX Environments."""
     
     def __init__(self,
                  num_agents: int,  
@@ -36,6 +37,7 @@ class MultiAgentEnv(object):
 
     @property
     def default_params(self) -> EnvParams:
+        """ Default environment parameters. """
         return EnvParams()
         
     @partial(jax.jit, static_argnums=(0,))
@@ -78,25 +80,28 @@ class MultiAgentEnv(object):
     def reset_env(
         self, key: chex.PRNGKey, params: EnvParams
     ) -> Tuple[Dict[str, chex.Array], State]:
+        """Environment-specific reset."""
         raise NotImplementedError
     
     def step_env(
         self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array], Params: EnvParams
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+        """Environment-specific step transition."""
+        raise NotImplementedError
+    
+    def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
+        """Applies observation function to state."""
         raise NotImplementedError
     
     def observation_space(self, agent: str):
+        """ Observation space for a given agent."""
         return self.observation_spaces[agent]
     
     def action_space(self, agent: str):
+        """ Action space for a given agent."""
         return self.action_spaces[agent]
     
-    # == PLOTTING ==
-    def enable_render(self, state: State, params: EnvParams) -> None:
-        raise NotImplementedError
-
-    def render(self, state: State, params: Optional[EnvParams] = None) -> None:
-        raise NotImplementedError
-    
-    def close(self, state: State, params: EnvParams) -> None:
-        raise NotImplementedError
+    @property
+    def name(self) -> str:
+        """ Environment name."""
+        return type(self).__name__

@@ -10,6 +10,11 @@ from gymnax.environments.spaces import Box
 # NOTE food and forests are part of world.landmarks
 
 class SimpleWorldCommEnv(MPEBaseEnv):
+    """ 
+    JAX Compatible version of simple_world_comm_v2 PettingZoo environment.
+    Source code: https://github.com/Farama-Foundation/PettingZoo/blob/master/pettingzoo/mpe/simple_world_comm/simple_world_comm.py 
+    Note, currently only have continuous actions implemented.
+    """
     
     def __init__(self, 
                  num_good_agents=2, 
@@ -19,16 +24,17 @@ class SimpleWorldCommEnv(MPEBaseEnv):
                  num_forests=2,):
         
         # Fixed parameters
-        dim_c = 4
+        dim_c = 4  # communication channel dimension
         
-        # NOTE for now using continuous action space
-        # leader continous actions =  [no_action, move_left, move_right, move_down, move_up, say_0, say_1, say_2, say_3]
+        # Number of entities in each entity class.
         num_agents = num_good_agents + num_adversaries
         num_landmarks = num_obs + num_food + num_forests
         
+        # Number of agents in each agent class.
         self.num_good_agents, self.num_adversaries = num_good_agents, num_adversaries
         self.num_obs, self.num_food, self.num_forests = num_obs, num_food, num_forests
         
+        # Entity names
         self.leader = "leadadversary_0"
         self.adversaries = ["adversary_{}".format(i) for i in range(num_adversaries-1)]
         self.good_agents = ["agent_{}".format(i) for i in range(num_good_agents)]
@@ -87,28 +93,9 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             dt=0.1,
         )
         return params
-
-    '''@partial(jax.jit, static_argnums=[0])
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, State]:
-        
-        key_a, key_l = jax.random.split(key)        
-        
-        p_pos = jnp.concatenate([
-            jax.random.uniform(key_a, (self.num_agents, 2), minval=-1, maxval=+1),
-            jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
-        ])
-        
-        state = State(
-            p_pos=p_pos,
-            p_vel=jnp.zeros((self.num_entities, self.dim_p)),
-            c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=jnp.full((self.num_agents), False),
-            step=0
-        )
-        
-        return self.observations(state, params), state'''
     
     def set_actions(self, actions: dict, params: EnvParams):
+        """ Extract actions for each agent from their action array."""
         
         @partial(jax.vmap, in_axes=[0, 0, None])
         def _set_u(a_idx, action, params):
@@ -130,10 +117,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
 
         return u, c
     
-    def observations(self, state: State, params: EnvParams) -> dict:
-        
-        # good [self vel, self pos, landmark rel pos, other agent rel pos, other aget vel, self in forest]
-        
+    def get_obs(self, state: State, params: EnvParams) -> dict:        
         """ Returns observations of all agents """
         
         @partial(jax.vmap, in_axes=(0, None, None))
@@ -143,8 +127,8 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             dist_min=params.rad[-self.num_forests:] + params.rad[idx]
             return dist < dist_min
 
-        @partial(jax.vmap, in_axes=(0, None, None, None))
-        def _common_stats(aidx, forest, state, params):
+        @partial(jax.vmap, in_axes=(0, None, None))
+        def _common_stats(aidx, forest, state):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -171,7 +155,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
             return landmark_pos, other_pos, other_vel, jnp.where(forest[aidx], 1, -1)
         
         forest = _in_forest(self.agent_range, state, params)
-        landmark_pos, other_pos, other_vel, forest = _common_stats(self.agent_range, forest, state, params)
+        landmark_pos, other_pos, other_vel, forest = _common_stats(self.agent_range, forest, state)
         
         # NOTE orderings taken from MPE code and some differ to their docs
         def _good(aidx):
@@ -214,6 +198,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
 
 
     def rewards(self, state, params) -> Dict[str, float]:
+        """ Computes rewards for all agents """
 
         @partial(jax.vmap, in_axes=[0, None, None])
         def _reward(aidx, state, params):
@@ -223,6 +208,7 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         return {agent: r[i] for i, agent in enumerate(self.agents)}
 
     def agent_reward(self, aidx, state, params: EnvParams):
+        """ Reward for good agents. """
         
         @partial(jax.vmap, in_axes=(0,))
         def _bound_rew(x):
@@ -249,8 +235,8 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         rew -= 0.05 * jnp.min(jnp.linalg.norm(state.p_pos[-(self.num_food+self.num_forests):-self.num_forests] - state.p_pos[aidx], axis=1))
         return rew
     
-    #@partial(jax.vmap, in_axes=[None, 0, None])
     def adversary_reward(self, aidx, state, params: EnvParams):
+        """ Reward for adversary agents. """
         
         @partial(jax.vmap, in_axes=[0, 0, None, None])
         def vcollision(apos, arad, opos, orad):
@@ -267,13 +253,14 @@ class SimpleWorldCommEnv(MPEBaseEnv):
         
     @partial(jax.vmap, in_axes=(None, None, None, 0, 0))
     def _collision(self, apos, arad, opos, orad):
+        """ Check collision between two entities."""
         deltas = opos - apos
         size = arad + orad
         dist = jnp.sqrt(jnp.sum(deltas ** 2))
         return dist < size
 
 def test_policy(key, state):
-    # adversarys hunt the first good agent
+    """ Test policy where the adversaries hunt the first good agent"""
     pos = state.p_pos[3]
         
     act = jnp.zeros((5, 9))
