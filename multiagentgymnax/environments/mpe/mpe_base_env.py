@@ -5,7 +5,7 @@ Base env class for MPE PettingZoo envs.
 import jax
 import jax.numpy as jnp 
 import numpy as onp
-from multiagentgymnax import MultiAgentEnv
+from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
 import chex
 from gymnax.environments.spaces import Box
 """
