@@ -5,15 +5,13 @@ Welcome to the work-in-progress Scalable MARL in Jax (SMAX) library. We build he
 ## Basic `SMAX` API  Usage
 ```python 
 import jax
-
-# import an environment
-from multiagentgymnax.environments.mpe import SimpleWorldCommEnv  
+from multiagentgymnax import make
 
 rng = jax.random.PRNGKey(0)
 rng, key_reset, key_act, key_step = jax.random.split(rng, 4)
 
 # Initialise environment.
-env = SimpleWorldCommEnv()
+env = make('simple_world_comm_v2')
 
 # Reset the environment.
 obs, state = env.reset(key_reset, env_params)
