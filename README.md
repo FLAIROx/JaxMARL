@@ -41,3 +41,6 @@ pip install -e .
 # to run MPE tests, you will also need pygame
 # pip install pygame
 ```
+
+## Contributing 
+Fork the repo and send a merge request once your environment is passing tests which show consistency with the existing implementation.
