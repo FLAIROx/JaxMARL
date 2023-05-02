@@ -43,4 +43,4 @@ pip install -e .
 ```
 
 ## Contributing 
-Fork the repo and send a merge request once your environment is passing tests which show consistency with the existing implementation.
+Create a branch and send a merge request once your environment is passing tests which show consistency with the existing implementation.
