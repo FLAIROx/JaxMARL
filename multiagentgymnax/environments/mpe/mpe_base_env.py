@@ -378,34 +378,33 @@ class MPEBaseEnv(MultiAgentEnv):
         br = jnp.min(jnp.array([jnp.exp(2* x - 2), 10]))
         return jax.lax.select(m, mr, br) * ~w
 
-    ### === PLOTTING === ###
-    def enable_render(self, mode="human") -> None:
-        import matplotlib.pyplot as plt 
-        plt.ion()
-        plt.subplots(figsize=(8, 8))
-        
-    def render(self, state: State, params: Optional[EnvParams] = None) -> None:
-        import matplotlib.pyplot as plt
+    ### === PLOTTING === ### 
+    def init_render(self, ax, state: State, params: Optional[EnvParams] = None):
         from matplotlib.patches import Circle
+        import numpy as np
         if params is None:
             params = self.default_params
-        
+
         ax_lim = 2
-        
-        fig = plt.gcf()
-        fig.clf()
-        ax = fig.gca()
+        ax.clear()
         ax.set_xlim([-ax_lim, ax_lim])
         ax.set_ylim([-ax_lim, ax_lim])
         for i in range(self.num_entities):
             c = Circle(state.p_pos[i], params.rad[i], color=onp.array(self.colour[i])/255)
             ax.add_patch(c)
-            
-        plt.draw()
 
-        fig.canvas.flush_events()            
+        canvas = ax.figure.canvas
+        canvas.draw()
 
-
+        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
+        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
+        print(rgb_array.shape)
+        
+        return ax.imshow(rgb_array)
+    
+    def update_render(self, im, state: State, params: Optional[EnvParams] = None):
+        ax = im.axes 
+        return self.init_render(ax, state, params)
 """
 
 how to store agent 
@@ -417,7 +416,8 @@ index seems more intuitive but jax can also vmap over a dictionary right
     
 
 if __name__=="__main__":
-    
+    from multiagentgymnax.viz.visualizer import Visualizer
+
     num_agents = 3
     key = jax.random.PRNGKey(0)
     
@@ -438,14 +438,18 @@ if __name__=="__main__":
     actions = {agent: mock_action for agent in a}
     print('actions', actions)
     
+    #env.enable_render()
     
-    env.enable_render()
-    
-
+    state_seq = []
     print('state', state)
     for _ in range(50):
+        state_seq.append(state)
         obs, state, rew, dones, _ = env.step_env(key, state, actions, params)
         print('state', obs)
-        env.render(state, params)
+        
+        #env.render(state, params)
         #raise
         #pygame.time.wait(300)
+
+    viz = Visualizer(env, state_seq, params)
+    viz.animate(view=True)
