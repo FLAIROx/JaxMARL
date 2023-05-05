@@ -31,11 +31,11 @@ from functools import partial
 import os
 @struct.dataclass
 class State:
-    p_pos: chex.Array # [n, [x, y]]
+    p_pos: chex.Array # [num_entities, [x, y]]
     p_vel: chex.Array # [n, [x, y]]
-    c: chex.Array  # communication state
-    done: chex.Array # [bool,]
-    step: int
+    c: chex.Array  # communication state [num_agents, [dim_c]]
+    done: chex.Array # bool [num_agents, ]
+    step: int # current step
 
 @struct.dataclass
 class EnvParams:
@@ -157,8 +157,6 @@ class MPEBaseEnv(MultiAgentEnv):
         state = State(
             p_pos=p_pos,
             p_vel=p_vel,
-            #s_c=state.s_c,
-            #u=u,
             c=c,
             done=done,
             step=state.step+1
@@ -217,7 +215,7 @@ class MPEBaseEnv(MultiAgentEnv):
         
         @partial(jax.vmap, in_axes=[0, None])
         def _reward(aidx, state):
-            return -1*jnp.linalg.norm(state.p_pos[aidx] - state.p_pos[-1])  # NOTE assumes one landmark 
+            return -1 * jnp.sum(jnp.square(state.p_pos[aidx] - state.p_pos[self.num_agents:]))
         
         r = _reward(self.agent_range, state)
         return {agent: r[i] for i, agent in enumerate(self.agents)}
@@ -225,7 +223,7 @@ class MPEBaseEnv(MultiAgentEnv):
     def set_actions(self, actions: Dict, params: EnvParams):
         """ Extract u and c actions for all agents from actions Dict."""
         # NOTE only for continuous action space currently
-        actions = jnp.array([actions[i] for i in self.agents]).squeeze()
+        actions = jnp.array([actions[i] for i in self.agents]).reshape((self.num_agents, -1))
 
         @partial(jax.vmap, in_axes=[0, 0, None])
         def _set_action(a_idx, action, params):
@@ -233,9 +231,10 @@ class MPEBaseEnv(MultiAgentEnv):
                 action[1] - action[2],
                 action[3] - action[4]
             ])
-            #print('u', u)
+            
             #print('params moveable', params.moveable[a_idx])
             u = u * params.accel[a_idx] * params.moveable[a_idx]
+            #jax.debug.print('jax u {u}', u=u)
             c = action[5:] * ~params.silent[a_idx]
             return u, c
 
@@ -260,6 +259,7 @@ class MPEBaseEnv(MultiAgentEnv):
         p_force = jnp.concatenate([p_force, jnp.zeros((self.num_landmarks, 2))])
         p_force = self._apply_environment_force(p_force, state, params)
         #print('p_force post apply env force', p_force)
+        #jax.debug.print('jax p_force {p_force}', p_force=p_force)
         
         # integrate physical state
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, params.mass, params.moveable, params.max_speed, params)
@@ -325,7 +325,7 @@ class MPEBaseEnv(MultiAgentEnv):
         )        
         over_max = (p_vel / jnp.sqrt(jnp.square(p_vel[0]) + jnp.square(p_vel[1])) * max_speed)
         
-        p_vel = jax.lax.select(speed > max_speed, over_max, p_vel)
+        p_vel = jax.lax.select((speed > max_speed) & (max_speed >= 0), over_max, p_vel)
         p_pos += p_vel * params.dt  
         return p_pos, p_vel  
         
@@ -367,7 +367,7 @@ class MPEBaseEnv(MultiAgentEnv):
         dist_min = params.rad[a] + params.rad[b]
         delta_pos = state.p_pos[a] - state.p_pos[b]
         dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
-        return dist < dist_min
+        return (dist < dist_min) & (params.collide[a] & params.collide[b]) & (a != b)
         
     @partial(jax.vmap, in_axes=(None, 0))
     def map_bounds_reward(self, x):

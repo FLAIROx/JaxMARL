@@ -1,12 +1,13 @@
+""" NOTE this file structure should and will be improved """
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pettingzoo
-from pettingzoo.mpe import simple_world_comm_v2, simple_tag_v2
+from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2
 #from multiagentgymnax.u
 import tqdm
 
-from multiagentgymnax.environments.mpe import SimpleTagEnv, SimpleWorldCommEnv
+from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
@@ -23,7 +24,7 @@ state = State(
 
 def np_state_to_jax(env_zoo, env_jax):
 
-    from multiagentgymnax.environments.mpe.mpe_base_env import State
+    from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import State
 
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
@@ -32,19 +33,20 @@ def np_state_to_jax(env_zoo, env_jax):
     #print('--', env_zoo.aec_env.env.world.agents)
     for agent in env_zoo.aec_env.env.world.agents:
         a_idx = env_jax.a_to_i[agent.name]
+        #print('zoo agent pos', agent.state.p_pos)
         p_pos[a_idx] = agent.state.p_pos
         p_vel[a_idx] = agent.state.p_vel
-        #print('communication state', agent.state.c)
+        #print('Zoo communication state', agent.state.c)
         c[a_idx] = agent.state.c
 
 
     for landmark in env_zoo.aec_env.env.world.landmarks:
         l_idx = env_jax.l_to_i[landmark.name]
-        #print('name', landmark.name)
+        #print('zoo landmark name', landmark.name)
         p_pos[l_idx] = landmark.state.p_pos
+        #print('zoo landmark pos', landmark.state.p_pos)
         
-    #print('p_pos', p_pos)
-
+    
     state = {
         "p_pos": p_pos,
         "p_vel": p_vel,
@@ -52,6 +54,9 @@ def np_state_to_jax(env_zoo, env_jax):
         "step": env_zoo.aec_env.env.steps,
         "done": np.full((env_jax.num_agents), False),
     }
+    
+    #print('jax state', state)
+    #print('test obs', state["p_pos"][1] - state["p_pos"][0])
     
     return State(**state)
 
@@ -93,6 +98,7 @@ def test_step(zoo_env_name):
         for s in range(num_steps):
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
             state = np_state_to_jax(env_zoo, env_jax)
+            #print('actions: ', actions)
             obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(actions)
             key, key_step = jax.random.split(key)
             obs_jax, state_jax, rew_jax, done_jax, _ = env_jax.step(key_step, state, actions)
@@ -105,11 +111,15 @@ def test_step(zoo_env_name):
     print(f'-- {zoo_env_name} all tests passed --')
 
 env_mapper = {
-    "simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommEnv),
-    "simple_tag_v2": (simple_tag_v2, SimpleTagEnv),
+    "simple_v2": (simple_v2, SimpleMPE),
+    "simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommMPE),
+    "simple_tag_v2": (simple_tag_v2, SimpleTagMPE),
+    "simple_spread_v2": (simple_spread_v2, SimpleSpreadMPE),
 }
 
 if __name__=="__main__":
+
+    test_step("simple_spread_v2")
 
     test_step("simple_world_comm_v2")
     test_step("simple_tag_v2")

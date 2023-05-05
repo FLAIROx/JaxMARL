@@ -2,7 +2,7 @@
 
 import jax
 import jax.numpy as jnp
-from multiagentgymnax.environments.mpe.simple_world_comm import SimpleWorldCommEnv
+from multiagentgymnax.environments.mpe.simple_world_comm import SimpleWorldCommMPE
 from multiagentgymnax.environments.mpe.train_utils import RolloutManager
 from pettingzoo.mpe import simple_world_comm_v2
 import time
