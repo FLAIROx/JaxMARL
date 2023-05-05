@@ -41,6 +41,8 @@ class State:
     last_goals: chex.Array
     wall_map: chex.Array
     maze_map: chex.Array
+    goals_map: chex.Array
+    agents_map: chex.Array
     time: int
     terminal: bool
     episode_returns: float
