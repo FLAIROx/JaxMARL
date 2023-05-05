@@ -191,6 +191,10 @@ class MAGoalCycle(MultiAgentEnv):
         occupied_mask = occupied_mask.at[agents_idx].set(1)
         agents_pos = jnp.transpose(jnp.array([agents_idx % w, agents_idx // w], dtype=jnp.uint32))
 
+        agents_mask = jnp.zeros_like(all_pos)
+        agents_mask = agents_mask.at[agents_idx].set(1)
+        agents_map = agents_mask.reshape(h, w).astype(jnp.bool_)
+
         key, subkey = jax.random.split(key)
         agents_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8),
                                            shape=(self.num_agents,))
@@ -201,6 +205,10 @@ class MAGoalCycle(MultiAgentEnv):
         goals_idx = jax.random.choice(subkey, all_pos, shape=(params.n_goals,),
                                      p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32))
         goals_pos = jnp.array([goals_idx % w, goals_idx // w], dtype=jnp.uint32)
+
+        goals_mask = jnp.zeros_like(all_pos)
+        goals_mask = goals_mask.at[goals_idx].set(1)
+        goals_map = goals_mask.reshape(h, w).astype(jnp.bool_)
 
         key, subkey = jax.random.split(key)
         last_goals = jax.random.choice(subkey, jnp.arange(params.n_goals, dtype=jnp.uint8),
@@ -221,6 +229,8 @@ class MAGoalCycle(MultiAgentEnv):
             goals_pos=goals_pos,
             last_goals=last_goals,
             wall_map=wall_map.astype(jnp.bool_),
+            agents_map=agents_map.astype(jnp.bool_),
+            goals_map=goals_map.astype(jnp.bool_),
             maze_map=maze_map,
             time=0,
             terminal=False,
@@ -295,12 +305,8 @@ class MAGoalCycle(MultiAgentEnv):
 
             # Can't go past wall or goal
             fwd_pos_has_wall = state.wall_map.at[fwd_pos[1], fwd_pos[0]].get()
-            fwd_pos_has_goal = jnp.logical_or(
-                jnp.logical_or(
-                jnp.logical_and(fwd_pos[0] == state.goals_pos[0, 0], fwd_pos[1] == state.goals_pos[1, 0]),
-                jnp.logical_and(fwd_pos[0] == state.goals_pos[0, 1], fwd_pos[1] == state.goals_pos[1, 1])),
-                jnp.logical_and(fwd_pos[0] == state.goals_pos[0, 2], fwd_pos[1] == state.goals_pos[1, 2])
-            )
+            fwd_pos_has_goal = state.goals_map.at[fwd_pos[1], fwd_pos[0]].get()
+            fwd_pos_has_agent = state.agents_map.at[fwd_pos[1], fwd_pos[0]].get()
 
             last_idx = state.last_goals[aidx]
             next_idx = last_idx + 1
@@ -309,7 +315,7 @@ class MAGoalCycle(MultiAgentEnv):
             last_goals = state.last_goals
             last_goals[aidx] = (last_idx + hit_target) % params.n_goals
 
-            fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal)
+            fwd_pos_blocked = jnp.logical_or(jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal), fwd_pos_has_agent)
 
             agent_pos_prev = jnp.array(state.agents_pos[aidx])
             agent_pos = (fwd_pos_blocked * state.agents_pos[aidx] + (~fwd_pos_blocked) * fwd_pos).astype(jnp.uint32)
