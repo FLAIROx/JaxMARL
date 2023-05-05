@@ -27,6 +27,7 @@ class SimpleSpreadMPE(MPEBaseEnv):
         
         # Env specific parameters
         self.local_ratio = local_ratio
+        assert self.local_ratio >= 0.0 and self.local_ratio <= 1.0, "local_ratio must be between 0.0 and 1.0"
         
         super().__init__(num_agents=num_agents,
                         agents=agents,
@@ -49,8 +50,8 @@ class SimpleSpreadMPE(MPEBaseEnv):
             collide = jnp.concatenate([jnp.full((self.num_agents), True),
                                        jnp.full((self.num_landmarks), False)]), 
             mass=jnp.full((self.num_entities), 1),
-            accel = jnp.full((self.num_agents), AGENT_ACCEL),
-            max_speed = jnp.concatenate([jnp.full((self.num_agents), AGENT_MAX_SPEED),
+            accel = jnp.full((self.num_agents), ACCEL),
+            max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
                                 jnp.full((self.num_landmarks), 0.0)]),
             u_noise=jnp.full((self.num_agents), 0),
             c_noise=jnp.full((self.num_agents), 0),
@@ -114,20 +115,23 @@ class SimpleSpreadMPE(MPEBaseEnv):
                         state,
                         params)  # [agent, agent, collison]
 
+        #jax.debug.print('c {c}', c=c)
+
         def _good(aidx, collisions):
 
-            rew = -1 * jnp.sum(collisions[aidx])  # NOTE is this right.. 
-
-            mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
-            rew -= mr
+            rew = -1 * jnp.sum(collisions[aidx]) 
+            #jax.debug.print('jax agent reward {rew}', rew=rew)
+            #mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
+            #rew -= mr
             return rew 
         
         def _land(land_pos):
             d = state.p_pos[:self.num_agents] -  land_pos
+            #jax.debug.print('dists {d}', d=jnp.linalg.norm(d, axis=1))
             return -1 * jnp.min(jnp.linalg.norm(d, axis=1))
 
         global_rew = jnp.sum(jax.vmap(_land)(state.p_pos[self.num_agents:]))
-        
+        #jax.debug.print('global_rew {global_rew}', global_rew=global_rew)
 
         rew = {a: _good(i, c) * self.local_ratio + global_rew * (1-self.local_ratio)
                for i, a in enumerate(self.agents)}

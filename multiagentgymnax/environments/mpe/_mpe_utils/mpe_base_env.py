@@ -367,7 +367,7 @@ class MPEBaseEnv(MultiAgentEnv):
         dist_min = params.rad[a] + params.rad[b]
         delta_pos = state.p_pos[a] - state.p_pos[b]
         dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
-        return (dist < dist_min) & (params.collide[a] & params.collide[b]) & (a != b)
+        return (dist < dist_min) & (params.collide[a] & params.collide[b]) #& (a != b)
         
     @partial(jax.vmap, in_axes=(None, 0))
     def map_bounds_reward(self, x):
