@@ -344,6 +344,9 @@ class MAGoalCycle(MultiAgentEnv):
             maze_map = state.maze_map
             maze_map = maze_map.at[padding + agent_pos_prev[1], padding + agent_pos_prev[0], :].set(empty)
             maze_map = maze_map.at[padding + agent_pos[1], padding + agent_pos[0], :].set(agent)
+            agents_map = state.agents_map
+            agents_map = agents_map.at[padding + agent_pos_prev[1], padding + agent_pos_prev[0], :].set(empty)
+            agents_map = agents_map.at[padding + agent_pos[1], padding + agent_pos[0], :].set(agent)
 
             reward = hit_target
             rewards[aidx] = reward
@@ -352,6 +355,7 @@ class MAGoalCycle(MultiAgentEnv):
                                         agents_pos=agents_pos,
                                         agents_dir_idx=agents_dir_idx,
                                         agentsdir=agents_dir,
+                                        agents_map=agents_map,
                                         maze_map=maze_map,
                                         last_goals=last_goals))
 
