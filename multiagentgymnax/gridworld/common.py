@@ -73,9 +73,9 @@ def make_maze_map(
 		goal_x,goal_y = goal_pos
 		maze_map = maze_map.at[goal_y,goal_x,:].set(goal)
 	else:
-		color_seq = jnp.array(list(GOAL_COLOR_TO_INDEX.values()))[goal_color_sequence]
+# 		color_seq = jnp.array(list(GOAL_COLOR_TO_INDEX.values()))[goal_color_sequence]
 		goals = jnp.stack(
-			[jnp.array([OBJECT_TO_INDEX['goal'], color, 0]) for color in color_seq],
+			[jnp.array([OBJECT_TO_INDEX['goal'], COLOR_TO_INDEX['green'], 0]) for i in range(params.n_goals)],
 			dtype=jnp.uint8
 		).at[:goal_pos.shape[0]].get()
 		goal_x = goal_pos.at[:,0].get()
