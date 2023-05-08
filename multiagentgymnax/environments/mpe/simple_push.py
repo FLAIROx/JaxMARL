@@ -69,7 +69,6 @@ class SimplePushMPE(MPEBaseEnv):
             dt=DT,       
         )
         return params
-    
 
     def get_obs(self, state: State, params: EnvParams):
 
@@ -95,9 +94,12 @@ class SimplePushMPE(MPEBaseEnv):
         landmark_pos, other_pos, other_vel = _common_stats(self.agent_range, state, params)
 
         def _good(aidx):
-            return jnp.concatenate([
+            goal_idx = state.goal_a[aidx]
+            rel_pos = state.p_pos[goal_idx] - state.p_pos[aidx]
+
+            return jnp.concatenate([ # TODO 
                 state.p_vel[aidx].flatten(), # 2
-                state.p_pos[aidx].flatten(), # 2
+                rel_pos.flatten(), # 2
                 landmark_pos[aidx].flatten(), # 5, 2
                 other_pos[aidx].flatten(), # 5, 2
                 #other_vel[aidx,-1:].flatten(), # 2
@@ -107,10 +109,10 @@ class SimplePushMPE(MPEBaseEnv):
         def _adversary(aidx):
             return jnp.concatenate([
                 state.p_vel[aidx].flatten(), # 2
-                state.p_pos[aidx].flatten(), # 2
+                #state.p_pos[aidx].flatten(), # 2
                 landmark_pos[aidx].flatten(), # 5, 2
                 other_pos[aidx].flatten(), # 5, 2
-                other_vel[aidx,-1:].flatten(), # 2
+                #other_vel[aidx,-1:].flatten(), # 2
             ])
         
         obs = {a: _adversary(i) for i, a in enumerate(self.adversaries)}
@@ -119,31 +121,23 @@ class SimplePushMPE(MPEBaseEnv):
     
     def rewards(self, state, params) -> Dict[str, float]:
 
-        @partial(jax.vmap, in_axes=(0, None, None, None))
-        def _collisions(agent_idx, other_idx, state, params):
-            return jax.vmap(self.is_collision, in_axes=(None, 0, None, None))(
-                agent_idx,
-                other_idx,
-                state,
-                params,
-            )
+        def _good(aidx):
 
-        c = _collisions(jnp.arange(self.num_good_agents)+self.num_adversaries, 
-                        jnp.arange(self.num_adversaries), 
-                        state,
-                        params)  # [agent, adversary, collison]
+            goal_idx = state.goal_a[aidx]
+            rel_pos = state.p_pos[goal_idx] - state.p_pos[aidx]
+            return -jnp.linalg.norm(rel_pos)
+        
+        def _adversary(aidx):
+            ad_goal = state.goal_a[aidx]
+            goal_idxs = state.goal_a[self.num_adversaries:self.num_agents]
+            agent_dist = state.p_pos[goal_idxs] - state.p_pos[self.num_adversaries:self.num_agents]
+            pos_rew = jnp.min(jnp.linalg.norm(agent_dist, axis=1))
 
-        def _good(aidx, collisions):
+            neg_rew = jnp.linalg.norm(state.p_pos[ad_goal] - state.p_pos[aidx])
 
-            rew = -10 * jnp.sum(collisions[aidx])
+            return pos_rew - neg_rew
 
-            mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
-            rew -= mr
-            return rew 
-
-        ad_rew = 10 * jnp.sum(c)
-
-        rew = {a: ad_rew for a in self.adversaries}
-        rew.update({a: _good(i+self.num_adversaries, c) for i, a in enumerate(self.good_agents)})
+        rew = {a: _adversary(i) for i, a in enumerate(self.adversaries)}
+        rew.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
         return rew
 

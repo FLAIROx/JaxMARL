@@ -36,6 +36,7 @@ class State:
     c: chex.Array  # communication state [num_agents, [dim_c]]
     done: chex.Array # bool [num_agents, ]
     step: int # current step
+    goal_a: chex.Array # [num_agents, [idx]] *Only used in some MPE envs*
 
 @struct.dataclass
 class EnvParams:
@@ -159,7 +160,8 @@ class MPEBaseEnv(MultiAgentEnv):
             p_vel=p_vel,
             c=c,
             done=done,
-            step=state.step+1
+            step=state.step+1,
+            goal_a=state.goal_a,
         )
         
         reward = self.rewards(state, params)
@@ -177,19 +179,21 @@ class MPEBaseEnv(MultiAgentEnv):
     def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, State]:
         """ Initialise with random positions """
         
-        key_a, key_l = jax.random.split(key)        
+        key_a, key_l, key_g = jax.random.split(key, 3)        
         
         p_pos = jnp.concatenate([
             jax.random.uniform(key_a, (self.num_agents, 2), minval=-1, maxval=+1),
             jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
         ])
+        goal_a = jax.random.randint(key_g, (self.num_agents,), minval=self.num_agents, maxval=self.num_entities)
         
         state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
             done=jnp.full((self.num_agents), False),
-            step=0
+            step=0,
+            goal_a=goal_a,
         )
         
         return self.get_obs(state, params), state
