@@ -8,14 +8,14 @@ from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
 from gymnax.environments.spaces import Box
 
 
-class SimplePushMPE(MPEBaseEnv):
+class SimpleCryptoMPE(MPEBaseEnv):
 
     def __init__(self,
-                 num_good_agents=2,
+                 num_good_agents=3,
                  num_adversaries=1,
                  num_landmarks=2,):
         
-        dim_c = 2 # NOTE follows code rather than docs
+        dim_c = 4 
 
         num_agents = num_good_agents + num_adversaries
         num_landmarks = num_landmarks 
