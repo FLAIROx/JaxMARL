@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, Sequence
 from collections import OrderedDict
 import chex
 import jax
@@ -29,6 +29,33 @@ class Discrete(object):
 		# shape_cond = (x.shape == self.shape)
 		range_cond = jnp.logical_and(x >= 0, x < self.n)
 		return range_cond
+
+
+class MultiDiscrete(object):
+    """
+    Minimal jittable class for multi-discrete gymnax spaces.
+    """
+
+    def __init__(self, num_categories: Sequence[int]):
+        """Num categories is the number of cat actions for each dim, [2,2,2]=2 actions x 3 dim"""
+        self.num_categories = jnp.array(num_categories)
+        self.shape = (len(num_categories),)
+        self.dtype = jnp.int_
+
+    def sample(self, rng: chex.PRNGKey) -> chex.Array:
+        """Sample random action uniformly from set of categorical choices."""
+        return jax.random.randint(
+            rng, 
+            shape=self.shape, 
+            minval=0, 
+            maxval=self.num_categories,
+            dtype=self.dtype
+        )
+
+    def contains(self, x: jnp.int_) -> bool:
+        """Check whether specific object is within space."""
+        range_cond = jnp.logical_and(x >= 0, x < self.num_categories)
+        return jnp.all(range_cond)
 
 
 class Box(object):

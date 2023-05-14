@@ -2,7 +2,8 @@ from .environments import (
     SimpleMPE,
     SimpleTagMPE,
     SimpleWorldCommMPE,
-    SimpleSpreadMPE
+    SimpleSpreadMPE,
+    SwitchRiddle
 )
 
 
@@ -20,11 +21,14 @@ def make(env_id: str, **env_kwargs):
         return SimpleWorldCommMPE(**env_kwargs)
     elif env_id == "simple_spread_v2":
         return SimpleSpreadMPE(**env_kwargs)
+    elif env_id == "switch_riddle":
+        return SwitchRiddle(**env_kwargs)
     
     
 registered_envs = [
     "simple_tag_v2",
     "simple_world_comm_v2",
-    "simple_spread_v2"
+    "simple_spread_v2",
+    "switch_riddle"
 ]
     

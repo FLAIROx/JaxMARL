@@ -5,4 +5,5 @@ from .mpe import (
     SimpleWorldCommMPE,
     SimpleSpreadMPE
 )
+from .switch_riddle import SwitchRiddle
 
