@@ -8,12 +8,12 @@ from functools import partial
 from flax import struct
 from typing import Tuple, Optional
 from enum import IntEnum
-from multi_agent_env import MultiAgentEnv
-from spaces import Box, Discrete
+# from multi_agent_env import MultiAgentEnv
+# from spaces import Box, Discrete
 import numpy as np
 
-# from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
-# from multiagentgymnax.environments.spaces import Box, Discrete
+from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
+from multiagentgymnax.environments.spaces import Box, Discrete
 
 from ma_common import (
     OBJECT_TO_INDEX,
