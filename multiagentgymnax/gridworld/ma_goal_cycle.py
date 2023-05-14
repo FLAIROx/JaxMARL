@@ -1,19 +1,21 @@
 import jax
 import jax.numpy as jnp
+from jax import lax
 from typing import Dict, Tuple, Any
+from collections import namedtuple, OrderedDict
 import chex
 from functools import partial
 from flax import struct
 from typing import Tuple, Optional
 from enum import IntEnum
-# from multi_agent_env import MultiAgentEnv
-# from spaces import Box, Discrete
+from multi_agent_env import MultiAgentEnv
+from spaces import Box, Discrete
 import numpy as np
 
-from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
-from multiagentgymnax.environments.spaces import Box, Discrete
+# from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
+# from multiagentgymnax.environments.spaces import Box, Discrete
 
-from common import (
+from ma_common import (
     OBJECT_TO_INDEX,
     COLORS,
     COLOR_TO_INDEX,
@@ -43,6 +45,7 @@ class State:
     maze_map: chex.Array
     goals_map: chex.Array
     agents_map: chex.Array
+    maze_map: chex.Array
     time: int
     terminal: bool
     episode_returns: float
@@ -71,7 +74,7 @@ class EnvParams:
 class MAGoalCycle(MultiAgentEnv):
     def __init__(
             self,
-            num_agents=1,
+            num_agents=2,
             height=13,
             width=13,
             n_walls=25,
@@ -127,11 +130,10 @@ class MAGoalCycle(MultiAgentEnv):
             self,
             key: chex.PRNGKey,
             state: State,
-            actions: dict,
-            params: EnvParams
+            actions: dict
     ) -> Tuple[chex.Array, State, chex.Array, bool, dict]:
         """Perform single timestep state transition."""
-
+        print(actions)
         a = jnp.array([self.action_set[action] for action in actions])
         state, rewards = self.step_agents(key, state, a)
         # Check game condition & no. steps for termination condition
@@ -139,19 +141,19 @@ class MAGoalCycle(MultiAgentEnv):
         done = self.is_terminal(state)
         state = state.replace(terminal=done)
 
-        new_episode_return = state.episode_returns + reward.squeeze()
-        new_episode_length = state.episode_lengths + 1
-        state = state.replace(episode_returns=new_episode_return * (1 - done),
-                              episode_lengths=new_episode_length * (1 - done),
-                              returned_episode_returns=state.returned_episode_returns * (
-                                          1 - done) + new_episode_return * done,
-                              returned_episode_lengths=state.returned_episode_lengths * (
-                                          1 - done) + new_episode_length * done)
+        # new_episode_return = state.episode_returns + reward.squeeze()
+        # new_episode_length = state.episode_lengths + 1
+        # state = state.replace(episode_returns=new_episode_return * (1 - done),
+        #                       episode_lengths=new_episode_length * (1 - done),
+        #                       returned_episode_returns=state.returned_episode_returns * (
+        #                                   1 - done) + new_episode_return * done,
+        #                       returned_episode_lengths=state.returned_episode_lengths * (
+        #                                   1 - done) + new_episode_length * done)
         info = {}
 
-        info["returned_episode_returns"] = state.returned_episode_returns
-        info["returned_episode_lengths"] = state.returned_episode_lengths
-        info["returned_episode"] = done
+        # info["returned_episode_returns"] = state.returned_episode_returns
+        # info["returned_episode_lengths"] = state.returned_episode_lengths
+        # info["returned_episode"] = done
 
         return (
             lax.stop_gradient(self.get_obs(state)),
@@ -242,10 +244,10 @@ class MAGoalCycle(MultiAgentEnv):
             returned_episode_lengths=0,
         )
 
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
-    def get_obs(self, state: State, params: EnvParams) -> Dict:
+    def get_obs(self, state: State) -> Dict:
 
         # @partial(jax.vmap, in_axes=[0, None])
         def _observation(aidx: int, state: State) -> chex.Array:
@@ -288,12 +290,21 @@ class MAGoalCycle(MultiAgentEnv):
             if self.params.normalize_obs:
                 image = image / 10.0
 
+            obs_dict = dict(
+                image=image,
+                agent_dir=state.agents_dir_idx[aidx]
+            )
+
+            # return OrderedDict(obs_dict)
+
             return image
 
         obs = jnp.array([_observation(aidx, state) for aidx in range(self.num_agents)])
         return {a: obs[i] for i, a in enumerate(self.agents)}
+        # obs = _observation(0, state)
+        # return obs
 
-    def step_agents(self, state: State, actions: chex.Array) -> Tuple[State, chex.Array]:
+    def step_agents(self, key: chex.PRNGKey, state: State, actions: chex.Array) -> Tuple[State, chex.Array]:
         params = self.params
 
         def _step(aidx, carry):
@@ -315,14 +326,14 @@ class MAGoalCycle(MultiAgentEnv):
             target_idx = state.goals_pos[:, next_idx % params.n_goals]
             hit_target = jnp.logical_and((fwd_pos[1] == target_idx[1]), (fwd_pos[0] == target_idx[0]))
             last_goals = state.last_goals
-            last_goals[aidx] = (last_idx + hit_target) % params.n_goals
+            last_goals = last_goals.at[aidx].set((last_idx + hit_target) % params.n_goals)
 
             fwd_pos_blocked = jnp.logical_or(jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal), fwd_pos_has_agent)
 
             agent_pos_prev = jnp.array(state.agents_pos[aidx])
             agent_pos = (fwd_pos_blocked * state.agents_pos[aidx] + (~fwd_pos_blocked) * fwd_pos).astype(jnp.uint32)
             agents_pos = state.agents_pos
-            agents_pos[aidx] = agent_pos
+            agents_pos = agents_pos.at[aidx].set(agent_pos)
 
             # Update agent direction (left_turn or right_turn action)
             agent_dir_offset = \
@@ -332,10 +343,10 @@ class MAGoalCycle(MultiAgentEnv):
 
             agent_dir_idx = (state.agents_dir_idx[aidx] + agent_dir_offset) % 4
             agents_dir_idx = state.agents_dir_idx
-            agents_dir_idx[aidx] = agent_dir_idx
+            agents_dir_idx = agents_dir_idx.at[aidx].set(agent_dir_idx)
             agent_dir = DIR_TO_VEC[agents_dir_idx[aidx]]
             agents_dir = state.agents_dir
-            agents_dir[aidx] = agent_dir
+            agents_dir = agents_dir.at[aidx].set(agent_dir)
 
             # Update agent component in maze_map
             empty = jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
@@ -345,16 +356,16 @@ class MAGoalCycle(MultiAgentEnv):
             maze_map = maze_map.at[padding + agent_pos_prev[1], padding + agent_pos_prev[0], :].set(empty)
             maze_map = maze_map.at[padding + agent_pos[1], padding + agent_pos[0], :].set(agent)
             agents_map = state.agents_map
-            agents_map = agents_map.at[padding + agent_pos_prev[1], padding + agent_pos_prev[0], :].set(empty)
-            agents_map = agents_map.at[padding + agent_pos[1], padding + agent_pos[0], :].set(agent)
+            agents_map = agents_map.at[agent_pos_prev[1], agent_pos_prev[0]].set(0)
+            agents_map = agents_map.at[agent_pos[1], agent_pos[0]].set(1)
 
             reward = hit_target
-            rewards[aidx] = reward
+            rewards = rewards.at[aidx].set(reward)
 
             return (actions, rewards, state.replace(
                                         agents_pos=agents_pos,
                                         agents_dir_idx=agents_dir_idx,
-                                        agentsdir=agents_dir,
+                                        agents_dir=agents_dir,
                                         agents_map=agents_map,
                                         maze_map=maze_map,
                                         last_goals=last_goals))
