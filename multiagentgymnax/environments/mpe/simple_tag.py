@@ -25,7 +25,7 @@ class SimpleTagMPE(MPEBaseEnv):
         self.good_agents = ["agent_{}".format(i) for i in range(num_good_agents)]
         agents = self.adversaries + self.good_agents
 
-        landmarks = ["landmark_{}".format(i) for i in range(num_obs)]
+        landmarks = ["landmark {}".format(i) for i in range(num_obs)]
 
         # Action and observation spaces
         action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
