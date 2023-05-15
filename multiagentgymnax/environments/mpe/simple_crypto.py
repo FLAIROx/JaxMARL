@@ -1,4 +1,3 @@
-""" Not yet passing tests """
 import jax 
 import jax.numpy as jnp
 import chex
@@ -21,6 +20,11 @@ class SimpleCryptoState(State):
     private_key: chex.Array
 
 class SimpleCryptoMPE(MPEBaseEnv):
+    """ 
+    JAX Compatible version of simple_crypto_v2 PettingZoo environment.
+    Source code: https://github.com/Farama-Foundation/PettingZoo/blob/master/pettingzoo/mpe/simple_crypto/simple_crypto.py 
+    Note, currently only have continuous actions implemented.
+    """
 
     def __init__(self,
                  num_agents=3,
@@ -29,7 +33,7 @@ class SimpleCryptoMPE(MPEBaseEnv):
         assert num_agents == 3, "Simple Crypto only supports 3 agents"
         assert num_landmarks == 2, "Simple Crypto only supports 2 landmarks"
         
-        dim_c = 4 
+        dim_c = 4  # Communication channel dimension
 
         num_landmarks = num_landmarks 
 
@@ -97,12 +101,8 @@ class SimpleCryptoMPE(MPEBaseEnv):
             jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
         ])
         
-        
         g_idx = jax.random.randint(key_g, (1,), minval=0, maxval=self.num_landmarks)
         k_idx = jax.random.randint(key_k, (1,), minval=0, maxval=self.num_landmarks)
-        print('g_idx', g_idx)
-        #private_key = jnp.zeros((self.num_agents, self.dim_c))
-        #private_key = private_key.at[-1].set()  # maybe this doesn't need to be a full array
         
         state = SimpleCryptoState(
             p_pos=p_pos,
