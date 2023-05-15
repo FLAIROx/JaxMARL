@@ -223,23 +223,24 @@ class MPEBaseEnv(MultiAgentEnv):
             
     def set_actions(self, actions: Dict, params: EnvParams):
         """ Extract u and c actions for all agents from actions Dict."""
-        # NOTE only for continuous action space currently
+        
         actions = jnp.array([actions[i] for i in self.agents]).reshape((self.num_agents, -1))
 
-        @partial(jax.vmap, in_axes=[0, 0, None])
-        def _set_action(a_idx, action, params):
-            u = jnp.array([
-                action[1] - action[2],
-                action[3] - action[4]
-            ])
-            
-            #print('params moveable', params.moveable[a_idx])
-            u = u * params.accel[a_idx] * params.moveable[a_idx]
-            #jax.debug.print('jax u {u}', u=u)
-            c = action[5:] * ~params.silent[a_idx]
-            return u, c
+        return self._set_action(self.agent_range, actions, params)
 
-        return _set_action(self.agent_range, actions, params)
+    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def _set_action(self, a_idx, action, params):
+        # NOTE only for continuous action space currently
+        u = jnp.array([
+            action[1] - action[2],
+            action[3] - action[4]
+        ])
+        
+        #print('params moveable', params.moveable[a_idx])
+        u = u * params.accel[a_idx] * params.moveable[a_idx]
+        #jax.debug.print('jax u {u}', u=u)
+        c = action[5:] * ~params.silent[a_idx]
+        return u, c
 
     # return all entities in the world
     @property

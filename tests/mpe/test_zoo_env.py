@@ -3,11 +3,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pettingzoo
-from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2
+from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2
 #from multiagentgymnax.u
 import tqdm
 
-from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE
+from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
@@ -23,7 +23,6 @@ state = State(
 """
 
 def np_state_to_jax(env_zoo, env_jax):
-
     from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import State
 
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
@@ -46,7 +45,6 @@ def np_state_to_jax(env_zoo, env_jax):
         p_pos[l_idx] = landmark.state.p_pos
         #print('zoo landmark pos', landmark.state.p_pos)
         
-    
     state = {
         "p_pos": p_pos,
         "p_vel": p_vel,
@@ -57,8 +55,13 @@ def np_state_to_jax(env_zoo, env_jax):
     
     #print('jax state', state)
     #print('test obs', state["p_pos"][1] - state["p_pos"][0])
-    
-    return State(**state)
+    if env_zoo.metadata["name"] == 'simple_crypto_v2':
+        from multiagentgymnax.environments.mpe.simple_crypto import SimpleCryptoState
+        state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
+        state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
+        return SimpleCryptoState(**state)
+    else:
+        return State(**state)
 
 def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
 
@@ -87,7 +90,7 @@ def test_step(zoo_env_name):
 
     env_zoo = env_zoo.parallel_env(max_cycles=25, continuous_actions=True)
     zoo_obs = env_zoo.reset()
-    
+
     env_jax = env_jax()
     
     env_params = env_jax.default_params
@@ -115,10 +118,13 @@ env_mapper = {
     "simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommMPE),
     "simple_tag_v2": (simple_tag_v2, SimpleTagMPE),
     "simple_spread_v2": (simple_spread_v2, SimpleSpreadMPE),
+    "simple_crypto_v2": (simple_crypto_v2, SimpleCryptoMPE),
 }
 
 if __name__=="__main__":
 
+    
+    test_step("simple_crypto_v2")
     test_step("simple_spread_v2")
     test_step("simple_v2")
     test_step("simple_world_comm_v2")
