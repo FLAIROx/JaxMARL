@@ -3,11 +3,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pettingzoo
-from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2
+from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2, simple_speaker_listener_v3, simple_push_v2
 #from multiagentgymnax.u
 import tqdm
 
-from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE
+from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
@@ -60,6 +60,10 @@ def np_state_to_jax(env_zoo, env_jax):
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
         return SimpleCryptoState(**state)
+    if env_zoo.metadata["name"] == 'simple_speaker_listener_v3':
+        from multiagentgymnax.environments.mpe.simple_speaker_listener import MPETargetState
+        state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_b.name[-1])
+        return MPETargetState(**state)
     else:
         return State(**state)
 
@@ -119,13 +123,16 @@ env_mapper = {
     "simple_tag_v2": (simple_tag_v2, SimpleTagMPE),
     "simple_spread_v2": (simple_spread_v2, SimpleSpreadMPE),
     "simple_crypto_v2": (simple_crypto_v2, SimpleCryptoMPE),
+    "simple_speaker_listener_v3": (simple_speaker_listener_v3, SimpleSpeakerListenerMPE),
+    "simple_push_v2": (simple_push_v2, SimplePushMPE),
 }
 
 if __name__=="__main__":
 
-    
+    test_step("simple_speaker_listener_v3")
     test_step("simple_crypto_v2")
     test_step("simple_spread_v2")
     test_step("simple_v2")
     test_step("simple_world_comm_v2")
     test_step("simple_tag_v2")
+    
