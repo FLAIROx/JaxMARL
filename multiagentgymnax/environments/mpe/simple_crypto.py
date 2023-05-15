@@ -5,10 +5,12 @@ from typing import Tuple, Dict
 from flax import struct
 from functools import partial
 from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
+from multiagentgymnax.environments.mpe._mpe_utils.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
 from gymnax.environments.spaces import Box
 
-GOOD_AGENT_NAMES = ["alice_0", "bob_0"]
+SPEAKER = "alice_0"
+LISTENER = "bob_0"
+ADVERSARY = "eve_0"
 SPEAKER_IDX = 1
 ADVERSARY_NAMES = ["eve_0"]
 OBS_COLOUR = jnp.array([[255, 0, 0, 0], [0, 255, 0, 0]])
@@ -39,8 +41,8 @@ class SimpleCryptoMPE(MPEBaseEnv):
 
         self.num_good_agents, self.num_adversaries = 2, 1
         self.num_agents = num_agents
-        self.adversaries = ADVERSARY_NAMES
-        self.good_agents = GOOD_AGENT_NAMES
+        self.adversaries = [ADVERSARY]
+        self.good_agents = [SPEAKER, LISTENER]
         
         assert self.num_agents == (self.num_good_agents + self.num_adversaries)
         assert len(self.adversaries) == self.num_adversaries
@@ -73,13 +75,13 @@ class SimpleCryptoMPE(MPEBaseEnv):
     def default_params(self) -> EnvParams:
         params = EnvParams(
             max_steps=MAX_STEPS,
-            rad=jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
-                            jnp.full((self.num_good_agents), 0.05),
-                            jnp.full((self.num_landmarks), 0.2)]),
+            rad=jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
+                            jnp.full((self.num_good_agents), AGENT_RADIUS),
+                            jnp.full((self.num_landmarks), LANDMARK_RADIUS)]),
             moveable= jnp.full((self.num_entities), False),
             silent = jnp.full((self.num_agents), 0),
             collide = jnp.full((self.num_entities), False),
-            mass=jnp.full((self.num_entities), 1),
+            mass=jnp.full((self.num_entities), MASS),
             accel = jnp.full((self.num_agents), ACCEL),
             max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
                                 jnp.full((self.num_landmarks), 0.0)]),
@@ -147,8 +149,8 @@ class SimpleCryptoMPE(MPEBaseEnv):
     
         # NOTE not a fan of this solution but it does work...        
         obs = {
-            GOOD_AGENT_NAMES[0]: _speaker(),
-            GOOD_AGENT_NAMES[1]: _listener(),
+            SPEAKER: _speaker(),
+            LISTENER: _listener(),
             ADVERSARY_NAMES[0]: _adversary()
         }
         return obs

@@ -43,7 +43,7 @@ class SimpleSpreadMPE(MPEBaseEnv):
         params = EnvParams(
             max_steps=25,
             rad=jnp.concatenate([jnp.full((self.num_agents), 0.15),
-                            jnp.full((self.num_landmarks), RADIUS)]), 
+                            jnp.full((self.num_landmarks), AGENT_RADIUS)]), 
             moveable=jnp.concatenate([jnp.full((self.num_agents), True),
                                       jnp.full((self.num_landmarks), False)]),
             silent = jnp.full((self.num_agents), 1),
