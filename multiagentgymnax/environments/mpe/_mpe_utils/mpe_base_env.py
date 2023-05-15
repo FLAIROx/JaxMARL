@@ -153,7 +153,6 @@ class MPEBaseEnv(MultiAgentEnv):
 
         key, key_w = jax.random.split(key)
         p_pos, p_vel = self._world_step(key_w, state, u, params)
-        
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, params.c_noise, params.silent)
         done = jnp.full((self.num_agents), state.step>=params.max_steps)
@@ -410,14 +409,6 @@ class MPEBaseEnv(MultiAgentEnv):
     def update_render(self, im, state: State, params: Optional[EnvParams] = None):
         ax = im.axes 
         return self.init_render(ax, state, params)
-"""
-
-how to store agent 
-if it is changing, must be in the data struct. should we use index or Dictionary
-index seems more intuitive but jax can also vmap over a dictionary right
-
-
-"""
     
 
 if __name__=="__main__":

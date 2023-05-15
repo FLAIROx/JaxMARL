@@ -74,7 +74,7 @@ def np_state_to_jax(env_zoo, env_jax):
 def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
 
     for agent in obs_zoo.keys():
-        print(f'{agent}: obs zoo {obs_zoo[agent]} len {len(obs_zoo[agent])}, obs jax {obs_jax[agent]} len {len(obs_jax[agent])}')
+        #print(f'{agent}: obs zoo {obs_zoo[agent]} len {len(obs_zoo[agent])}, obs jax {obs_jax[agent]} len {len(obs_jax[agent])}')
         assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
         assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
         #print('done zoo', done_zoo, 'done jax', done_jax)
@@ -107,6 +107,7 @@ def test_step(zoo_env_name):
     for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}", leave=True):
         obs = env_zoo.reset()
         for s in range(num_steps):
+            #print('-- step', s)
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
             state = np_state_to_jax(env_zoo, env_jax)
             #print('actions: ', actions)

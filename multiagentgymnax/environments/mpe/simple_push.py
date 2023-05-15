@@ -1,4 +1,3 @@
-""" Not yet passing tests """
 import jax 
 import jax.numpy as jnp
 import chex
@@ -19,7 +18,7 @@ class SimplePushMPE(MPEBaseEnv):
                  num_adversaries=1,
                  num_landmarks=2,):
         
-        assert num_landmarks == 2, "SimplePushMPE only supports 2 landmarks" # TODO can it work for 1?
+        assert num_landmarks == 2, "SimplePushMPE only supports 2 landmarks (yes, this is a departure from the docs but follows the code)" 
         
         dim_c = 2 # NOTE follows code rather than docs
 
@@ -56,8 +55,7 @@ class SimplePushMPE(MPEBaseEnv):
     def default_params(self) -> EnvParams:
         params = EnvParams(
             max_steps=MAX_STEPS,
-            rad=jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
-                            jnp.full((self.num_good_agents), AGENT_RADIUS),
+            rad=jnp.concatenate([jnp.full((self.num_agents), AGENT_RADIUS),
                             jnp.full((self.num_landmarks), LANDMARK_RADIUS)]),
             moveable=jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
             silent = jnp.full((self.num_agents), 1),
@@ -155,7 +153,6 @@ class SimplePushMPE(MPEBaseEnv):
         
         def _adversary(aidx):
             agent_dist = state.p_pos[state.goal+self.num_agents] - state.p_pos[self.num_adversaries:self.num_agents]
-            jax.debug.print('agent dist jax {a}', a=jnp.linalg.norm(agent_dist, axis=1))
             pos_rew = jnp.min(jnp.linalg.norm(agent_dist, axis=1))
             neg_rew = jnp.linalg.norm(state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx])
             return pos_rew - neg_rew
