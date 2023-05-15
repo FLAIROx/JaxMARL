@@ -37,6 +37,9 @@ class State:
     done: chex.Array # bool [num_agents, ]
     step: int # current step
     
+@struct.dataclass
+class MPETargetState(State):
+    goal: int
 
 @struct.dataclass
 class EnvParams:

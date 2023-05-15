@@ -4,7 +4,7 @@ import chex
 from typing import Tuple, Dict
 from flax import struct
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams
+from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, MPETargetState, EnvParams
 from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
 from gymnax.environments.spaces import Box
 
@@ -16,9 +16,7 @@ COLOUR_1 = jnp.array([0.65, 0.15, 0.15])
 COLOUR_2 = jnp.array([0.15, 0.65, 0.15])
 COLOUR_3 = jnp.array([0.15, 0.15, 0.65])
 
-@struct.dataclass
-class MPETargetState(State):
-    goal: int
+
 
 class SimpleSpeakerListenerMPE(MPEBaseEnv):
     
@@ -83,7 +81,7 @@ class SimpleSpeakerListenerMPE(MPEBaseEnv):
     
     def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, MPETargetState]:
         
-        key_a, key_l, key_g, key_k = jax.random.split(key, 4)        
+        key_a, key_l, key_g = jax.random.split(key, 3)        
         
         p_pos = jnp.concatenate([
             jax.random.uniform(key_a, (self.num_agents, 2), minval=-1, maxval=+1),

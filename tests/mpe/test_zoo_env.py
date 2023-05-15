@@ -56,13 +56,17 @@ def np_state_to_jax(env_zoo, env_jax):
     #print('jax state', state)
     #print('test obs', state["p_pos"][1] - state["p_pos"][0])
     if env_zoo.metadata["name"] == 'simple_crypto_v2':
-        from multiagentgymnax.environments.mpe.simple_crypto import SimpleCryptoState
+        from multiagentgymnax.environments.mpe.simple_crypto import MPECryptoState
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
-        return SimpleCryptoState(**state)
+        return MPECryptoState(**state)
     if env_zoo.metadata["name"] == 'simple_speaker_listener_v3':
-        from multiagentgymnax.environments.mpe.simple_speaker_listener import MPETargetState
+        from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPETargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_b.name[-1])
+        return MPETargetState(**state)
+    if env_zoo.metadata["name"] == 'simple_push_v2':
+        from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPETargetState
+        state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_a.name[-1])
         return MPETargetState(**state)
     else:
         return State(**state)
@@ -70,7 +74,7 @@ def np_state_to_jax(env_zoo, env_jax):
 def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax, atol=1e-4):
 
     for agent in obs_zoo.keys():
-        #print(f'{agent}: obs zoo {obs_zoo[agent]} len {len(obs_zoo[agent])}, obs jax {obs_jax[agent]} len {len(obs_jax[agent])}')
+        print(f'{agent}: obs zoo {obs_zoo[agent]} len {len(obs_zoo[agent])}, obs jax {obs_jax[agent]} len {len(obs_jax[agent])}')
         assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
         assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
         #print('done zoo', done_zoo, 'done jax', done_jax)
@@ -129,6 +133,7 @@ env_mapper = {
 
 if __name__=="__main__":
 
+    test_step("simple_push_v2")
     test_step("simple_speaker_listener_v3")
     test_step("simple_crypto_v2")
     test_step("simple_spread_v2")
