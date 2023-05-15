@@ -3,6 +3,7 @@ from .mpe import (
     SimpleMPE,
     SimpleTagMPE,
     SimpleWorldCommMPE,
-    SimpleSpreadMPE
+    SimpleSpreadMPE,
+    SimpleCryptoMPE
 )
 

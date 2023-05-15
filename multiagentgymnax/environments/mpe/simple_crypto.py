@@ -1,41 +1,60 @@
+""" Not yet passing tests """
 import jax 
 import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
+from flax import struct
 from functools import partial
 from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
+from multiagentgymnax.environments.mpe._mpe_utils.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
 from gymnax.environments.spaces import Box
 
+GOOD_AGENT_NAMES = ["alice_0", "bob_0"]
+SPEAKER_IDX = 1
+ADVERSARY_NAMES = ["eve_0"]
+OBS_COLOUR = [(255, 0, 0, 0), (0, 255, 0, 0)]
+
+@struct.dataclass
+class SimpleCryptoState(State):
+    """ State for the simple crypto environment. """
+    goal_colour: chex.Array
+    private_key: chex.Array
 
 class SimpleCryptoMPE(MPEBaseEnv):
 
     def __init__(self,
-                 num_good_agents=3,
-                 num_adversaries=1,
+                 num_agents=3,
                  num_landmarks=2,):
+        
+        assert num_agents == 3, "Simple Crypto only supports 3 agents"
+        assert num_landmarks == 2, "Simple Crypto only supports 2 landmarks"
         
         dim_c = 4 
 
-        num_agents = num_good_agents + num_adversaries
         num_landmarks = num_landmarks 
 
-        self.num_good_agents, self.num_adversaries = num_good_agents, num_adversaries
-
-        self.adversaries = ["adversary_{}".format(i) for i in range(num_adversaries)]
-        self.good_agents = ["agent_{}".format(i) for i in range(num_good_agents)]
+        self.num_good_agents, self.num_adversaries = 2, 1
+        self.num_agents = num_agents
+        self.adversaries = ADVERSARY_NAMES
+        self.good_agents = GOOD_AGENT_NAMES
+        
+        assert self.num_agents == (self.num_good_agents + self.num_adversaries)
+        assert len(self.adversaries) == self.num_adversaries
+        assert len(self.good_agents) == self.num_good_agents
+        
         agents = self.adversaries + self.good_agents
-
+        assert agents[SPEAKER_IDX] == "alice"
+        
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
 
         # Action and observation spaces
-        action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
+        action_spaces = {i: Box(0.0, 1.0, (4,)) for i in agents}
 
-        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (8,)) for i in self.adversaries }
-        observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (19,)) for i in self.good_agents})
+        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.adversaries }
+        observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (8,)) for i in self.good_agents})
 
-        colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
-            [OBS_COLOUR] * num_landmarks 
+        colour = [ADVERSARY_COLOUR] * self.num_adversaries + [AGENT_COLOUR] * self.num_good_agents + \
+            OBS_COLOUR
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -53,9 +72,9 @@ class SimpleCryptoMPE(MPEBaseEnv):
             rad=jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
                             jnp.full((self.num_good_agents), 0.05),
                             jnp.full((self.num_landmarks), 0.2)]),
-            moveable=jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
-            silent = jnp.full((self.num_agents), 1),
-            collide = jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
+            moveable= jnp.full((self.num_entities), False),
+            silent = jnp.full((self.num_agents), 0),
+            collide = jnp.full((self.num_entities), False),
             mass=jnp.full((self.num_entities), 1),
             accel = jnp.full((self.num_agents), ACCEL),
             max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
@@ -68,75 +87,80 @@ class SimpleCryptoMPE(MPEBaseEnv):
             dt=DT,       
         )
         return params
-
-    def get_obs(self, state: State, params: EnvParams):
-
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx, state, params):
-            """ Values needed in all observations """
-            
-            landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
-
-            # Zero out unseen agents with other_mask
-            other_pos = (state.p_pos[:self.num_agents] - state.p_pos[aidx]) 
-            other_vel = state.p_vel[:self.num_agents] 
-            
-            # use jnp.roll to remove ego agent from other_pos and other_vel arrays
-            other_pos = jnp.roll(other_pos, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
-            other_vel = jnp.roll(other_vel, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
-            
-            other_pos = jnp.roll(other_pos, shift=aidx, axis=0)
-            other_vel = jnp.roll(other_vel, shift=aidx, axis=0)
-            
-            return landmark_pos, other_pos, other_vel
-
-        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range, state, params)
-
-        def _good(aidx):
-            goal_idx = state.goal_a[aidx]
-            rel_pos = state.p_pos[goal_idx] - state.p_pos[aidx]
-
-            return jnp.concatenate([ # TODO 
-                state.p_vel[aidx].flatten(), # 2
-                rel_pos.flatten(), # 2
-                landmark_pos[aidx].flatten(), # 5, 2
-                other_pos[aidx].flatten(), # 5, 2
-                #other_vel[aidx,-1:].flatten(), # 2
-            ])
-
-
-        def _adversary(aidx):
-            return jnp.concatenate([
-                state.p_vel[aidx].flatten(), # 2
-                #state.p_pos[aidx].flatten(), # 2
-                landmark_pos[aidx].flatten(), # 5, 2
-                other_pos[aidx].flatten(), # 5, 2
-                #other_vel[aidx,-1:].flatten(), # 2
-            ])
+    
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, SimpleCryptoState]:
         
-        obs = {a: _adversary(i) for i, a in enumerate(self.adversaries)}
-        obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
+        key_a, key_l, key_g, key_k = jax.random.split(key, 4)        
+        
+        p_pos = jnp.concatenate([
+            jax.random.uniform(key_a, (self.num_agents, 2), minval=-1, maxval=+1),
+            jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
+        ])
+        
+        
+        g_idx = jax.random.randint(key_g, (1,), minval=0, maxval=self.num_landmarks)
+        k_idx = jax.random.randint(key_k, (1,), minval=0, maxval=self.num_landmarks)
+        
+        #private_key = jnp.zeros((self.num_agents, self.dim_c))
+        #private_key = private_key.at[-1].set()  # maybe this doesn't need to be a full array
+        
+        state = SimpleCryptoState(
+            p_pos=p_pos,
+            p_vel=jnp.zeros((self.num_entities, self.dim_p)),
+            c=jnp.zeros((self.num_agents, self.dim_c)),
+            done=jnp.full((self.num_agents), False),
+            step=0,
+            goal_colour=jnp.array(OBS_COLOUR[g_idx]),
+            private_key=jnp.array(OBS_COLOUR[k_idx]),
+        )
+        
+        return self.get_obs(state, params), state
+
+    def get_obs(self, state: SimpleCryptoState, params: EnvParams):
+
+        goal_colour = OBS_COLOUR[state.goal_a]
+        comm = state.c[SPEAKER_IDX]
+        
+        def _speaker():
+            return jnp.concatenate([
+                goal_colour,
+                state.private_key,
+            ])
+            
+        def _listener():
+            return jnp.concatenate([
+                state.private_key,
+                comm,
+            ])
+            
+        def _adversary():
+            return comm
+    
+        # NOTE not a fan of this solution but it does work...        
+        obs = {
+            GOOD_AGENT_NAMES[0]: _speaker(),
+            GOOD_AGENT_NAMES[1]: _listener(),
+            ADVERSARY_NAMES[0]: _adversary()
+        }
         return obs
     
-    def rewards(self, state, params) -> Dict[str, float]:
+    def rewards(self, state: SimpleCryptoState, params: EnvParams) -> Dict[str, float]:
 
-        def _good(aidx):
-
-            goal_idx = state.goal_a[aidx]
-            rel_pos = state.p_pos[goal_idx] - state.p_pos[aidx]
-            return -jnp.linalg.norm(rel_pos)
+        comm_diff = jnp.square(state.c - state.goal_colour) # check axis
+        print('comm diff', comm_diff)
+        comm_zeros = not jnp.any(state.c)  # Ensure communication has happend
         
-        def _adversary(aidx):
-            ad_goal = state.goal_a[aidx]
-            goal_idxs = state.goal_a[self.num_adversaries:self.num_agents]
-            agent_dist = state.p_pos[goal_idxs] - state.p_pos[self.num_adversaries:self.num_agents]
-            pos_rew = jnp.min(jnp.linalg.norm(agent_dist, axis=1))
+        mask = jnp.full((self.num_agents), -1)
+        mask = mask.at[0].set(1)
+        mask *= comm_zeros
 
-            neg_rew = jnp.linalg.norm(state.p_pos[ad_goal] - state.p_pos[aidx])
-
-            return pos_rew - neg_rew
+        def _good():
+            return jnp.sum(comm_diff * mask) 
+        
+        def _adversary(idx):
+            return jnp.sum(comm_diff[idx]) * comm_zeros
 
         rew = {a: _adversary(i) for i, a in enumerate(self.adversaries)}
-        rew.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
+        rew.update({a: _good() for i, a in enumerate(self.good_agents)})
         return rew
 
