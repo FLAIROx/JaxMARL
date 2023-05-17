@@ -41,6 +41,7 @@ class State:
     agents_dir_idx: chex.Array
     goals_pos: chex.Array
     last_goals: chex.Array
+    goals_reached: chex.Array
     wall_map: chex.Array
     maze_map: chex.Array
     goals_map: chex.Array
@@ -217,6 +218,8 @@ class MAGoalCycle(MultiAgentEnv):
         key, subkey = jax.random.split(key)
         last_goals = jax.random.choice(subkey, jnp.arange(params.n_goals, dtype=jnp.uint8),
                                            shape=(self.num_agents,))
+                                           
+        goals_reached = jnp.array([False] * self.num_agents)
 
         maze_map = make_maze_map(
             params,
@@ -232,6 +235,7 @@ class MAGoalCycle(MultiAgentEnv):
             agents_dir_idx=agents_dir_idx,
             goals_pos=goals_pos,
             last_goals=last_goals,
+            goals_reached=goals_reached,
             wall_map=wall_map.astype(jnp.bool_),
             agents_map=agents_map.astype(jnp.bool_),
             goals_map=goals_map.astype(jnp.bool_),
@@ -321,12 +325,35 @@ class MAGoalCycle(MultiAgentEnv):
             fwd_pos_has_goal = state.goals_map.at[fwd_pos[1], fwd_pos[0]].get()
             fwd_pos_has_agent = state.agents_map.at[fwd_pos[1], fwd_pos[0]].get()
 
-            last_idx = state.last_goals[aidx]
-            next_idx = last_idx + 1
-            target_idx = state.goals_pos[:, next_idx % params.n_goals]
-            hit_target = jnp.logical_and((fwd_pos[1] == target_idx[1]), (fwd_pos[0] == target_idx[0]))
-            last_goals = state.last_goals
-            last_goals = last_goals.at[aidx].set((last_idx + hit_target) % params.n_goals)
+#             last_idx = state.last_goals[aidx]
+#             next_idx = last_idx + 1
+#             target_idx = state.goals_pos[:, next_idx % params.n_goals]
+#             hit_target = jnp.logical_and((fwd_pos[1] == target_idx[1]), (fwd_pos[0] == target_idx[0]))
+#             last_goals = state.last_goals
+#             last_goals = last_goals.at[aidx].set((last_idx + hit_target) % params.n_goals)
+
+			def true_fn():
+				match = jnp.argwhere(jnp.array(
+					[jnp.logical_and(state.goals_pos[1, i] == fwd_pos[1],
+					 state.goals_pos[0, i] == fwd_pos[0]) for i in range(params.n_goals)]), size=1)[0][0]
+				return match
+
+			def false_fn():
+				return 0
+
+			first_idx = lax.cond(fwd_pos_has_goal, true_fn, false_fn)
+			next_idx = state.last_goals[aidx] + 1
+			target_idx = state.goals_pos[:, next_idx % params.n_goals]
+			hit = jnp.logical_and((fwd_pos[1] == target_idx[1]), (fwd_pos[0] == target_idx[0]))
+			goals_reached = state.goals_reached
+			hit_next = jnp.logical_and(hit, goals_reached[aidx])
+			first_goal_reached = jnp.logical_and(jnp.logical_not(goals_reached[aidx]), fwd_pos_has_goal)
+			hit_target = jnp.logical_or(hit_next, first_goal_reached)
+			last_goals = state.last_goals
+			last_goals = last_goals.at[aidx].set(((next_idx * hit_next) + (first_idx * first_goal_reached) +
+						 (last_goals[aidx] * jnp.logical_not(hit_target))) % params.n_goals)
+			goal_reached = (jnp.logical_not(goals_reached[aidx]) * first_goal_reached) + goals_reached[aidx]
+			goals_reached = goals_reached.at[aidx].set(goal_reached)
 
             fwd_pos_blocked = jnp.logical_or(jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal), fwd_pos_has_agent)
 
@@ -366,6 +393,7 @@ class MAGoalCycle(MultiAgentEnv):
                                         agents_pos=agents_pos,
                                         agents_dir_idx=agents_dir_idx,
                                         agents_dir=agents_dir,
+                                        goals_reached=goals_reached,
                                         agents_map=agents_map,
                                         maze_map=maze_map,
                                         last_goals=last_goals))
