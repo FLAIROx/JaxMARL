@@ -3,11 +3,11 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
+from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
 from gymnax.environments.spaces import Box
 
 
-class SimpleTagMPE(MPEBaseEnv):
+class SimpleTagMPE(SimpleMPE):
 
     def __init__(self,
                  num_good_agents=1,

@@ -5,3 +5,4 @@ from .simple_spread import SimpleSpreadMPE
 from .simple_push import SimplePushMPE
 from .simple_crypto import SimpleCryptoMPE
 from .simple_speaker_listener import SimpleSpeakerListenerMPE
+from .simple_adversary import SimpleAdversaryMPE

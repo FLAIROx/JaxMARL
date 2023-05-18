@@ -3,11 +3,11 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
+from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from multiagentgymnax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
-class SimpleSpreadMPE(MPEBaseEnv):
+class SimpleSpreadMPE(SimpleMPE):
     
     def __init__(self,
                  num_agents=3,

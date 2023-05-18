@@ -4,8 +4,8 @@ import chex
 from typing import Tuple, Dict
 from flax import struct
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, MPETargetState, EnvParams
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
+from multiagentgymnax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
+from multiagentgymnax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
 SPEAKER = "speaker_0"
@@ -18,7 +18,7 @@ COLOUR_3 = jnp.array([0.15, 0.15, 0.65])
 
 
 
-class SimpleSpeakerListenerMPE(MPEBaseEnv):
+class SimpleSpeakerListenerMPE(SimpleMPE):
     
     def __init__(
         self,
@@ -79,7 +79,7 @@ class SimpleSpeakerListenerMPE(MPEBaseEnv):
         )
         return params
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, MPETargetState]:
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, TargetState]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -90,7 +90,7 @@ class SimpleSpeakerListenerMPE(MPEBaseEnv):
         
         g_idx = jax.random.randint(key_g, (), minval=0, maxval=self.num_landmarks)
         
-        state = MPETargetState(
+        state = TargetState(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
@@ -120,11 +120,11 @@ class SimpleSpeakerListenerMPE(MPEBaseEnv):
         return u, c
 
     
-    def rewards(self, state: MPETargetState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
         r =  -1 * jnp.sum(jnp.square(state.p_pos[1] - state.p_pos[state.goal+self.num_agents]))
         return {a: r for a in self.agents}
     
-    def get_obs(self, state: MPETargetState, params: EnvParams):
+    def get_obs(self, state: TargetState, params: EnvParams):
         
         goal_colour = jnp.full((3,), 0.15)
         goal_colour = goal_colour.at[state.goal].set(0.65)        

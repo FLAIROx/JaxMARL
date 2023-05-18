@@ -3,15 +3,15 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, MPETargetState, EnvParams
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
+from multiagentgymnax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
+from multiagentgymnax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
 COLOUR_1 = jnp.array([0.1, 0.9, 0.1])
 COLOUR_2 = jnp.array([0.1, 0.1, 0.9])
 OBS_COLOUR = jnp.concatenate([COLOUR_1, COLOUR_2])
 
-class SimplePushMPE(MPEBaseEnv):
+class SimplePushMPE(SimpleMPE):
 
     def __init__(self,
                  num_good_agents=1,
@@ -73,7 +73,7 @@ class SimplePushMPE(MPEBaseEnv):
         )
         return params
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, MPETargetState]:
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, TargetState]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -84,7 +84,7 @@ class SimplePushMPE(MPEBaseEnv):
         
         g_idx = jax.random.randint(key_g, (), minval=0, maxval=self.num_landmarks)
         
-        state = MPETargetState(
+        state = TargetState(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
@@ -95,7 +95,7 @@ class SimplePushMPE(MPEBaseEnv):
         
         return self.get_obs(state, params), state
 
-    def get_obs(self, state: MPETargetState, params: EnvParams):
+    def get_obs(self, state: TargetState, params: EnvParams):
 
         @partial(jax.vmap, in_axes=(0, None, None))
         def _common_stats(aidx, state, params):
@@ -146,7 +146,7 @@ class SimplePushMPE(MPEBaseEnv):
         obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
         return obs
     
-    def rewards(self, state: MPETargetState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
 
         def _good(aidx):
             return -jnp.linalg.norm(state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx])

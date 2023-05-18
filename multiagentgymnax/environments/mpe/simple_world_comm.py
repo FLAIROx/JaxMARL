@@ -3,14 +3,14 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import *
+from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
+from multiagentgymnax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
 
 # NOTE food and forests are part of world.landmarks
 
-class SimpleWorldCommMPE(MPEBaseEnv):
+class SimpleWorldCommMPE(SimpleMPE):
     """ 
     JAX Compatible version of simple_world_comm_v2 PettingZoo environment.
     Source code: https://github.com/Farama-Foundation/PettingZoo/blob/master/pettingzoo/mpe/simple_world_comm/simple_world_comm.py 

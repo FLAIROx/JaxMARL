@@ -4,8 +4,8 @@ import chex
 from typing import Tuple, Dict
 from flax import struct
 from functools import partial
-from multiagentgymnax.environments.mpe._mpe_utils.mpe_base_env import MPEBaseEnv, State, EnvParams
-from multiagentgymnax.environments.mpe._mpe_utils.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
+from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from multiagentgymnax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
 from gymnax.environments.spaces import Box
 
 SPEAKER = "alice_0"
@@ -16,12 +16,12 @@ ADVERSARY_NAMES = ["eve_0"]
 OBS_COLOUR = jnp.array([[255, 0, 0, 0], [0, 255, 0, 0]])
 
 @struct.dataclass
-class MPECryptoState(State):
+class CryptoState(State):
     """ State for the simple crypto environment. """
     goal_colour: chex.Array
     private_key: chex.Array
 
-class SimpleCryptoMPE(MPEBaseEnv):
+class SimpleCryptoMPE(SimpleMPE):
     """ 
     JAX Compatible version of simple_crypto_v2 PettingZoo environment.
     Source code: https://github.com/Farama-Foundation/PettingZoo/blob/master/pettingzoo/mpe/simple_crypto/simple_crypto.py 
@@ -94,7 +94,7 @@ class SimpleCryptoMPE(MPEBaseEnv):
         )
         return params
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, MPECryptoState]:
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, CryptoState]:
         
         key_a, key_l, key_g, key_k = jax.random.split(key, 4)        
         
@@ -106,7 +106,7 @@ class SimpleCryptoMPE(MPEBaseEnv):
         g_idx = jax.random.randint(key_g, (1,), minval=0, maxval=self.num_landmarks)
         k_idx = jax.random.randint(key_k, (1,), minval=0, maxval=self.num_landmarks)
         
-        state = MPECryptoState(
+        state = CryptoState(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
@@ -126,7 +126,7 @@ class SimpleCryptoMPE(MPEBaseEnv):
         
         return u, c
 
-    def get_obs(self, state: MPECryptoState, params: EnvParams):
+    def get_obs(self, state: CryptoState, params: EnvParams):
 
         goal_colour = state.goal_colour
         comm = state.c[SPEAKER_IDX]
@@ -155,7 +155,7 @@ class SimpleCryptoMPE(MPEBaseEnv):
         }
         return obs
     
-    def rewards(self, state: MPECryptoState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: CryptoState, params: EnvParams) -> Dict[str, float]:
 
         comm_diff = jnp.sum(jnp.square(state.c - state.goal_colour), axis=1) # check axis
         

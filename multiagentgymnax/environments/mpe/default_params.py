@@ -1,3 +1,4 @@
+""" Default parameters for MPE environments """
 
 # Environment
 MAX_STEPS = 25

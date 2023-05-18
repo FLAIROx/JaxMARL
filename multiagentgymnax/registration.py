@@ -6,6 +6,7 @@ from .environments import (
     SimpleCryptoMPE,
     SimpleSpeakerListenerMPE,
     SimplePushMPE,
+    SimpleAdversaryMPE,
 )
 
 
@@ -29,6 +30,8 @@ def make(env_id: str, **env_kwargs):
         return SimpleSpeakerListenerMPE(**env_kwargs)
     elif env_id == "simple_push_v2":
         return SimplePushMPE(**env_kwargs)
+    elif env_id == "simple_adversary_v2":
+        return SimpleAdversaryMPE(**env_kwargs)
     
     
 registered_envs = [
@@ -38,6 +41,7 @@ registered_envs = [
     "simple_spread_v2",
     "simple_crypto_v2",
     "simple_speaker_listener_v3",
-    "simple_push_v2"
+    "simple_push_v2",
+    "simple_adversary_v2",
 ]
     
