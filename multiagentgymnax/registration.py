@@ -7,8 +7,8 @@ from .environments import (
     SimpleSpeakerListenerMPE,
     SimplePushMPE,
     SimpleAdversaryMPE,
+    SimpleReferenceMPE,
 )
-
 
 def make(env_id: str, **env_kwargs):
     """A JAX-version of OpenAI's env.make(env_name), built off Gymnax"""
@@ -32,7 +32,8 @@ def make(env_id: str, **env_kwargs):
         return SimplePushMPE(**env_kwargs)
     elif env_id == "simple_adversary_v2":
         return SimpleAdversaryMPE(**env_kwargs)
-    
+    elif env_id == "simple_reference_v2":
+        return SimpleReferenceMPE(**env_kwargs)
     
 registered_envs = [
     "simple_v2",
@@ -43,5 +44,6 @@ registered_envs = [
     "simple_speaker_listener_v3",
     "simple_push_v2",
     "simple_adversary_v2",
+    "simple_reference_v2",
 ]
     

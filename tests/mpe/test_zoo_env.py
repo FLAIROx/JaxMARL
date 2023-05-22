@@ -4,12 +4,12 @@ import jax.numpy as jnp
 import numpy as np
 import pettingzoo
 from pettingzoo.test import parallel_api_test
-from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2, simple_speaker_listener_v3, simple_push_v2, simple_adversary_v2
+from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2, simple_speaker_listener_v3, simple_push_v2, simple_adversary_v2, simple_reference_v2
 #from multiagentgymnax.u
 import tqdm
 from multiagentgymnax import make
 
-from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE
+from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
@@ -70,6 +70,12 @@ def np_state_to_jax(env_zoo, env_jax):
         from multiagentgymnax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_a.name[-1])
         return TargetState(**state)
+    if env_zoo.metadata["name"] == 'simple_reference_v2':
+        from multiagentgymnax.environments.mpe.simple import TargetState
+        
+        state["goal"] = np.flip(np.array([int(env_zoo.aec_env.env.world.agents[i].goal_b.name[-1]) for i in range(2)]))
+        #print('goals', state["goal"])
+        return TargetState(**state)
     else:
         return State(**state)
 
@@ -114,6 +120,7 @@ def test_step(zoo_env_name):
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
             state = np_state_to_jax(env_zoo, env_jax)
             #print('actions: ', actions)
+            
             obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(actions)
             key, key_step = jax.random.split(key)
             obs_jax, state_jax, rew_jax, done_jax, _ = env_jax.step(key_step, state, actions)
@@ -134,10 +141,12 @@ mpe_env_mapper = {
     "simple_speaker_listener_v3": (simple_speaker_listener_v3, SimpleSpeakerListenerMPE),
     "simple_push_v2": (simple_push_v2, SimplePushMPE),
     "simple_adversary_v2": (simple_adversary_v2, SimpleAdversaryMPE),
+    "simple_reference_v2": (simple_reference_v2, SimpleReferenceMPE),
 }
 
 if __name__=="__main__":
-
+    
+    test_step("simple_reference_v2")
     test_step("simple_adversary_v2")
     test_step("simple_push_v2")
     test_step("simple_speaker_listener_v3")
