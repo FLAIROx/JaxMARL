@@ -2,6 +2,9 @@
 Base env class for MPE PettingZoo envs.
 
 NOTE: only for continuous action spaces currently
+
+TODO: discrete action spaces
+TODO: viz for communication env, e.g. crypto
 """
 
 import jax
@@ -85,11 +88,10 @@ class SimpleMPE(MultiAgentEnv):
         if action_spaces is None:
             self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in self.agents}
         else:
-            # TODO some check with the names?
             assert len(action_spaces.keys()) == num_agents, f"Number of action spaces {len(action_spaces.keys())} does not match number of agents {num_agents}"
             self.action_spaces = action_spaces
         if observation_spaces is None:
-            self.action_spaces = {i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.agents}
+            self.observation_spaces = {i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.agents}
         else:
             assert len(observation_spaces.keys()) == num_agents, f"Number of observation spaces {len(observation_spaces.keys())} does not match number of agents {num_agents}"
             self.observation_spaces = observation_spaces
@@ -382,7 +384,6 @@ class SimpleMPE(MultiAgentEnv):
 
         rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
         rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
-        print(rgb_array.shape)
         
         return ax.imshow(rgb_array)
     
@@ -418,8 +419,15 @@ if __name__=="__main__":
     
     state_seq = []
     print('state', state)
+    print('action spaces', env.action_spaces)
+    
     for _ in range(50):
         state_seq.append(state)
+        key, key_act = jax.random.split(key)
+        key_act = jax.random.split(key_act, env.num_agents)
+        actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enumerate(env.agents)} 
+        print('actions', actions)
+        
         obs, state, rew, dones, _ = env.step_env(key, state, actions, params)
         print('state', obs)
         

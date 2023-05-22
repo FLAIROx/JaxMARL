@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from typing import Optional
 
-from multiagentgymnax import EnvParams
+from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv, EnvParams
 
 
 class Visualizer(object):
-    def __init__(self, env, state_seq, env_params: Optional[EnvParams] = None, reward_seq=None):
+    def __init__(self, env: MultiAgentEnv, state_seq, env_params: Optional[EnvParams] = None, reward_seq=None):
         self.env = env
         self.env_params = self.env.default_params if env_params is None else env_params
 
