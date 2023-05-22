@@ -66,7 +66,7 @@ def np_state_to_jax(env_zoo, env_jax):
         from multiagentgymnax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_b.name[-1])
         return TargetState(**state)
-    if env_zoo.metadata["name"] == 'simple_push_v2':
+    if env_zoo.metadata["name"] == 'simple_push_v2' or env_zoo.metadata["name"] == 'simple_adversary_v2':
         from multiagentgymnax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_a.name[-1])
         return TargetState(**state)
@@ -138,6 +138,7 @@ mpe_env_mapper = {
 
 if __name__=="__main__":
 
+    test_step("simple_adversary_v2")
     test_step("simple_push_v2")
     test_step("simple_speaker_listener_v3")
     test_step("simple_crypto_v2")

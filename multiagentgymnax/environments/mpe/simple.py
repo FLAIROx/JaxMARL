@@ -1,5 +1,7 @@
 """ 
 Base env class for MPE PettingZoo envs.
+
+NOTE: only for continuous action spaces currently
 """
 
 import jax
@@ -9,27 +11,10 @@ from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
 from multiagentgymnax.environments.mpe.default_params import *
 import chex
 from gymnax.environments.spaces import Box
-"""
-has both a physical and communication action
-
-agents change each step - state
-landmarks are constant - params
-
-need to deal with action call back
-
-
-NOTE only continuous actions fo rnow
-
-TODO
-landmarks currently have a velocity kept within the state which is just always zero. This should be removed.
-
-
-"""
-
 from flax import struct
 from typing import Tuple, Optional, Dict
 from functools import partial
-import os
+
 @struct.dataclass
 class State:
     """ Basic MPE State """
@@ -261,7 +246,7 @@ class SimpleMPE(MultiAgentEnv):
         p_force = self._apply_environment_force(p_force, state, params)
         #print('p_force post apply env force', p_force)
         #jax.debug.print('jax p_force {p_force}', p_force=p_force)
-        
+
         # integrate physical state
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, params.mass, params.moveable, params.max_speed, params)
         

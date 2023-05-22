@@ -1,13 +1,11 @@
-''' Not yet passing tests '''
 import jax 
 import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from multiagentgymnax.environments.mpe.simple import TargetState, SimpleMPE, EnvParams
 from multiagentgymnax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
-
 
 class SimpleAdversaryMPE(SimpleMPE):
 
@@ -27,14 +25,13 @@ class SimpleAdversaryMPE(SimpleMPE):
         self.good_agents = ["agent_{}".format(i) for i in range(num_good_agents)]
         agents = self.adversaries + self.good_agents
 
-        landmarks = ["landmark_{}".format(i) for i in range(num_obs)]
+        landmarks = ["landmark {}".format(i) for i in range(num_obs)]
 
         # Action and observation spaces
         action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
 
-        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (16,)) for i in self.adversaries }
-        observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (14,)) for i in self.good_agents})
-
+        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (8,)) for i in self.adversaries }
+        observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (10,)) for i in self.good_agents})
 
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
             [OBS_COLOUR] * num_obs 
@@ -51,102 +48,98 @@ class SimpleAdversaryMPE(SimpleMPE):
     @property
     def default_params(self) -> EnvParams:
         params = EnvParams(
-            max_steps=25,
-            rad=jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
-                            jnp.full((self.num_good_agents), 0.05),
-                            jnp.full((self.num_landmarks), 0.2)]),
-            moveable=jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
+            max_steps=MAX_STEPS,
+            rad=jnp.concatenate([jnp.full((self.num_agents), 0.15),
+                            jnp.full((self.num_landmarks), 0.08)]),
+            moveable=jnp.concatenate([jnp.full((self.num_agents), True), 
+                                      jnp.full((self.num_landmarks), False)]),
             silent = jnp.full((self.num_agents), 1),
-            collide = jnp.full((self.num_entities), True),
+            collide = jnp.full((self.num_entities), False),
             mass=jnp.full((self.num_entities), 1),
-            accel = jnp.concatenate([jnp.full((self.num_adversaries), 3.0),
-                                jnp.full((self.num_good_agents), 4.0)]),
-            max_speed = jnp.concatenate([jnp.full((self.num_adversaries), 1.0),
-                                jnp.full((self.num_good_agents), 1.3),
+            accel = jnp.full((self.num_entities), ACCEL),
+            max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
                                 jnp.full((self.num_landmarks), 0.0)]),
             u_noise=jnp.full((self.num_agents), 0),
             c_noise=jnp.full((self.num_agents), 0),
-            damping=0.25,  # physical damping
-            contact_force=1e2,  # contact response parameters
-            contact_margin=1e-3,
-            dt=0.1,            
+            damping=DAMPING,  # physical damping
+            contact_force=CONTACT_FORCE,  # contact response parameters
+            contact_margin=CONTACT_MARGIN,
+            dt=DT,            
         )
         return params
     
+    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, TargetState]:
+        
+        key_a, key_l, key_g = jax.random.split(key, 3)        
+        
+        p_pos = jnp.concatenate([
+            jax.random.uniform(key_a, (self.num_agents, 2), minval=-1, maxval=+1),
+            jax.random.uniform(key_l, (self.num_landmarks, 2), minval=-0.9, maxval=+0.9)
+        ])
+        
+        g_idx = jax.random.randint(key_g, (), minval=0, maxval=self.num_landmarks)
+        
+        state = TargetState(
+            p_pos=p_pos,
+            p_vel=jnp.zeros((self.num_entities, self.dim_p)),
+            c=jnp.zeros((self.num_agents, self.dim_c)),
+            done=jnp.full((self.num_agents), False),
+            step=0,
+            goal=g_idx,
+        )
+        
+        return self.get_obs(state, params), state
 
-    def get_obs(self, state: State, params: EnvParams):
+    def get_obs(self, state: TargetState, params: EnvParams):
 
         @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx, state, params):
+        def _common_stats(aidx, state: TargetState, params: EnvParams):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
 
             # Zero out unseen agents with other_mask
             other_pos = (state.p_pos[:self.num_agents] - state.p_pos[aidx]) 
-            other_vel = state.p_vel[:self.num_agents] 
             
             # use jnp.roll to remove ego agent from other_pos and other_vel arrays
             other_pos = jnp.roll(other_pos, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
-            other_vel = jnp.roll(other_vel, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
             
             other_pos = jnp.roll(other_pos, shift=aidx, axis=0)
-            other_vel = jnp.roll(other_vel, shift=aidx, axis=0)
             
-            return landmark_pos, other_pos, other_vel
+            return landmark_pos, other_pos
 
-        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range, state, params)
+        landmark_pos, other_pos = _common_stats(self.agent_range, state, params)
 
         def _good(aidx):
+            goal_rel_pos = state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx]
+            
             return jnp.concatenate([
-                state.p_vel[aidx].flatten(), # 2
-                state.p_pos[aidx].flatten(), # 2
+                goal_rel_pos.flatten(),
                 landmark_pos[aidx].flatten(), # 5, 2
                 other_pos[aidx].flatten(), # 5, 2
-                #other_vel[aidx,-1:].flatten(), # 2
             ])
 
 
         def _adversary(aidx):
             return jnp.concatenate([
-                state.p_vel[aidx].flatten(), # 2
-                state.p_pos[aidx].flatten(), # 2
                 landmark_pos[aidx].flatten(), # 5, 2
                 other_pos[aidx].flatten(), # 5, 2
-                other_vel[aidx,-1:].flatten(), # 2
             ])
         
         obs = {a: _adversary(i) for i, a in enumerate(self.adversaries)}
         obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
         return obs
     
-    def rewards(self, state, params) -> Dict[str, float]:
+    def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
 
-        @partial(jax.vmap, in_axes=(0, None, None, None))
-        def _collisions(agent_idx, other_idx, state, params):
-            return jax.vmap(self.is_collision, in_axes=(None, 0, None, None))(
-                agent_idx,
-                other_idx,
-                state,
-                params,
-            )
+        adv_rew = jnp.sum(jnp.linalg.norm(state.p_pos[:self.num_adversaries] - state.p_pos[state.goal+self.num_agents], axis=1))
+        pos_rew = -1 * jnp.min(jnp.linalg.norm(state.p_pos[self.num_adversaries:self.num_agents] - state.p_pos[state.goal+self.num_agents], axis=1))
+        good_rew = adv_rew + pos_rew
+        
+        def _ad(aidx):
+            return -1 * jnp.linalg.norm(state.p_pos[aidx] - state.p_pos[state.goal+self.num_agents])
 
-        c = _collisions(jnp.arange(self.num_good_agents)+self.num_adversaries, 
-                        jnp.arange(self.num_adversaries), 
-                        state,
-                        params)  # [agent, adversary, collison]
-
-        def _good(aidx, collisions):
-
-            rew = -10 * jnp.sum(collisions[aidx])
-
-            mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
-            rew -= mr
-            return rew 
-
-        ad_rew = 10 * jnp.sum(c)
-
-        rew = {a: ad_rew for a in self.adversaries}
-        rew.update({a: _good(i+self.num_adversaries, c) for i, a in enumerate(self.good_agents)})
+        rew = {a: _ad(i) for i, a in enumerate(self.adversaries)}
+        rew.update({a: good_rew for a in self.good_agents})
         return rew
 

@@ -7,6 +7,7 @@ from multiagentgymnax.environments.mpe.simple import SimpleMPE, TargetState, Env
 from multiagentgymnax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
+# Obstacle Colours
 COLOUR_1 = jnp.array([0.1, 0.9, 0.1])
 COLOUR_2 = jnp.array([0.1, 0.1, 0.9])
 OBS_COLOUR = jnp.concatenate([COLOUR_1, COLOUR_2])
