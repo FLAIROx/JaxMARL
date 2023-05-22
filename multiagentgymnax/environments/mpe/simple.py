@@ -132,6 +132,7 @@ class SimpleMPE(MultiAgentEnv):
     def step_env(self, key: chex.PRNGKey, state: State, actions: dict, params: EnvParams):
         
         u, c = self.set_actions(actions, params)
+        jax.debug.print('c {c}', c=c)
         if c.shape[1] < self.dim_c:  # This is due to the MPE code carrying around 0s for the communication channels
             c = jnp.concatenate([c, jnp.zeros((self.num_agents, self.dim_c - c.shape[1]))], axis=1)
 
@@ -224,8 +225,8 @@ class SimpleMPE(MultiAgentEnv):
         
         #print('params moveable', params.moveable[a_idx])
         u = u * params.accel[a_idx] * params.moveable[a_idx]
-        #jax.debug.print('jax u {u}', u=u)
-        c = action[5:] * ~params.silent[a_idx]
+        jax.debug.print('jax c {u}', u=action[5:])
+        c = action[5:] 
         return u, c
 
     # return all entities in the world
