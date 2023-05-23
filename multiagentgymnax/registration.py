@@ -8,6 +8,7 @@ from .environments import (
     SimplePushMPE,
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
+    SwitchRiddle
 )
 
 def make(env_id: str, **env_kwargs):
@@ -35,6 +36,11 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "simple_reference_v2":
         return SimpleReferenceMPE(**env_kwargs)
     
+    # 2. Switch Riddle
+    elif env_id == "switch_riddle":
+        return SwitchRiddle(**env_kwargs)
+    
+    
 registered_envs = [
     "simple_v2",
     "simple_tag_v2",
@@ -45,5 +51,6 @@ registered_envs = [
     "simple_push_v2",
     "simple_adversary_v2",
     "simple_reference_v2",
+    "switch_riddle",
 ]
     

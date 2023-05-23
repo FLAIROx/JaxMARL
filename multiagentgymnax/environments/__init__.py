@@ -10,4 +10,5 @@ from .mpe import (
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
 )
+from .switch_riddle import SwitchRiddle
 
