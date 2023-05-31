@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp 
-from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
-from multiagentgymnax.environments.spaces import Discrete, MultiDiscrete
+from smax.environments.multi_agent_env import MultiAgentEnv
+from smax.environments.spaces import Discrete, MultiDiscrete
 import chex
 from flax import struct
 from typing import Tuple, Dict

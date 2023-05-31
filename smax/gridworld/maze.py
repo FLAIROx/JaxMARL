@@ -7,14 +7,14 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import lax
-from multiagentgymnax.gridworld.env import Environment
-from multiagentgymnax.environments import spaces
+from smax.gridworld.env import Environment
+from smax.environments import spaces
 from typing import Tuple, Optional
 import chex
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 
-from multiagentgymnax.gridworld.common import (
+from smax.gridworld.common import (
 	OBJECT_TO_INDEX,
 	COLORS,
 	COLOR_TO_INDEX,

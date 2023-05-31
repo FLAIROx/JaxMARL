@@ -4,8 +4,8 @@ import chex
 from typing import Tuple, Dict
 from flax import struct
 from functools import partial
-from multiagentgymnax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
-from multiagentgymnax.environments.mpe.default_params import *
+from smax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
+from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
 SPEAKER = "speaker_0"

@@ -7,7 +7,7 @@ from flax import struct
 from functools import partial
 #from gymnax.environments import environment, spaces
 from typing import Optional, Tuple, Union
-from multiagentgymnax.environments import multi_agent_env
+from smax.environments import multi_agent_env
 
 class SMAXWrapper(object):
     """ Base class for all SMAX wrappers. """

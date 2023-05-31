@@ -10,8 +10,8 @@ TODO: viz for communication env, e.g. crypto
 import jax
 import jax.numpy as jnp 
 import numpy as onp
-from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
-from multiagentgymnax.environments.mpe.default_params import *
+from smax.environments.multi_agent_env import MultiAgentEnv
+from smax.environments.mpe.default_params import *
 import chex
 from gymnax.environments.spaces import Box
 from flax import struct
@@ -393,7 +393,7 @@ class SimpleMPE(MultiAgentEnv):
     
 
 if __name__=="__main__":
-    from multiagentgymnax.viz.visualizer import Visualizer
+    from smax.viz.visualizer import Visualizer
 
     num_agents = 3
     key = jax.random.PRNGKey(0)

@@ -15,8 +15,8 @@ Below is an example of a simple environment loop, using random actions.
 """
 
 import jax 
-from multiagentgymnax import make
-from multiagentgymnax.viz.visualizer import Visualizer
+from smax import make
+from smax.viz.visualizer import Visualizer
 
 # Parameters + random keys
 max_steps = 100

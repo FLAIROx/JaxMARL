@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 from functools import partial
-from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv
+from smax.environments.multi_agent_env import MultiAgentEnv
 
 class RolloutManager:
 

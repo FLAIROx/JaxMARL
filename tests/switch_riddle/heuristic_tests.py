@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from multiagentgymnax import make
+from smax import make
 
 def get_nothing_actions(env):
     actions = {agent: jnp.array(env.game_actions['NOTHING']) for agent in env.agents}

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from typing import Optional
 
-from multiagentgymnax.environments.multi_agent_env import MultiAgentEnv, EnvParams
+from smax.environments.multi_agent_env import MultiAgentEnv, EnvParams
 
 
 class Visualizer(object):

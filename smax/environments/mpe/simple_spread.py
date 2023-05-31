@@ -3,8 +3,8 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams
-from multiagentgymnax.environments.mpe.default_params import *
+from smax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
 class SimpleSpreadMPE(SimpleMPE):

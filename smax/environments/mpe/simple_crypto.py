@@ -4,8 +4,8 @@ import chex
 from typing import Tuple, Dict
 from flax import struct
 from functools import partial
-from multiagentgymnax.environments.mpe.simple import SimpleMPE, State, EnvParams
-from multiagentgymnax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
+from smax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
 from gymnax.environments.spaces import Box
 
 SPEAKER = "alice_0"

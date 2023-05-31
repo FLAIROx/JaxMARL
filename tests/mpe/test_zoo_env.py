@@ -7,9 +7,9 @@ from pettingzoo.test import parallel_api_test
 from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2, simple_speaker_listener_v3, simple_push_v2, simple_adversary_v2, simple_reference_v2
 #from multiagentgymnax.u
 import tqdm
-from multiagentgymnax import make
+from smax import make
 
-from multiagentgymnax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
+from smax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
@@ -25,7 +25,7 @@ state = State(
 """
 
 def np_state_to_jax(env_zoo, env_jax):
-    from multiagentgymnax.environments.mpe.simple import State
+    from smax.environments.mpe.simple import State
 
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
@@ -58,20 +58,20 @@ def np_state_to_jax(env_zoo, env_jax):
     #print('jax state', state)
     #print('test obs', state["p_pos"][1] - state["p_pos"][0])
     if env_zoo.metadata["name"] == 'simple_crypto_v2':
-        from multiagentgymnax.environments.mpe.simple_crypto import CryptoState
+        from smax.environments.mpe.simple_crypto import CryptoState
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
         return CryptoState(**state)
     if env_zoo.metadata["name"] == 'simple_speaker_listener_v3':
-        from multiagentgymnax.environments.mpe.simple import TargetState
+        from smax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_b.name[-1])
         return TargetState(**state)
     if env_zoo.metadata["name"] == 'simple_push_v2' or env_zoo.metadata["name"] == 'simple_adversary_v2':
-        from multiagentgymnax.environments.mpe.simple import TargetState
+        from smax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_a.name[-1])
         return TargetState(**state)
     if env_zoo.metadata["name"] == 'simple_reference_v2':
-        from multiagentgymnax.environments.mpe.simple import TargetState
+        from smax.environments.mpe.simple import TargetState
         
         state["goal"] = np.flip(np.array([int(env_zoo.aec_env.env.world.agents[i].goal_b.name[-1]) for i in range(2)]))
         #print('goals', state["goal"])

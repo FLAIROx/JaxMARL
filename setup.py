@@ -1,6 +1,6 @@
 from setuptools import setup
 
 setup(
-    name="multiagentgymnax",
+    name="smax",
     version="0.0.1",
 )

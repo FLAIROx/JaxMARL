@@ -1,4 +1,4 @@
-from multiagentgymnax import make
+from smax import make
 from rollout_menager import RolloutManager
 from switch_riddle_nojax import SwitchRiddleNoJax
 import time

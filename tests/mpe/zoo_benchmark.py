@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from multiagentgymnax.environments.mpe.simple_world_comm import SimpleWorldCommMPE
+from smax.environments.mpe.simple_world_comm import SimpleWorldCommMPE
 from ._test_utils.rollout_manager import RolloutManager
 from pettingzoo.mpe import simple_world_comm_v2
 import time
