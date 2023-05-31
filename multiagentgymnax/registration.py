@@ -8,10 +8,11 @@ from .environments import (
     SimplePushMPE,
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
+    
     SwitchRiddle
 )
 
-def make(env_id: str, **env_kwargs):
+def make(env_id: str, env_kwargs):
     """A JAX-version of OpenAI's env.make(env_name), built off Gymnax"""
     if env_id not in registered_envs:
         raise ValueError(f"{env_id} is not in registered SMAX environments.")
@@ -52,6 +53,7 @@ registered_envs = [
     "MPE_simple_push_v2",
     "MPE_simple_adversary_v2",
     "MPE_simple_reference_v2",
+    
     "switch_riddle",
 ]
     
