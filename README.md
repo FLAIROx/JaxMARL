@@ -1,4 +1,4 @@
-# SMAX ..or MultiAgentGymnax
+# Scalable MARL in JAX (SMAX)
 
 Welcome to the work-in-progress Scalable MARL in Jax (SMAX) library. We build heavily off Gymnax and take API inspiration from PettingZoo.
 
