@@ -141,7 +141,7 @@ class SimpleMPE(MultiAgentEnv):
         p_pos, p_vel = self._world_step(key_w, state, u, params)
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, params.c_noise, params.silent)
-        done = jnp.full((self.num_agents), state.step>=params.max_steps)
+        done = jnp.full((self.num_agents), state.step>=params.max_steps-1)
         
         state = state.replace(
             p_pos=p_pos,
