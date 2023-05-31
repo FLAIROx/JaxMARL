@@ -108,9 +108,9 @@ def test_step(zoo_env_name):
     zoo_obs = env_zoo.reset()
 
     env_jax = env_jax()
-    env_jax = make(zoo_env_name)
+    env_jax, env_params = make(zoo_env_name)
     
-    env_params = env_jax.default_params
+    #env_params = env_jax.default_params
     key, key_reset = jax.random.split(key)
     env_jax.reset(key_reset, env_params)
     for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}", leave=True):
@@ -133,26 +133,26 @@ def test_step(zoo_env_name):
     print(f'-- {zoo_env_name} all tests passed --')
 
 mpe_env_mapper = {
-    "simple_v2": (simple_v2, SimpleMPE),
-    "simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommMPE),
-    "simple_tag_v2": (simple_tag_v2, SimpleTagMPE),
-    "simple_spread_v2": (simple_spread_v2, SimpleSpreadMPE),
-    "simple_crypto_v2": (simple_crypto_v2, SimpleCryptoMPE),
-    "simple_speaker_listener_v3": (simple_speaker_listener_v3, SimpleSpeakerListenerMPE),
-    "simple_push_v2": (simple_push_v2, SimplePushMPE),
-    "simple_adversary_v2": (simple_adversary_v2, SimpleAdversaryMPE),
-    "simple_reference_v2": (simple_reference_v2, SimpleReferenceMPE),
+    "MPE_simple_v2": (simple_v2, SimpleMPE),
+    "MPE_simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommMPE),
+    "MPE_simple_tag_v2": (simple_tag_v2, SimpleTagMPE),
+    "MPE_simple_spread_v2": (simple_spread_v2, SimpleSpreadMPE),
+    "MPE_simple_crypto_v2": (simple_crypto_v2, SimpleCryptoMPE),
+    "MPE_simple_speaker_listener_v3": (simple_speaker_listener_v3, SimpleSpeakerListenerMPE),
+    "MPE_simple_push_v2": (simple_push_v2, SimplePushMPE),
+    "MPE_simple_adversary_v2": (simple_adversary_v2, SimpleAdversaryMPE),
+    "MPE_simple_reference_v2": (simple_reference_v2, SimpleReferenceMPE),
 }
 
 if __name__=="__main__":
     
-    test_step("simple_reference_v2")
-    test_step("simple_adversary_v2")
-    test_step("simple_push_v2")
-    test_step("simple_speaker_listener_v3")
-    test_step("simple_crypto_v2")
-    test_step("simple_spread_v2")
-    test_step("simple_v2")
-    test_step("simple_world_comm_v2")
-    test_step("simple_tag_v2")
+    test_step("MPE_simple_reference_v2")
+    test_step("MPE_simple_adversary_v2")
+    test_step("MPE_simple_push_v2")
+    test_step("MPE_simple_speaker_listener_v3")
+    test_step("MPE_simple_crypto_v2")
+    test_step("MPE_simple_spread_v2")
+    test_step("MPE_simple_v2")
+    test_step("MPE_simple_world_comm_v2")
+    test_step("MPE_simple_tag_v2")
     
