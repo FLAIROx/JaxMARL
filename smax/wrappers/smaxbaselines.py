@@ -111,3 +111,7 @@ class LogWrapper(SMAXWrapper):
         info["returned_episode_lengths"] = state.returned_episode_lengths
         info["returned_episode"] = jnp.full((self._env.num_agents,), ep_done)
         return obs, state, reward, done, info
+
+
+        
+        
