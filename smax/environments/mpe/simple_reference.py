@@ -33,7 +33,7 @@ class SimpleReferenceMPE(SimpleMPE):
 
         # Action and observation spaces
         action_spaces = {i: Box(0.0, 1.0, (15,)) for i in agents}
-        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (8,)) for i in agents}
+        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (21,)) for i in agents}
         colour = [AGENT_COLOUR] * num_agents + list(OBS_COLOUR)
         
         super().__init__(num_agents=num_agents, 

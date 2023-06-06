@@ -77,6 +77,7 @@ class SimpleMPE(MultiAgentEnv):
             assert len(agents) == num_agents, f"Number of agents {len(agents)} does not match number of agents {num_agents}"
             self.agents = agents
         self.a_to_i = {a: i for i, a in enumerate(self.agents)}
+        self.classes = self.create_agent_classes()
 
         if landmarks is None:
             self.landmarks = [f"landmark {i}" for i in range(num_landmarks)]
@@ -346,6 +347,21 @@ class SimpleMPE(MultiAgentEnv):
         c = ~params.collide[idx_a] |  ~params.collide[idx_b]
         c_force = jnp.zeros((2, 2)) 
         return jax.lax.select(c, c_force, force)
+    
+    def create_agent_classes(self):
+        if hasattr(self, "leader"):
+            return {"leadadversary": self.leader,
+                    "adversaries": self.adversaries, 
+                    "agents": self.good_agents,}
+        elif hasattr(self, "adversaries"):
+            return {"adversaries": self.adversaries, 
+                    "agents": self.good_agents,}
+        else:
+            return {"agents": self.agents,}
+
+
+    def agent_classes(self):
+        return self.classes
     
     ### === UTILITIES === ###
     def is_collision(self, a:int, b:int, state: State, params: EnvParams):
