@@ -105,3 +105,12 @@ class MultiAgentEnv(object):
     def name(self) -> str:
         """ Environment name."""
         return type(self).__name__
+    
+    @property
+    def agent_classes(self) -> dict:
+        """ Returns a dictionary with agent classes, used in environments with hetrogenous agents. 
+        
+        Format:
+            agent_base_name: [agent_base_name_1, agent_base_name_2, ...]
+        """
+        raise NotImplementedError

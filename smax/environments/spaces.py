@@ -4,8 +4,18 @@ import chex
 import jax
 import jax.numpy as jnp
 
+class Space(object):
+    """
+    Minimal jittable class for abstract SMAX space.
+    """
 
-class Discrete(object):
+    def sample(self, rng: chex.PRNGKey) -> chex.Array:
+        raise NotImplementedError
+
+    def contains(self, x: jnp.int_) -> bool:
+        raise NotImplementedError
+
+class Discrete(Space):
 	"""
 	Minimal jittable class for discrete gymnax spaces.
 	TODO: For now this is a 1d space. Make composable for multi-discrete.
@@ -31,7 +41,7 @@ class Discrete(object):
 		return range_cond
 
 
-class MultiDiscrete(object):
+class MultiDiscrete(Space):
     """
     Minimal jittable class for multi-discrete gymnax spaces.
     """
@@ -58,7 +68,7 @@ class MultiDiscrete(object):
         return jnp.all(range_cond)
 
 
-class Box(object):
+class Box(Space):
 	"""
 	Minimal jittable class for array-shaped gymnax spaces.
 	TODO: Add unboundedness - sampling from other distributions, etc.
@@ -91,7 +101,7 @@ class Box(object):
 		return range_cond
 
 
-class Dict(object):
+class Dict(Space):
 	"""Minimal jittable class for dictionary of simpler jittable spaces."""
 	def __init__(self, spaces: dict):
 		self.spaces = spaces
@@ -118,7 +128,7 @@ class Dict(object):
 		return out_of_space == 0
 
 
-class Tuple(object):
+class Tuple(Space):
 	"""Minimal jittable class for tuple (product) of jittable spaces."""
 	def __init__(self, spaces: Union[tuple, list]):
 		self.spaces = spaces
