@@ -7,11 +7,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from smax.gridworld.maze import Maze, Actions
+from smax.gridworld.ma_maze import MAMaze
 from smax.gridworld.grid_viz import GridVisualizer 
 
 
 def redraw(state, obs, extras):
-	extras['viz'].render(extras['params'], state)
+	extras['viz'].render(extras['params'], state, highlight=False)
 	if extras['obs_viz'] is not None:
 		extras['obs_viz'].render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
 
@@ -26,13 +27,16 @@ def reset(key, env, extras):
 	redraw(state, obs, extras)
 
 def step(env, action, extras):
+	# TODO: Handle actions better (e.g. choose which agent to control)
 	key, subkey = jax.random.split(extras['rng']) 
-	obs, state, reward, done, info = env.step_env(subkey, extras['state'], action)
+	obs, state, reward, done, info = env.step_env(subkey, extras['state'], jnp.array([action, action]))
 	extras['obs'] = obs
 	extras['state'] = state
 	print(f"reward={reward}, agent_dir={obs['agent_dir']}")
 
-	if done or action == Actions.done:
+	print(done)
+
+	if done or (jnp.array([action, action]) == Actions.done).any():
 		key, subkey = jax.random.split(subkey) 
 		reset(subkey, env, extras)
 	else:
@@ -84,7 +88,7 @@ if __name__ == '__main__':
 		"--env",
 		type=str,
 		help="Environment name",
-		default="Maze"
+		default="MAMaze"
 	)
 	parser.add_argument(
 		"--seed",
@@ -124,12 +128,21 @@ if __name__ == '__main__':
 	)
 	args = parser.parse_args()
 
-	env = Maze(
-		height=13,
-		width=13,
-		n_walls=25,
-		see_agent=True,
-	)
+	if args.env == "Maze":
+		env = Maze(
+			height=13,
+			width=13,
+			n_walls=25,
+			see_agent=True,
+		)
+	else:
+		env = MAMaze(
+			height=13,
+			width=13,
+			n_walls=25,
+			see_agent=True,
+			n_agents=2
+		)
 	params = env.params
 
 	viz = GridVisualizer()
@@ -137,13 +150,13 @@ if __name__ == '__main__':
 	if args.render_agent_view:
 		obs_viz = GridVisualizer()
 
-	with jax.disable_jit(False):
+	with jax.disable_jit(True):
 		jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
 		# jit_reset = env.reset_env
 		key = jax.random.PRNGKey(args.seed)
 		key, subkey = jax.random.split(key)
 		o0, s0 = jit_reset(subkey)
-		viz.render(params, s0)
+		viz.render(params, s0, highlight=False)
 		if obs_viz is not None:
 			obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
 

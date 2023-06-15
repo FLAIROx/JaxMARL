@@ -4,6 +4,7 @@ import numpy as np
 import jax.numpy as jnp
 from flax import struct
 import chex
+import jax
 
 
 OBJECT_TO_INDEX = {
@@ -63,10 +64,14 @@ def make_maze_map(
 	wall = jnp.array([OBJECT_TO_INDEX['wall'], COLOR_TO_INDEX['grey'], 0], dtype=jnp.uint8)
 	maze_map = jnp.array(jnp.expand_dims(wall_map, -1), dtype=jnp.uint8)
 	maze_map = jnp.where(maze_map > 0, wall, empty)
-	
-	agent = jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red'], agent_dir_idx], dtype=jnp.uint8)
-	agent_x,agent_y = agent_pos
-	maze_map = maze_map.at[agent_y,agent_x,:].set(agent)
+
+	def _get_agent_updates(agent_dir_idx, agent_pos, agent_idx):
+		agent = jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red']+agent_idx*2, agent_dir_idx], dtype=jnp.uint8)
+		agent_x, agent_y = agent_pos
+		return agent_x, agent_y, agent
+
+	agent_x_vec, agent_y_vec, agent_vec = jax.vmap(_get_agent_updates, in_axes=(0,0,0))(agent_dir_idx, agent_pos, jnp.arange(params.n_agents))
+	maze_map = maze_map.at[agent_y_vec,agent_x_vec,:].set(agent_vec)
 
 	if len(goal_pos.shape) == 1:
 		goal = jnp.array([OBJECT_TO_INDEX['goal'], COLOR_TO_INDEX['green'], 0], dtype=jnp.uint8)
