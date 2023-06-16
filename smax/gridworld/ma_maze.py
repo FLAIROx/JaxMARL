@@ -219,7 +219,7 @@ class MAMaze(Environment):
         obs_fwd_bound2 = agent_pos + agent_dir * (self.obs_shape[0] - 1)
 
         side_offset = self.obs_shape[0] // 2
-        obs_side_bound1 =  agent_pos + (agent_dir == 0) * side_offset
+        obs_side_bound1 = agent_pos + (agent_dir == 0) * side_offset
         obs_side_bound2 = agent_pos - (agent_dir == 0) * side_offset
 
         all_bounds = jnp.stack([obs_fwd_bound1, obs_fwd_bound2, obs_side_bound1, obs_side_bound2])
@@ -261,16 +261,11 @@ class MAMaze(Environment):
     def step_agents(self, key: chex.PRNGKey, state: EnvState, action: chex.Array) -> Tuple[EnvState, float]:
         params = self.params
 
-        # TODO: Update both agents
         # Update agent position (forward action)
         fwd_pos = jnp.minimum(
             jnp.maximum(state.agent_pos + (action == Actions.forward) * state.agent_dir, 0),
             jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32))
 
-        print("old pos:\n", state.agent_pos)
-        print("fwd pos:\n", fwd_pos)
-
-        # TODO: handle agent collisions
         # Can't go past wall or goal
         def _wall_or_goal(fwd_position, wall_map, goal_pos):
             fwd_wall = wall_map.at[fwd_position[1], fwd_position[0]].get()
@@ -281,15 +276,61 @@ class MAMaze(Environment):
 
         fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((params.n_agents, 1))
 
-        print("wall in front:", fwd_pos_has_wall)
-        print("goal in front:", fwd_pos_has_goal)
-        print("blocked front:", fwd_pos_blocked)
-        print("tilde blocked:", ~fwd_pos_blocked)
-
+        # Agents can't overlap
+        # Hardcoded for 2 agents
         agent_pos_prev = jnp.array(state.agent_pos)
-        agent_pos = (fwd_pos_blocked * state.agent_pos + (~fwd_pos_blocked) * fwd_pos).astype(jnp.uint32)
+        fwd_pos = (fwd_pos_blocked * state.agent_pos + (~fwd_pos_blocked) * fwd_pos).astype(jnp.uint32)
+        collision = jnp.all(fwd_pos[0] == fwd_pos[1])
 
-        print("new pos:\n", agent_pos)
+        # Cases (bounced == hit wall/goal and stayed in place)
+        neither_bounced = (~fwd_pos_blocked).all()
+        only_alice_bounced = jnp.logical_and(fwd_pos_blocked[0], ~fwd_pos_blocked[1])
+        only_bob_bounced = jnp.logical_and(~fwd_pos_blocked[0], fwd_pos_blocked[1])
+
+        alice_pos = jnp.where(
+            collision * only_bob_bounced,
+            state.agent_pos[0],                     # collision and Bob bounced
+            fwd_pos[0],
+        )
+        bob_pos = jnp.where(
+            collision * only_alice_bounced,
+            state.agent_pos[1],                     # collision and Alice bounced
+            fwd_pos[1],
+        )
+
+        key, rng_coll = jax.random.split(key)
+        alice_wins = jax.random.choice(rng_coll, 2)
+
+        alice_pos = jnp.where(
+            collision * neither_bounced * (1-alice_wins),
+            state.agent_pos[0],
+            alice_pos
+        )
+        bob_pos = jnp.where(
+            collision * neither_bounced * alice_wins,
+            state.agent_pos[1],
+            bob_pos
+        )
+
+        # Prevent swapping places (i.e. passing through each other)
+        swap_places = jnp.logical_and(
+            jnp.all(fwd_pos[0] == state.agent_pos[1]),
+            jnp.all(fwd_pos[1] == state.agent_pos[0]),
+        )
+        alice_pos = jnp.where(
+            ~collision * swap_places,
+            state.agent_pos[0],
+            alice_pos
+        )
+        bob_pos = jnp.where(
+            ~collision * swap_places,
+            state.agent_pos[1],
+            bob_pos
+        )
+
+        fwd_pos = fwd_pos.at[0].set(alice_pos)
+        fwd_pos = fwd_pos.at[1].set(bob_pos)
+        agent_pos = fwd_pos.astype(jnp.uint32)
 
         # Update agent direction (left_turn or right_turn action)
         agent_dir_offset = \

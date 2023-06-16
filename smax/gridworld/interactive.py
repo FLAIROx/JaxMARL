@@ -13,8 +13,13 @@ from smax.gridworld.grid_viz import GridVisualizer
 
 def redraw(state, obs, extras):
 	extras['viz'].render(extras['params'], state, highlight=False)
+
 	if extras['obs_viz'] is not None:
-		extras['obs_viz'].render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
+		if extras['env'] == "MAMaze" or "Overcooked":
+			obs_viz.render_grid(np.asarray(obs['image'][0]), k_rot90=3, agent_dir_idx=[3])
+			obs_viz2.render_grid(np.asarray(obs['image'][1]), k_rot90=3, agent_dir_idx=[3])
+		else:
+			obs_viz.render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
 
 def reset(key, env, extras):
 	key, subkey = jax.random.split(extras['rng'])
@@ -33,8 +38,6 @@ def step(env, action, extras):
 	extras['obs'] = obs
 	extras['state'] = state
 	print(f"reward={reward}, agent_dir={obs['agent_dir']}")
-
-	print(done)
 
 	if done or (jnp.array([action, action]) == Actions.done).any():
 		key, subkey = jax.random.split(subkey) 
@@ -147,8 +150,11 @@ if __name__ == '__main__':
 
 	viz = GridVisualizer()
 	obs_viz = None
+	obs_viz2 = None
 	if args.render_agent_view:
 		obs_viz = GridVisualizer()
+		if args.env == "MAMaze" or "Overcooked":
+			obs_viz2 = GridVisualizer()
 
 	with jax.disable_jit(True):
 		jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
@@ -158,7 +164,11 @@ if __name__ == '__main__':
 		o0, s0 = jit_reset(subkey)
 		viz.render(params, s0, highlight=False)
 		if obs_viz is not None:
-			obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
+			if args.env == "MAMaze" or "Overcooked":
+				obs_viz.render_grid(np.asarray(o0['image'][0]), k_rot90=3, agent_dir_idx=[3])
+				obs_viz2.render_grid(np.asarray(o0['image'][1]), k_rot90=3, agent_dir_idx=[3])
+			else:
+				obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
 
 		key, subkey = jax.random.split(key)
 		extras = {
@@ -168,7 +178,9 @@ if __name__ == '__main__':
 			'params':params,
 			'viz': viz,
 			'obs_viz': obs_viz,
+			'obs_viz2': obs_viz2,
 			'jit_reset': jit_reset,
+			'env': args.env
 		}
 
 		viz.window.reg_key_handler(partial(key_handler, env, extras))

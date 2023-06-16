@@ -139,8 +139,11 @@ class GridVisualizer:
 			obj[0] == OBJECT_TO_INDEX['agent'] and \
 			agent_dir_idx is not None:
 			obj = np.array(obj)
-			# TODO: Fix orientation for multiagent
-			# obj[-1] = agent_dir_idx[0]
+
+			# TODO: Fix this for multiagents. Currently the orientation of other agents is wrong
+			if len(agent_dir_idx) == 1:
+				# Hacky way of making agent views orientations consistent with global view
+				obj[-1] = agent_dir_idx[0]
 
 		no_object = obj is None or (
 			obj[0] in [OBJECT_TO_INDEX['empty'], OBJECT_TO_INDEX['unseen']] \
