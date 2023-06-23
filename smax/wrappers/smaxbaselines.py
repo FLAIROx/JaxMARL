@@ -7,12 +7,12 @@ from flax import struct
 from functools import partial
 #from gymnax.environments import environment, spaces
 from typing import Optional, Tuple, Union
-from smax.environments import multi_agent_env
+from smax.environments.multi_agent_env import MultiAgentEnv, State, EnvParams
 
 class SMAXWrapper(object):
     """ Base class for all SMAX wrappers. """
     
-    def __init__(self, env: multi_agent_env.MultiAgentEnv):
+    def __init__(self, env: MultiAgentEnv):
         self._env = env 
         
     def __getattr__(self, name: str):
@@ -26,19 +26,19 @@ class SMAXWrapper(object):
         return jnp.stack([x[a] for a in self._env.agents])
     
 
-class HomogenousBatch(SMAXWrapper):
+class ArrayOutputs(SMAXWrapper):
     """ Convert outputs from dicts to arrays, indexed by agent.
-    Only works for domains with homogenous agents.
-    NOTE not complete
+    Only works for domains with where agent observations & actions are all the same size.
+    NOTE: old name - HomogenousBatch
     """
-    def __init__(self, env):
+    def __init__(self, env: MultiAgentEnv):
         super().__init__(env)
         self.num_agents = self._env.num_agents
     
     @partial(jax.jit, static_argnums=(0,))
     def reset(
-        self, key: chex.PRNGKey, params: Optional[multi_agent_env.EnvParams] = None
-    ) -> Tuple[chex.Array, multi_agent_env.State]:
+        self, key: chex.PRNGKey, params: Optional[EnvParams] = None
+    ) -> Tuple[chex.Array, State]:
         obs, state = self._env.reset(key, params)
         obs = jnp.stack([obs[a] for a in self._env.agent_list])
         obs = jnp.reshape(obs, (self._env.num_agents, -1))
@@ -56,12 +56,22 @@ class HomogenousBatch(SMAXWrapper):
             params = self._env.default_params
         actions = {a: actions[i] for i, a in enumerate(self._env.agents)}
         obs, state, reward, done, info = self._env.step(key, state, actions, params)
+        obs = jnp.stack([obs[a] for a in self._env.agent_list])
         obs = jnp.reshape(obs, (self._env.num_agents, -1))
+        reward = jnp.stack([reward[a] for a in self._env.agent_list])
+        reward = jnp.reshape(reward, (self._env.num_agents, -1))
+        done = jnp.stack([done[a] for a in self._env.agent_list])
+        done = jnp.reshape(done, (self._env.num_agents, -1))
+        return obs, state, reward, done, info
+    
+    def observation_space(self, agent: int):
+        agent_name = self._env.agents[agent]
+        return self._env.observation_space(agent_name)
         
 
 @struct.dataclass
 class LogEnvState:
-    env_state: multi_agent_env.State
+    env_state: State
     episode_returns: float
     episode_lengths: int
     returned_episode_returns: float
@@ -73,13 +83,13 @@ class LogWrapper(SMAXWrapper):
     NOTE for now for envs where agents terminate at the same time.
     """
 
-    def __init__(self, env: multi_agent_env.MultiAgentEnv):
+    def __init__(self, env: MultiAgentEnv):
         super().__init__(env)
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
-        self, key: chex.PRNGKey, params: Optional[multi_agent_env.EnvParams] = None
-    ) -> Tuple[chex.Array, multi_agent_env.State]:
+        self, key: chex.PRNGKey, params: Optional[EnvParams] = None
+    ) -> Tuple[chex.Array, State]:
         obs, env_state = self._env.reset(key, params)
         state = LogEnvState(env_state, 
                             jnp.zeros((self._env.num_agents,)),
@@ -94,7 +104,7 @@ class LogWrapper(SMAXWrapper):
         key: chex.PRNGKey,
         state: LogEnvState,
         action: Union[int, float],
-        params: Optional[multi_agent_env.EnvParams] = None,
+        params: Optional[EnvParams] = None,
     ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params
