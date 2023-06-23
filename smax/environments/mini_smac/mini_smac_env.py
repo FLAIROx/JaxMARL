@@ -88,7 +88,8 @@ class MiniSMAC(MultiAgentEnv):
         self.observation_spaces = {
             i: Box(low=0.0, high=1.0, shape=(self.obs_size,)) for i in self.agents
         }
-        self.action_spaces = {i: Discrete(num_categories=5) for i in self.agents}
+        self.num_actions = self.num_agents_per_team + self.num_movement_actions
+        self.action_spaces = {i: Discrete(num_categories=self.num_actions) for i in self.agents}
 
     @property
     def default_params(self):
