@@ -26,7 +26,7 @@ class SMAXWrapper(object):
         return jnp.stack([x[a] for a in self._env.agents])
     
 
-class ArrayOutputs(SMAXWrapper):
+class ArrayInterface(SMAXWrapper):
     """ Convert outputs from dicts to arrays, indexed by agent.
     Only works for domains with where agent observations & actions are all the same size.
     NOTE: old name - HomogenousBatch
