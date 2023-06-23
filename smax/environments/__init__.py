@@ -1,4 +1,4 @@
-from .multi_agent_env import EnvParams, State
+from .multi_agent_env import MultiAgentEnv, EnvParams, State
 from .mpe import (
     SimpleMPE,
     SimpleTagMPE,

@@ -35,6 +35,7 @@ class HomogenousBatch(SMAXWrapper):
         super().__init__(env)
         self.num_agents = self._env.num_agents
     
+    @partial(jax.jit, static_argnums=(0,))
     def reset(
         self, key: chex.PRNGKey, params: Optional[multi_agent_env.EnvParams] = None
     ) -> Tuple[chex.Array, multi_agent_env.State]:
@@ -43,13 +44,16 @@ class HomogenousBatch(SMAXWrapper):
         obs = jnp.reshape(obs, (self._env.num_agents, -1))
         return obs, state
         
+    @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
         key,
         state,
         actions,
-        params
+        params=None,
     ):
+        if params is None:
+            params = self._env.default_params
         actions = {a: actions[i] for i, a in enumerate(self._env.agents)}
         obs, state, reward, done, info = self._env.step(key, state, actions, params)
         obs = jnp.reshape(obs, (self._env.num_agents, -1))
