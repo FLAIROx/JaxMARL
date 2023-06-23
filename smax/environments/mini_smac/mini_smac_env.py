@@ -54,19 +54,6 @@ class MiniSMAC(MultiAgentEnv):
         self.num_agents_per_team = num_agents_per_team
         self.num_agents = num_agents_per_team * 2
         self.num_movement_actions = 4
-        self.params = EnvParams(
-            num_agents_per_team=num_agents_per_team,
-            map_width=map_width,
-            map_height=map_height,
-            world_steps_per_env_step=world_steps_per_env_step,
-            unit_velocity=unit_velocity,
-            unit_type_attacks=unit_type_attacks,
-            time_per_step=time_per_step,
-            won_battle_bonus=won_battle_bonus,
-            unit_type_attack_ranges=unit_type_attack_ranges,
-            unit_type_sight_ranges=unit_type_sight_ranges,
-            max_steps=max_steps,
-        )
         self.world_steps_per_env_step = world_steps_per_env_step
         self.agents = [f"ally_{i}" for i in range(self.num_agents_per_team)] + [
             f"enemy_{i}" for i in range(self.num_agents_per_team)
