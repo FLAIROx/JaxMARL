@@ -67,6 +67,10 @@ class ArrayOutputs(SMAXWrapper):
     def observation_space(self, agent: int):
         agent_name = self._env.agents[agent]
         return self._env.observation_space(agent_name)
+    
+    def action_space(self, agent: int):
+        agent_name = self._env.agents[agent]
+        return self._env.action_space(agent_name)
         
 
 @struct.dataclass
