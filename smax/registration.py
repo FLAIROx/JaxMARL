@@ -8,7 +8,7 @@ from .environments import (
     SimplePushMPE,
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
-    
+    MiniSMAC,
     SwitchRiddle
 )
 
@@ -40,7 +40,11 @@ def make(env_id: str, **env_kwargs):
     # 2. Switch Riddle
     elif env_id == "switch_riddle":
         env = SwitchRiddle(**env_kwargs)
-    
+
+    # 3. MiniSMAC
+    elif env_id == "MiniSMAC":
+        env = MiniSMAC(**env_kwargs)
+
     return env, env.default_params
     
 registered_envs = [
@@ -55,5 +59,7 @@ registered_envs = [
     "MPE_simple_reference_v2",
     
     "switch_riddle",
+
+    "MiniSMAC"
 ]
     
