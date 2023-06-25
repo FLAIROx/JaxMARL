@@ -39,17 +39,8 @@ class EnvParams:
 class MiniSMAC(MultiAgentEnv):
     def __init__(
         self,
-        num_agents_per_team: int = 5,
-        map_width: float = 32,
-        map_height: float = 32,
-        world_steps_per_env_step: int = 8,
-        unit_velocity: float = 1.0,
-        time_per_step: float = 1.0 / 16,
-        unit_type_attacks: chex.Array = jnp.array([0.02]),
-        unit_type_attack_ranges: chex.Array = jnp.array([3.0]),
-        unit_type_sight_ranges: chex.Array = jnp.array([5.0]),
-        won_battle_bonus: float = 5,
-        max_steps: int = 100,
+        num_agents_per_team=5,
+        world_steps_per_env_step=8,
     ) -> None:
         self.num_agents_per_team = num_agents_per_team
         self.num_agents = num_agents_per_team * 2
