@@ -3,7 +3,7 @@ import jax
 from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.spaces import Box, Discrete
 import chex
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional
 from flax.struct import dataclass
 from enum import IntEnum
 from functools import partial
@@ -76,7 +76,9 @@ class MiniSMAC(MultiAgentEnv):
             i: Box(low=0.0, high=1.0, shape=(self.obs_size,)) for i in self.agents
         }
         self.num_actions = self.num_agents_per_team + self.num_movement_actions
-        self.action_spaces = {i: Discrete(num_categories=self.num_actions) for i in self.agents}
+        self.action_spaces = {
+            i: Discrete(num_categories=self.num_actions) for i in self.agents
+        }
 
     @property
     def default_params(self):
@@ -335,3 +337,90 @@ class MiniSMAC(MultiAgentEnv):
         own_unit_obs = get_all_self_features(jnp.arange(self.num_agents))
         obs = jnp.concatenate([other_unit_obs, own_unit_obs], axis=-1)
         return {agent: obs[self.agent_ids[agent]] for agent in self.agents}
+
+    def init_render(
+        self,
+        ax,
+        state: Tuple[State, Dict],
+        step: int,
+        params: Optional[EnvParams] = None,
+    ):
+        from matplotlib.patches import Circle, Rectangle
+        import numpy as np
+
+        state, actions = state
+        if params is None:
+            params = self.default_params
+
+        # work out which agents are being shot
+        def agent_being_shot(shooter_idx, action):
+            attacked_idx = jax.lax.cond(
+                shooter_idx < self.num_agents_per_team,
+                lambda: action + self.num_agents_per_team - self.num_movement_actions,
+                lambda: action - self.num_movement_actions,
+            )
+            return attacked_idx
+
+        def agent_can_shoot(shooter_idx, action):
+            attacked_idx = agent_being_shot(shooter_idx, action)
+            dist = jnp.linalg.norm(
+                state.unit_positions[shooter_idx] - state.unit_positions[attacked_idx]
+            )
+            return (
+                state.unit_alive[shooter_idx] & state.unit_alive[attacked_idx] & (dist
+                < params.unit_type_attack_ranges[state.unit_types[shooter_idx]])
+            )
+
+        attacked_agents = set(
+            [
+                int(agent_being_shot(i, actions[agent]))
+                for i, agent in enumerate(self.agents)
+                if actions[agent] > self.num_movement_actions - 1 and agent_can_shoot(i, actions[agent])
+            ]
+        )
+        # render circles
+        ax.clear()
+        ax.set_xlim([0.0, params.map_width])
+        ax.set_ylim([0.0, params.map_height])
+        for i in range(self.num_agents_per_team):
+            if state.unit_alive[i]:
+                color = "blue" if i not in attacked_agents else "red"
+                c = Circle(state.unit_positions[i], 0.5, color=color)
+                ax.add_patch(c)
+            if state.unit_alive[i + self.num_agents_per_team]:
+                color = "green" if i not in attacked_agents else "red"
+                c = Circle(
+                    state.unit_positions[i + params.num_agents_per_team],
+                    0.5,
+                    color=color,
+                )
+                ax.add_patch(c)
+
+        # render bullets
+        for agent in self.agents:
+            i = self.agent_ids[agent]
+            attacked_idx = agent_being_shot(i, actions[agent])
+            if (
+                actions[agent] < self.num_movement_actions
+                or not agent_can_shoot(i, actions[agent])
+            ):
+                continue
+            frac = step / self.world_steps_per_env_step
+            bullet_pos = (1 - frac) * state.unit_positions[
+                i
+            ] + frac * state.unit_positions[attacked_idx]
+            r = Rectangle(bullet_pos, 0.5, 0.5, color="gray")
+            ax.add_patch(r)
+
+        canvas = ax.figure.canvas
+        canvas.draw()
+
+        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
+        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
+        im = ax.imshow(rgb_array)
+
+        return im
+
+    def update_render(self, im, state: State, step, params: Optional[EnvParams] = None):
+        ax = im.axes
+        return self.init_render(ax, state, step, params)
