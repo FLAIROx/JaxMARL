@@ -138,12 +138,15 @@ class MiniSMAC(MultiAgentEnv):
         }
         rewards = self.compute_reward(state, params, health_before, health_after)
         dones["__all__"] = state.terminal
+        world_state = self.get_world_state(state, params)
+        infos = {}
+        infos["world_state"] = jax.lax.stop_gradient(world_state)
         return (
             jax.lax.stop_gradient(obs),
             jax.lax.stop_gradient(state),
             rewards,
             dones,
-            {},
+            infos,
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -290,7 +293,24 @@ class MiniSMAC(MultiAgentEnv):
         )
         return state
 
+    def get_world_state(self, state: State, params: EnvParams) -> chex.Array:
+        # get the features of every unit, as well as the teams that they belong to.
+        def get_features(i):
+            empty_features = jnp.zeros(shape=(len(self.own_features),))
+            features = empty_features.at[0].set(state.unit_health[i])
+            features = features.at[1:3].set(state.unit_positions[i])
+            return jax.lax.cond(
+                state.unit_alive[i], lambda: features, lambda: empty_features
+            )
+        get_all_features = jax.vmap(get_features)
+        unit_obs = get_all_features(jnp.arange(self.num_agents)).reshape[-1]
+        unit_teams = state.unit_teams
+        unit_types = state.unit_types
+        return jnp.concatenate([unit_obs, unit_teams, unit_types], axis=-1)
+
+
     def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
+        # TODO fix this so that it orders allies and enemies correctly
         """Applies observation function to state."""
 
         def get_features(i, j):
