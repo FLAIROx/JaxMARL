@@ -63,6 +63,7 @@ class MiniSMAC(MultiAgentEnv):
             + len(self.unit_features) * self.num_agents_per_team
             + len(self.own_features)
         )
+        self.state_size = (len(self.unit_features) + 2) * self.num_agents
         self.observation_spaces = {
             i: Box(low=0.0, high=1.0, shape=(self.obs_size,)) for i in self.agents
         }
@@ -302,38 +303,57 @@ class MiniSMAC(MultiAgentEnv):
             return jax.lax.cond(
                 state.unit_alive[i], lambda: features, lambda: empty_features
             )
+
         get_all_features = jax.vmap(get_features)
-        unit_obs = get_all_features(jnp.arange(self.num_agents)).reshape[-1]
+        unit_obs = get_all_features(jnp.arange(self.num_agents)).reshape(-1)
         unit_teams = state.unit_teams
         unit_types = state.unit_types
         return jnp.concatenate([unit_obs, unit_teams, unit_types], axis=-1)
 
-
     def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
-        # TODO fix this so that it orders allies and enemies correctly
         """Applies observation function to state."""
 
         def get_features(i, j):
             """Get features of unit j as seen from unit i"""
-            # much easier if features are symmetrical. Then can VMAP.
             # Can just keep them symmetrical for now.
             # j here means 'the jth unit that is not i'
-            j_idx = jax.lax.cond(j < i, lambda: j, lambda: j + 1)
+            # The observation is such that allies are always first
+            # so for units in the second team we count in reverse.
+            j = jax.lax.cond(
+                i < params.num_agents_per_team,
+                lambda: j,
+                lambda: self.num_agents - j - 1,
+            )
+            offset = jax.lax.cond(i < params.num_agents_per_team, lambda: 1, lambda: -1)
+            j_idx = jax.lax.cond(
+                ((j < i) & (i < params.num_agents_per_team))
+                | ((j > i) & (i >= params.num_agents_per_team)),
+                lambda: j,
+                lambda: j + offset,
+            )
             empty_features = jnp.zeros(shape=(len(self.unit_features),))
             features = empty_features.at[0].set(state.unit_health[j_idx])
-            features = features.at[1:3].set(state.unit_positions[j_idx])
+            features = features.at[1:3].set(
+                (state.unit_positions[j_idx] - state.unit_positions[i])
+                / params.unit_type_sight_ranges[state.unit_types[i]]
+            )
             visible = (
                 jnp.linalg.norm(state.unit_positions[j_idx] - state.unit_positions[i])
                 < params.unit_type_sight_ranges[state.unit_types[i]]
             )
             return jax.lax.cond(
-                visible & state.unit_alive[i], lambda: features, lambda: empty_features
+                visible & state.unit_alive[i] & state.unit_alive[j_idx],
+                lambda: features,
+                lambda: empty_features,
             )
 
         def get_self_features(i):
             empty_features = jnp.zeros(shape=(len(self.own_features),))
             features = empty_features.at[0].set(state.unit_health[i])
-            features = features.at[1:3].set(state.unit_positions[i])
+            features = features.at[1:3].set(
+                state.unit_positions[i]
+                / jnp.array([params.map_width, params.map_height])
+            )
             return jax.lax.cond(
                 state.unit_alive[i], lambda: features, lambda: empty_features
             )
@@ -378,15 +398,17 @@ class MiniSMAC(MultiAgentEnv):
                 state.unit_positions[shooter_idx] - state.unit_positions[attacked_idx]
             )
             return (
-                state.unit_alive[shooter_idx] & state.unit_alive[attacked_idx] & (dist
-                < params.unit_type_attack_ranges[state.unit_types[shooter_idx]])
+                state.unit_alive[shooter_idx]
+                & state.unit_alive[attacked_idx]
+                & (dist < params.unit_type_attack_ranges[state.unit_types[shooter_idx]])
             )
 
         attacked_agents = set(
             [
                 int(agent_being_shot(i, actions[agent]))
                 for i, agent in enumerate(self.agents)
-                if actions[agent] > self.num_movement_actions - 1 and agent_can_shoot(i, actions[agent])
+                if actions[agent] > self.num_movement_actions - 1
+                and agent_can_shoot(i, actions[agent])
             ]
         )
         # render circles
@@ -411,9 +433,8 @@ class MiniSMAC(MultiAgentEnv):
         for agent in self.agents:
             i = self.agent_ids[agent]
             attacked_idx = agent_being_shot(i, actions[agent])
-            if (
-                actions[agent] < self.num_movement_actions
-                or not agent_can_shoot(i, actions[agent])
+            if actions[agent] < self.num_movement_actions or not agent_can_shoot(
+                i, actions[agent]
             ):
                 continue
             frac = step / self.world_steps_per_env_step

@@ -223,9 +223,21 @@ def test_obs_function(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
         env, params, obs, state = create_env(key_reset)
-        assert jnp.allclose(obs["ally_0"][0:3], jnp.array([1.0, 8.0, 16.0]))
-        assert jnp.allclose(obs["ally_0"][12:15], jnp.zeros((3,)))
-
+        first_enemy_idx = (env.num_agents_per_team - 1) * len(env.unit_features)
+        assert jnp.allclose(
+            obs["ally_0"][0 : len(env.unit_features)], jnp.array([1.0, 0.0, 0.0])
+        )
+        assert jnp.allclose(
+            obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
+            jnp.zeros((3,)),
+        )
+        assert jnp.allclose(
+            obs["enemy_0"][0 : len(env.unit_features)], jnp.array([1.0, 0.0, 0.0])
+        )
+        assert jnp.allclose(
+            obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
+            jnp.zeros((3,)),
+        )
         # test a dead agent sees nothing
         unit_alive = state.unit_alive.at[0].set(0)
         unit_health = state.unit_health.at[0].set(0)
@@ -234,6 +246,9 @@ def test_obs_function(do_jit):
         unit_positions = unit_positions.at[env.num_agents_per_team].set(
             jnp.array([1.0, 2.0])
         )
+        unit_positions = unit_positions.at[env.num_agents_per_team + 1].set(
+            jnp.array([1.5, 3.0])
+        )
         state = state.replace(
             unit_alive=unit_alive,
             unit_health=unit_health,
@@ -241,9 +256,65 @@ def test_obs_function(do_jit):
         )
         key, key_actions = jax.random.split(key)
         actions = get_random_actions(key_actions, env)
+        actions["enemy_0"] = 0
+        actions["enemy_1"] = 0
 
         key, key_step = jax.random.split(key)
 
         obs, state, _, _, _ = env.step(key_step, state, actions, params)
         assert jnp.allclose(obs["ally_0"], jnp.zeros((env.obs_size,)))
-        assert jnp.allclose(obs["enemy_0"][0:3], jnp.array([0.0, 1.0, 1.0]))
+        assert jnp.allclose(
+            obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
+            jnp.zeros((3,)),
+        )
+        last_ally_idx = first_enemy_idx - len(env.unit_features)
+        assert jnp.allclose(
+            obs["enemy_0"][last_ally_idx : last_ally_idx + len(env.unit_features)],
+            jnp.array([1.0, 0.125, 0.25]),
+        )
+
+
+@pytest.mark.parametrize("do_jit", [True, False])
+def test_world_state(do_jit):
+    with jax.disable_jit(do_jit):
+        key = jax.random.PRNGKey(0)
+        key, key_reset = jax.random.split(key)
+        env, params, _, state = create_env(key_reset)
+
+        unit_1_idx = 0
+        unit_2_idx = env.num_agents_per_team
+
+        unit_alive = jnp.zeros((env.num_agents,), dtype=jnp.bool_)
+        unit_alive = unit_alive.at[unit_1_idx].set(1)
+        unit_alive = unit_alive.at[unit_2_idx].set(1)
+
+        unit_health = jnp.zeros((env.num_agents,))
+        unit_health = unit_health.at[unit_1_idx].set(0.5)
+        unit_health = unit_health.at[unit_2_idx].set(0.5)
+
+        state = state.replace(unit_alive=unit_alive, unit_health=unit_health)
+
+        unit_1_action = 0
+        unit_2_action = 2
+
+        key, key_actions = jax.random.split(key)
+        actions = get_random_actions(key_actions, env)
+        actions[f"ally_{unit_1_idx}"] = unit_1_action
+        actions[f"enemy_{unit_2_idx - env.num_agents_per_team}"] = unit_2_action
+
+        key, key_step = jax.random.split(key)
+        _, state, _, _, infos = env.step(key_step, state, actions, params)
+
+        world_state = jnp.zeros((env.state_size,))
+        world_state = world_state.at[0 : len(env.unit_features)].set(
+            jnp.array([0.5, 8.0, 16.5])
+        )
+        idx = env.num_agents_per_team * len(env.unit_features)
+        end_idx = idx + len(env.unit_features)
+        world_state = world_state.at[idx:end_idx].set(jnp.array([0.5, 24.0, 15.5]))
+        idx = env.num_agents * len(env.unit_features) + env.num_agents_per_team
+        end_idx = idx + env.num_agents_per_team
+        world_state = world_state.at[idx:end_idx].set(
+            jnp.ones((env.num_agents_per_team,))
+        )
+        assert jnp.allclose(infos["world_state"], world_state)
