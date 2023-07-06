@@ -65,6 +65,8 @@ class EnvParams:
     max_episode_steps: int = 250
     singleton_seed: int = -1
     n_agents: int = 2
+    fixed_layout: bool = False
+    layout: FrozenDict = FrozenDict({})
 
 
 class Overcooked(Environment):
@@ -80,7 +82,9 @@ class Overcooked(Environment):
             max_episode_steps=250,
             normalize_obs=False,
             singleton_seed=-1,
-            n_agents=2
+            n_agents=2,
+            fixed_layout = False,
+            layout = {}
     ):
         super().__init__()
 
@@ -107,7 +111,9 @@ class Overcooked(Environment):
             max_episode_steps=max_episode_steps,
             normalize_obs=normalize_obs,
             singleton_seed=-1,
-            n_agents=n_agents
+            n_agents=n_agents,
+            fixed_layout=fixed_layout,
+            layout=layout
         )
 
     @property
@@ -151,8 +157,13 @@ class Overcooked(Environment):
         - wall positions
         """
         params = self.params
+        fixed_layout = params.fixed_layout
+        layout = params.layout
+
         h = params.height
         w = params.width
+        assert (1 - fixed_layout) or (h == layout.get("height", -1))
+        assert (1 - fixed_layout) or (w == layout.get("width", -1))
         n_agents = params.n_agents
         all_pos = np.arange(np.prod([h, w]), dtype=jnp.uint32)
 
@@ -163,6 +174,9 @@ class Overcooked(Environment):
             shape=(params.n_walls,),
             replace=params.replace_wall_pos)
 
+        # Replace wall_idx with fixed layout if applicable
+        wall_idx = (1-fixed_layout)*wall_idx + fixed_layout*layout.get("wall_idx", wall_idx)
+
         occupied_mask = jnp.zeros_like(all_pos)
         occupied_mask = occupied_mask.at[wall_idx].set(1)
         wall_map = occupied_mask.reshape(h, w).astype(jnp.bool_)
@@ -171,8 +185,10 @@ class Overcooked(Environment):
         key, subkey = jax.random.split(key)
         agent_idx = jax.random.choice(subkey, all_pos, shape=(n_agents,),
                                       p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        # Replace with fixed layout if applicable
+        agent_idx = (1-fixed_layout)*agent_idx + fixed_layout*layout.get("agent_idx", agent_idx)
         occupied_mask = occupied_mask.at[agent_idx].set(1)
-        agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32)#.transpose() # dim = n_agents x 2
+        agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32).transpose() # dim = n_agents x 2
 
         key, subkey = jax.random.split(key)
         agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8), shape=(n_agents,))
@@ -182,6 +198,8 @@ class Overcooked(Environment):
         key, subkey = jax.random.split(key)
         goal_idx = jax.random.choice(subkey, all_pos, shape=(1,),
                                      p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32))
+        # Replace wall_idx with fixed layout if applicable
+        goal_idx = (1-fixed_layout)*goal_idx + fixed_layout*layout.get("goal_idx", goal_idx)
         goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).flatten()
 
         maze_map = make_maze_map(

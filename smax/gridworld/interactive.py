@@ -9,6 +9,8 @@ import numpy as np
 from smax.gridworld.maze import Maze, Actions
 from smax.gridworld.ma_maze import MAMaze
 from smax.gridworld.grid_viz import GridVisualizer
+from smax.gridworld.overcooked import Overcooked
+from smax.gridworld.layouts import layouts
 
 
 def redraw(state, obs, extras):
@@ -40,7 +42,7 @@ def step(env, action, extras):
     extras['obs'] = obs
     extras['state'] = state
     print(f"reward={reward}, agent_dir={obs['agent_dir']}")
-    print(f"agent obs =\n {obs}")
+    # print(f"agent obs =\n {obs}")
 
     if done or (jnp.array([action, action]) == Actions.done).any():
         key, subkey = jax.random.split(subkey)
@@ -76,10 +78,10 @@ def key_handler(env, extras, event):
     if event.key == ' ':
         step(env, Actions.toggle, extras)
         return
-    if event.key == 'pageup':
+    if event.key == '[':
         step(env, Actions.pickup, extras)
         return
-    if event.key == 'pagedown':
+    if event.key == ']':
         step(env, Actions.drop, extras)
         return
 
@@ -94,7 +96,13 @@ if __name__ == '__main__':
         "--env",
         type=str,
         help="Environment name",
-        default="MAMaze"
+        default="Overcooked"
+    )
+    parser.add_argument(
+        "--layout",
+        type=str,
+        help="Overcooked layout",
+        default=""
     )
     parser.add_argument(
         "--seed",
@@ -141,7 +149,7 @@ if __name__ == '__main__':
             n_walls=25,
             see_agent=True,
         )
-    else:
+    elif args.env == "MAMaze":
         env = MAMaze(
             height=13,
             width=13,
@@ -149,6 +157,27 @@ if __name__ == '__main__':
             see_agent=True,
             n_agents=2
         )
+    elif args.env == "Overcooked":
+        if len(args.layout) > 0:
+            layout = layouts[args.layout]
+            env = Overcooked(
+                height=layout["height"],
+                width=layout["width"],
+                n_walls=1,
+                see_agent=True,
+                n_agents=2,
+                fixed_layout=True,
+                layout=layout
+            )
+        else:
+            env = Overcooked(
+                height=13,
+                width=13,
+                n_walls=25,
+                see_agent=True,
+                n_agents=2
+            )
+
     params = env.params
 
     viz = GridVisualizer()
@@ -160,8 +189,8 @@ if __name__ == '__main__':
             obs_viz2 = GridVisualizer()
 
     with jax.disable_jit(True):
-        jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
-        # jit_reset = env.reset_env
+        # jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
+        jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)
         key, subkey = jax.random.split(key)
         o0, s0 = jit_reset(subkey)

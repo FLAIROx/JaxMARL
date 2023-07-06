@@ -84,9 +84,7 @@ class MAMaze(Environment):
     ):
         super().__init__()
 
-        # TODO: Change obs to make it global
         self.obs_shape = (agent_view_size, agent_view_size, 3)
-        # TODO: Change actions to match overcooked
         self.action_set = jnp.array([
             Actions.left,
             Actions.right,
@@ -172,7 +170,7 @@ class MAMaze(Environment):
         agent_idx = jax.random.choice(subkey, all_pos, shape=(n_agents,),
                                       p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
         occupied_mask = occupied_mask.at[agent_idx].set(1)
-        agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32)#.transpose() # dim = n_agents x 2
+        agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32).transpose() # dim = n_agents x 2
 
         key, subkey = jax.random.split(key)
         agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8), shape=(n_agents,))
