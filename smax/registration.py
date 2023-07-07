@@ -9,6 +9,7 @@ from .environments import (
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
     MiniSMAC,
+    HeuristicEnemyMiniSMAC,
     SwitchRiddle
 )
 
@@ -44,6 +45,8 @@ def make(env_id: str, **env_kwargs):
     # 3. MiniSMAC
     elif env_id == "MiniSMAC":
         env = MiniSMAC(**env_kwargs)
+    elif env_id == "HeuristicEnemyMiniSMAC":
+        env = HeuristicEnemyMiniSMAC(**env_kwargs)
 
     return env, env.default_params
     
@@ -60,6 +63,7 @@ registered_envs = [
     
     "switch_riddle",
 
-    "MiniSMAC"
+    "MiniSMAC",
+    "HeuristicEnemyMiniSMAC"
 ]
     

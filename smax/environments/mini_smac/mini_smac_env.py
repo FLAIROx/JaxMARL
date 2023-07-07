@@ -93,8 +93,17 @@ class MiniSMAC(MultiAgentEnv):
         self, key: chex.PRNGKey, params: EnvParams
     ) -> Tuple[Dict[str, chex.Array], State]:
         """Environment-specific reset."""
+        key, team_0_key, team_1_key = jax.random.split(key, num=3)
         team_0_start = jnp.stack([jnp.array([8.0, 16.0])] * self.num_agents_per_team)
+        team_0_start_noise = jax.random.uniform(
+            team_0_key, shape=(self.num_agents_per_team, 2), minval=-2, maxval=2
+        )
+        team_0_start = team_0_start + team_0_start_noise
         team_1_start = jnp.stack([jnp.array([24.0, 16.0])] * self.num_agents_per_team)
+        team_1_start_noise = jax.random.uniform(
+            team_1_key, shape=(self.num_agents_per_team, 2), minval=-2, maxval=2
+        )
+        team_1_start = team_1_start + team_1_start_noise
         unit_positions = jnp.concatenate([team_0_start, team_1_start])
         unit_teams = jnp.zeros((self.num_agents,))
         unit_teams = unit_teams.at[self.num_agents_per_team :].set(1)
@@ -220,7 +229,7 @@ class MiniSMAC(MultiAgentEnv):
             # because these are easier to encode as actions than the four
             # diagonal directions. Then rotate the velocity 45
             # degrees anticlockwise to compute the movement.
-            vel = jax.lax.cond(
+            vec = jax.lax.cond(
                 action > self.num_movement_actions - 1,
                 lambda: jnp.zeros((2,)),
                 lambda: jnp.array(
@@ -236,8 +245,8 @@ class MiniSMAC(MultiAgentEnv):
                     [1.0 / jnp.sqrt(2), 1.0 / jnp.sqrt(2)],
                 ]
             )
-            vel = rotation @ vel
-            new_pos = pos + vel * params.time_per_step
+            vec = rotation @ vec
+            new_pos = pos + vec * params.unit_velocity * params.time_per_step
             # avoid going out of bounds
             new_pos = jnp.maximum(
                 jnp.minimum(new_pos, jnp.array([params.map_width, params.map_height])),
@@ -248,10 +257,15 @@ class MiniSMAC(MultiAgentEnv):
             return state
 
         def update_agent_health(state, params, idx, action):
+            # for team 1, their attack actions are labelled in
+            # reverse order because that is the order they are
+            # observed in
             attacked_idx = jax.lax.cond(
                 idx < self.num_agents_per_team,
                 lambda: action + self.num_agents_per_team - self.num_movement_actions,
-                lambda: action - self.num_movement_actions,
+                lambda: self.num_agents_per_team
+                - 1
+                - (action - self.num_movement_actions),
             )
             attack_valid = (
                 jnp.linalg.norm(
@@ -379,7 +393,7 @@ class MiniSMAC(MultiAgentEnv):
         from matplotlib.patches import Circle, Rectangle
         import numpy as np
 
-        state, actions = state
+        _, state, actions = state
         if params is None:
             params = self.default_params
 
@@ -388,7 +402,9 @@ class MiniSMAC(MultiAgentEnv):
             attacked_idx = jax.lax.cond(
                 shooter_idx < self.num_agents_per_team,
                 lambda: action + self.num_agents_per_team - self.num_movement_actions,
-                lambda: action - self.num_movement_actions,
+                lambda: params.num_agents_per_team
+                - 1
+                - (action - self.num_movement_actions),
             )
             return attacked_idx
 
@@ -404,12 +420,10 @@ class MiniSMAC(MultiAgentEnv):
             )
 
         attacked_agents = set(
-            [
-                int(agent_being_shot(i, actions[agent]))
-                for i, agent in enumerate(self.agents)
-                if actions[agent] > self.num_movement_actions - 1
-                and agent_can_shoot(i, actions[agent])
-            ]
+            int(agent_being_shot(i, actions[agent]))
+            for i, agent in enumerate(self.agents)
+            if actions[agent] > self.num_movement_actions - 1
+            and agent_can_shoot(i, actions[agent])
         )
         # render circles
         ax.clear()
