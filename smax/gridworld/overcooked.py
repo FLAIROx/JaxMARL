@@ -28,10 +28,11 @@ class Actions(IntEnum):
     right = 1
     forward = 2
     # down = 3
-    # stay = 4
+    stay = 4
 
     # Interact
     interact = 5
+    done = 6
 
 
 @struct.dataclass
@@ -90,9 +91,7 @@ class Overcooked(Environment):
             Actions.left,
             Actions.right,
             Actions.forward,
-            Actions.pickup,
-            Actions.drop,
-            Actions.toggle,
+            Actions.interact,
             Actions.done
         ])
 
@@ -288,8 +287,12 @@ class Overcooked(Environment):
         params = self.params
 
         # Update agent position (forward action)
+        # TODO: change dynamic here with 4 move directions
+        is_move_action = (action == Actions.forward)
+        is_move_action = jnp.expand_dims(is_move_action, 0).transpose()  # Necessary to broadcast correctly
+
         fwd_pos = jnp.minimum(
-            jnp.maximum(state.agent_pos + (action == Actions.forward) * state.agent_dir, 0),
+            jnp.maximum(state.agent_pos + is_move_action * state.agent_dir, 0),
             jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32))
 
         # Can't go past wall or goal
@@ -302,16 +305,18 @@ class Overcooked(Environment):
 
         fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((params.n_agents, 1))
 
+        bounced = jnp.logical_or(fwd_pos_blocked, ~is_move_action)
+
         # Agents can't overlap
-        # Hardcoded for 2 agents
+        # Hardcoded for 2 agents (call them Alice and Bob)
         agent_pos_prev = jnp.array(state.agent_pos)
-        fwd_pos = (fwd_pos_blocked * state.agent_pos + (~fwd_pos_blocked) * fwd_pos).astype(jnp.uint32)
+        fwd_pos = (bounced * state.agent_pos + (~bounced) * fwd_pos).astype(jnp.uint32)
         collision = jnp.all(fwd_pos[0] == fwd_pos[1])
 
-        # Cases (bounced == hit wall/goal and stayed in place)
-        neither_bounced = (~fwd_pos_blocked).all()
-        only_alice_bounced = jnp.logical_and(fwd_pos_blocked[0], ~fwd_pos_blocked[1])
-        only_bob_bounced = jnp.logical_and(~fwd_pos_blocked[0], fwd_pos_blocked[1])
+        # Cases (bounced == stayed in place, either because hitting wall or taking non-move action)
+        neither_bounced = (~bounced).all()
+        only_alice_bounced = jnp.logical_and(bounced[0], ~bounced[1])
+        only_bob_bounced = jnp.logical_and(~bounced[0], bounced[1])
 
         alice_pos = jnp.where(
             collision * only_bob_bounced,
@@ -367,7 +372,10 @@ class Overcooked(Environment):
         agent_dir_idx = (state.agent_dir_idx + agent_dir_offset) % 4
         agent_dir = DIR_TO_VEC[agent_dir_idx]
 
-        # # Update agent component in maze_map
+        # print("BP 2")
+        # breakpoint()
+
+        # Update agent component in maze_map
         def _get_agent_updates(agent_dir_idx, agent_pos, agent_pos_prev, agent_idx):
             agent = jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red']+agent_idx*2, agent_dir_idx], dtype=jnp.uint8)
             agent_x_prev, agent_y_prev = agent_pos_prev
