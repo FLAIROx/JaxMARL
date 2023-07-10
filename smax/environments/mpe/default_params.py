@@ -1,5 +1,9 @@
 """ Default parameters for MPE environments """
 
+# Action types
+DISCRETE_ACT = "Discrete"
+CONTINUOUS_ACT = "Continuous"
+
 # Environment
 MAX_STEPS = 25
 AGENT_RADIUS = 0.05
