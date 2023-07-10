@@ -8,7 +8,6 @@ import numpy as np
 
 from smax.gridworld.maze import Maze, Actions
 from smax.gridworld.ma_maze import MAMaze
-from smax.gridworld.grid_viz import GridVisualizer
 from smax.gridworld.overcooked import Overcooked
 from smax.gridworld.layouts import layouts
 
@@ -149,6 +148,8 @@ if __name__ == '__main__':
             n_walls=25,
             see_agent=True,
         )
+        from smax.gridworld.grid_viz import GridVisualizer as Visualizer
+
     elif args.env == "MAMaze":
         env = MAMaze(
             height=13,
@@ -157,6 +158,8 @@ if __name__ == '__main__':
             see_agent=True,
             n_agents=2
         )
+        from smax.gridworld.grid_viz import GridVisualizer as Visualizer
+
     elif args.env == "Overcooked":
         if len(args.layout) > 0:
             layout = layouts[args.layout]
@@ -177,16 +180,17 @@ if __name__ == '__main__':
                 see_agent=True,
                 n_agents=2
             )
+        from smax.gridworld.overcooked_viz import OvercookedVisualizer as Visualizer
 
     params = env.params
 
-    viz = GridVisualizer()
+    viz = Visualizer()
     obs_viz = None
     obs_viz2 = None
     if args.render_agent_view:
-        obs_viz = GridVisualizer()
+        obs_viz = Visualizer()
         if args.env == "MAMaze" or "Overcooked":
-            obs_viz2 = GridVisualizer()
+            obs_viz2 = Visualizer()
 
     with jax.disable_jit(True):
         # jit_reset = jax.jit(env.reset_env, static_argnums=(1,))

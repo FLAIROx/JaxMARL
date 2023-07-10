@@ -7,7 +7,12 @@ cramped_room = {
     "wall_idx" : jnp.array([0,1,2,3,4,
                             5,9,
                             10,14,
-                            15,16,17,18,19])
+                            15,16,17,18,19]),
+    "agent_idx" : jnp.array([6, 8]),
+    "goal_idx" : jnp.array([18]),
+    "plate_pile_idx" : jnp.array([16]),
+    "onion_pile_idx" : jnp.array([5,9]),
+    "pot_idx" : jnp.array([2])
 }
 forced_coord = {
     "height" : 5,
@@ -23,5 +28,5 @@ forced_coord = {
 
 layouts = {
     "cramped_room" : FrozenDict(cramped_room),
-    "forced_coord" : FrozenDict(forced_coord)
+    "forced_coord" : FrozenDict(forced_coord),
 }

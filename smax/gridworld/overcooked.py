@@ -19,7 +19,7 @@ from smax.gridworld.common import (
     COLORS,
     COLOR_TO_INDEX,
     DIR_TO_VEC,
-    make_maze_map)
+    make_overcooked_map)
 
 
 class Actions(IntEnum):
@@ -27,16 +27,11 @@ class Actions(IntEnum):
     left = 0
     right = 1
     forward = 2
+    # down = 3
+    # stay = 4
 
-    # Pick up an object
-    pickup = 3
-    # Drop an object
-    drop = 4
-    # Toggle/activate an object
-    toggle = 5
-
-    # Done completing task
-    done = 6
+    # Interact
+    interact = 5
 
 
 @struct.dataclass
@@ -198,16 +193,29 @@ class Overcooked(Environment):
         key, subkey = jax.random.split(key)
         goal_idx = jax.random.choice(subkey, all_pos, shape=(1,),
                                      p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32))
-        # Replace wall_idx with fixed layout if applicable
+        # Replace with fixed layout if applicable
         goal_idx = (1-fixed_layout)*goal_idx + fixed_layout*layout.get("goal_idx", goal_idx)
         goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).flatten()
 
-        maze_map = make_maze_map(
+        # TODO: add support for randomized envs.
+        onion_pile_idx = layout.get("onion_pile_idx")
+        onion_pile_pos = jnp.array([onion_pile_idx % w, onion_pile_idx // w], dtype=jnp.uint32).transpose()
+
+        plate_pile_idx = layout.get("plate_pile_idx")
+        plate_pile_pos = jnp.array([plate_pile_idx % w, plate_pile_idx // w], dtype=jnp.uint32).transpose()
+
+        pot_idx = layout.get("pot_idx")
+        pot_pos = jnp.array([pot_idx % w, pot_idx // w], dtype=jnp.uint32).transpose()
+
+        maze_map = make_overcooked_map(
             params,
             wall_map,
             goal_pos,
             agent_pos,
             agent_dir_idx,
+            plate_pile_pos,
+            onion_pile_pos,
+            pot_pos,
             pad_obs=True)
 
         state = EnvState(
