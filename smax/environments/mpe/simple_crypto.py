@@ -5,8 +5,8 @@ from typing import Tuple, Dict
 from flax import struct
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, State, EnvParams
-from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING  
-from gymnax.environments.spaces import Box
+from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING, DISCRETE_ACT, CONTINUOUS_ACT 
+from gymnax.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
 LISTENER = "bob_0"
@@ -30,7 +30,8 @@ class SimpleCryptoMPE(SimpleMPE):
 
     def __init__(self,
                  num_agents=3,
-                 num_landmarks=2,):
+                 num_landmarks=2,
+                 action_type=DISCRETE_ACT):
         
         assert num_agents == 3, "Simple Crypto only supports 3 agents"
         assert num_landmarks == 2, "Simple Crypto only supports 2 landmarks"
@@ -53,8 +54,13 @@ class SimpleCryptoMPE(SimpleMPE):
         
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
 
-        # Action and observation spaces
-        action_spaces = {i: Box(0.0, 1.0, (4,)) for i in agents}
+        # Action and observation spaces        
+        if action_type == DISCRETE_ACT:
+            action_spaces = {i: Discrete(4) for i in agents}
+        elif action_type == CONTINUOUS_ACT:
+            action_spaces = {i: Box(0.0, 1.0, (4,)) for i in agents}
+        else:
+            raise NotImplementedError('Action type not implemented')
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.adversaries }
         observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (8,)) for i in self.good_agents})
@@ -118,12 +124,27 @@ class SimpleCryptoMPE(SimpleMPE):
         
         return self.get_obs(state, params), state
 
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    '''@partial(jax.vmap, in_axes=[None, 0, 0, None])
     def _set_action(self, a_idx, action, params):
         """ Communication action """
         u = jnp.zeros((self.dim_p,))
         c = action
         
+        return u, c'''
+    
+    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def _decode_continuous_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        """ Communication action """
+        u = jnp.zeros((self.dim_p,))
+        c = action
+        return u, c
+    
+    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def _decode_discrete_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        """ Communication action """
+        u = jnp.zeros((self.dim_p,))
+        c = jnp.zeros((self.dim_c,))
+        c = c.at[action].set(1.0)
         return u, c
 
     def get_obs(self, state: CryptoState, params: EnvParams):
