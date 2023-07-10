@@ -40,6 +40,7 @@ class EnvState:
     agent_pos: chex.Array
     agent_dir: chex.Array
     agent_dir_idx: int
+    agent_inv: chex.Array
     goal_pos: chex.Array
     wall_map: chex.Array
     maze_map: chex.Array
@@ -221,6 +222,7 @@ class Overcooked(Environment):
             agent_pos=agent_pos,
             agent_dir=agent_dir,
             agent_dir_idx=agent_dir_idx,
+            agent_inv=jnp.zeros((n_agents)),
             goal_pos=goal_pos,
             wall_map=wall_map.astype(jnp.bool_),
             maze_map=maze_map,
@@ -313,35 +315,48 @@ class Overcooked(Environment):
         fwd_pos = (bounced * state.agent_pos + (~bounced) * fwd_pos).astype(jnp.uint32)
         collision = jnp.all(fwd_pos[0] == fwd_pos[1])
 
-        # Cases (bounced == stayed in place, either because hitting wall or taking non-move action)
-        neither_bounced = (~bounced).all()
-        only_alice_bounced = jnp.logical_and(bounced[0], ~bounced[1])
-        only_bob_bounced = jnp.logical_and(~bounced[0], bounced[1])
-
+        # No collision = No movement. This matches original Overcooked env.
         alice_pos = jnp.where(
-            collision * only_bob_bounced,
+            collision,
             state.agent_pos[0],                     # collision and Bob bounced
             fwd_pos[0],
         )
         bob_pos = jnp.where(
-            collision * only_alice_bounced,
+            collision,
             state.agent_pos[1],                     # collision and Alice bounced
             fwd_pos[1],
         )
 
-        key, rng_coll = jax.random.split(key)
-        alice_wins = jax.random.choice(rng_coll, 2)
-
-        alice_pos = jnp.where(
-            collision * neither_bounced * (1-alice_wins),
-            state.agent_pos[0],
-            alice_pos
-        )
-        bob_pos = jnp.where(
-            collision * neither_bounced * alice_wins,
-            state.agent_pos[1],
-            bob_pos
-        )
+        # DO NOT DELETE:
+        # Code for randomly handling collisions, to be used in v2.0
+        # Cases (bounced == stayed in place, either because hitting wall or taking non-move action)
+        # neither_bounced = (~bounced).all()
+        # only_alice_bounced = jnp.logical_and(bounced[0], ~bounced[1])
+        # only_bob_bounced = jnp.logical_and(~bounced[0], bounced[1])
+        # alice_pos = jnp.where(
+        #     collision * only_bob_bounced,
+        #     state.agent_pos[0],                     # collision and Bob bounced
+        #     fwd_pos[0],
+        # )
+        # bob_pos = jnp.where(
+        #     collision * only_alice_bounced,
+        #     state.agent_pos[1],                     # collision and Alice bounced
+        #     fwd_pos[1],
+        # )
+        #
+        # key, rng_coll = jax.random.split(key)
+        # alice_wins = jax.random.choice(rng_coll, 2)
+        #
+        # alice_pos = jnp.where(
+        #     collision * neither_bounced * (1-alice_wins),
+        #     state.agent_pos[0],
+        #     alice_pos
+        # )
+        # bob_pos = jnp.where(
+        #     collision * neither_bounced * alice_wins,
+        #     state.agent_pos[1],
+        #     bob_pos
+        # )
 
         # Prevent swapping places (i.e. passing through each other)
         swap_places = jnp.logical_and(
