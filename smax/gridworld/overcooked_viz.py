@@ -147,13 +147,54 @@ class OvercookedVisualizer:
 			onion_fn = rendering.point_in_circle(0.5, 0.5, 0.13)
 			rendering.fill_coords(img, onion_fn, COLORS["orange"])
 		elif obj_type == OBJECT_TO_INDEX['pot']:
-			rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"])
-			pot_fns = [rendering.point_in_rect(0.1, 0.9, 0.3, 0.9),
-					   rendering.point_in_rect(0.1, 0.9, 0.20, 0.23),
-					   rendering.point_in_rect(0.4, 0.6, 0.15, 0.20),]
-			[rendering.fill_coords(img, pot_fn, COLORS[color]) for pot_fn in pot_fns]
+			OvercookedVisualizer._render_pot(obj, img)
+			# rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"])
+			# pot_fns = [rendering.point_in_rect(0.1, 0.9, 0.3, 0.9),
+			# 		   rendering.point_in_rect(0.1, 0.9, 0.20, 0.23),
+			# 		   rendering.point_in_rect(0.4, 0.6, 0.15, 0.20),]
+			# [rendering.fill_coords(img, pot_fn, COLORS[color]) for pot_fn in pot_fns]
 		else:
 			raise ValueError(f'Rendering object at index {obj_type} is currently unsupported.')
+
+	@classmethod
+	def _render_pot(
+		cls,
+		obj,
+		img):
+		pot_status = obj[-1]
+		num_onions = np.max([23-pot_status, 0])
+		is_cooking = np.array((pot_status < 20) * (pot_status > 0))
+		is_done = np.array(pot_status == 0)
+
+		pot_fn = rendering.point_in_rect(0.1, 0.9, 0.33, 0.9)
+		lid_fn = rendering.point_in_rect(0.1, 0.9, 0.21, 0.25)
+		handle_fn = rendering.point_in_rect(0.4, 0.6, 0.16, 0.21)
+
+		rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"])
+
+		# Render onions in pot
+		if num_onions > 0 and not is_done:
+			onion_fns = [rendering.point_in_circle(*coord, 0.13) for coord in [(0.23, 0.33), (0.77, 0.33), (0.50, 0.33)]]
+			onion_fns = onion_fns[:num_onions]
+			[rendering.fill_coords(img, onion_fn, COLORS["yellow"]) for onion_fn in onion_fns]
+			if not is_cooking:
+				lid_fn = rendering.rotate_fn(lid_fn, cx=0.1, cy=0.25, theta=-0.1 * math.pi)
+				handle_fn =rendering.rotate_fn(handle_fn, cx=0.1, cy=0.25, theta=-0.1 * math.pi)
+
+		# Render done soup
+		if is_done:
+			soup_fn = rendering.point_in_rect(0.12, 0.88, 0.23, 0.35)
+			rendering.fill_coords(img, soup_fn, COLORS["orange"])
+
+		# Render the pot itself
+		pot_fns = [pot_fn, lid_fn, handle_fn]
+		[rendering.fill_coords(img, pot_fn, COLORS["black"]) for pot_fn in pot_fns]
+
+		# Render progress bar
+		if is_cooking:
+			progress_fn = rendering.point_in_rect(0.1, 0.9-(0.9-0.1)/20*pot_status, 0.83, 0.88)
+			rendering.fill_coords(img, progress_fn, COLORS["green"])
+
 
 	@classmethod
 	def _render_inv(

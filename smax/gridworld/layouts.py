@@ -21,7 +21,12 @@ forced_coord = {
                             5,7,9,
                             10,12,14,
                             15,17,19,
-                            20,21,22,23,24])
+                            20,21,22,23,24]),
+    "agent_idx" : jnp.array([11,8]),
+    "goal_idx" : jnp.array([23]),
+    "onion_pile_idx" : jnp.array([5,10]),
+    "plate_pile_idx" : jnp.array([15]),
+    "pot_idx" : jnp.array([3,9])
 }
 
 
