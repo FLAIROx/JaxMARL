@@ -32,6 +32,7 @@ OBJECT_TO_INDEX = {
 	"goal": 8,
 	"pot": 9,
 	"agent": 10,
+	"dish": 11,
 }
 
 
@@ -44,6 +45,7 @@ COLORS = {
     'grey'  : np.array([100, 100, 100]),
     'white' : np.array([255, 255, 255]),
 	'black' : np.array([25, 25, 25]),
+	'orange': np.array([220, 180, 0]),
 }
 
 
@@ -187,7 +189,7 @@ def make_overcooked_map(
 	pot_x = pot_pos[:, 0]
 	pot_y = pot_pos[:, 1]
 	pots = jnp.stack(
-		[jnp.array([OBJECT_TO_INDEX['pot'], COLOR_TO_INDEX["black"], 0]) for _ in range(10)],
+		[jnp.array([OBJECT_TO_INDEX['pot'], COLOR_TO_INDEX["black"], 23]) for _ in range(10)],
 		dtype=jnp.uint8
 	).at[:pot_pos.shape[0]].get()
 	maze_map = maze_map.at[pot_y, pot_x, :].set(pots)

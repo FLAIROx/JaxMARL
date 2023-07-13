@@ -10,6 +10,7 @@ from smax.gridworld.overcooked import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
 INDEX_TO_COLOR = [k for k,v in COLOR_TO_INDEX.items()]
 TILE_PIXELS = 32
 
+COLOR_TO_AGENT_INDEX = {0:0, 2:1} # Hardcoded. Red is first, blue is second
 
 class OvercookedVisualizer:
 	"""
@@ -90,7 +91,8 @@ class OvercookedVisualizer:
 			grid,
 			tile_size,
 			highlight_mask=highlight_mask if highlight else None,
-			agent_dir_idx=state.agent_dir_idx
+			agent_dir_idx=state.agent_dir_idx,
+			agent_inv=state.agent_inv
 		)
 
 		self.window.show_img(img)
@@ -138,6 +140,12 @@ class OvercookedVisualizer:
 			rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"])
 			plate_fn = rendering.point_in_circle(0.5, 0.5, 0.2)
 			rendering.fill_coords(img, plate_fn, COLORS[color])
+		elif obj_type == OBJECT_TO_INDEX['dish']:
+			rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"])
+			plate_fn = rendering.point_in_circle(0.5, 0.5, 0.2)
+			rendering.fill_coords(img, plate_fn, COLORS[color])
+			onion_fn = rendering.point_in_circle(0.5, 0.5, 0.13)
+			rendering.fill_coords(img, onion_fn, COLORS["orange"])
 		elif obj_type == OBJECT_TO_INDEX['pot']:
 			rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"])
 			pot_fns = [rendering.point_in_rect(0.1, 0.9, 0.3, 0.9),
@@ -148,11 +156,35 @@ class OvercookedVisualizer:
 			raise ValueError(f'Rendering object at index {obj_type} is currently unsupported.')
 
 	@classmethod
+	def _render_inv(
+		cls,
+		obj,
+		img):
+		# Render each kind of object
+		obj_type = obj[0]
+		if obj_type == OBJECT_TO_INDEX['empty']:
+			pass
+		elif obj_type == OBJECT_TO_INDEX['onion']:
+			onion_fn = rendering.point_in_circle(0.75, 0.75, 0.15)
+			rendering.fill_coords(img, onion_fn, COLORS["yellow"])
+		elif obj_type == OBJECT_TO_INDEX['plate']:
+			plate_fn = rendering.point_in_circle(0.75, 0.75, 0.2)
+			rendering.fill_coords(img, plate_fn, COLORS["white"])
+		elif obj_type == OBJECT_TO_INDEX['dish']:
+			plate_fn = rendering.point_in_circle(0.75, 0.75, 0.2)
+			rendering.fill_coords(img, plate_fn, COLORS["white"])
+			onion_fn = rendering.point_in_circle(0.75, 0.75, 0.13)
+			rendering.fill_coords(img, onion_fn, COLORS["orange"])
+		else:
+			raise ValueError(f'Rendering object at index {obj_type} is currently unsupported.')
+
+	@classmethod
 	def _render_tile(
 		cls,
 		obj,
 		highlight=False,
 		agent_dir_idx=None,
+		agent_inv=None,
 		tile_size=TILE_PIXELS,
 		subdivs=3
 	):
@@ -160,15 +192,20 @@ class OvercookedVisualizer:
 		Render a tile and cache the result
 		"""
 		# Hash map lookup key for the cache
-		if obj is not None and \
-			obj[0] == OBJECT_TO_INDEX['agent'] and \
-			agent_dir_idx is not None:
-			obj = np.array(obj)
+		if obj is not None and obj[0] == OBJECT_TO_INDEX['agent']:
+			# Get inventory of this specific agent
+			if agent_inv is not None:
+				color_idx = obj[1]
+				agent_inv = agent_inv[COLOR_TO_AGENT_INDEX[color_idx]]
+				agent_inv = np.array([agent_inv, -1, 0])
 
-			# TODO: Fix this for multiagents. Currently the orientation of other agents is wrong
-			if len(agent_dir_idx) == 1:
-				# Hacky way of making agent views orientations consistent with global view
-				obj[-1] = agent_dir_idx[0]
+			if agent_dir_idx is not None:
+				obj = np.array(obj)
+
+				# TODO: Fix this for multiagents. Currently the orientation of other agents is wrong
+				if len(agent_dir_idx) == 1:
+					# Hacky way of making agent views orientations consistent with global view
+					obj[-1] = agent_dir_idx[0]
 
 		no_object = obj is None or (
 			obj[0] in [OBJECT_TO_INDEX['empty'], OBJECT_TO_INDEX['unseen']] \
@@ -176,7 +213,10 @@ class OvercookedVisualizer:
 		)
 
 		if not no_object:
-			key = (*obj, highlight, tile_size)
+			if agent_inv is not None and obj[0] == OBJECT_TO_INDEX['agent']:
+				key = (*obj, *agent_inv, highlight, tile_size)
+			else:
+				key = (*obj, highlight, tile_size)
 		else:
 			key = (obj, highlight, tile_size)
 
@@ -191,6 +231,11 @@ class OvercookedVisualizer:
 
 		if not no_object:
 			OvercookedVisualizer._render_obj(obj, img)
+			# render inventory
+			if agent_inv is not None and obj[0] == OBJECT_TO_INDEX['agent']:
+				print(agent_inv)
+				OvercookedVisualizer._render_inv(agent_inv, img)
+
 
 		if highlight:
 			rendering.highlight_img(img)
@@ -209,7 +254,8 @@ class OvercookedVisualizer:
 		grid,
 		tile_size=TILE_PIXELS,
 		highlight_mask=None,
-		agent_dir_idx=None):
+		agent_dir_idx=None,
+		agent_inv=None):
 		if highlight_mask is None:
 			highlight_mask = np.zeros(shape=grid.shape[:2], dtype=np.bool)
 
@@ -232,6 +278,7 @@ class OvercookedVisualizer:
 					highlight=highlight_mask[y, x],
 					tile_size=tile_size,
 					agent_dir_idx=agent_dir_idx,
+					agent_inv=agent_inv,
 				)
 
 				ymin = y*tile_size
