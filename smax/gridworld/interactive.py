@@ -39,7 +39,7 @@ def step(env, action, extras):
     key, subkey = jax.random.split(extras['rng'])
 
     print("action:", jnp.array([action, action.left]))
-    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, action]))
+    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, Actions.left]))
     extras['obs'] = obs
     extras['state'] = state
     print(f"reward={reward}, agent_dir={obs['agent_dir']}, agent_inv={state.agent_inv}")
@@ -96,7 +96,6 @@ def key_handler_overcooked(env, extras, event):
     if event.key == 'escape':
         window.close()
         return
-
     if event.key == 'backspace':
         extras['jit_reset']((env, extras))
         return
@@ -108,16 +107,19 @@ def key_handler_overcooked(env, extras, event):
         step(env, Actions.right, extras)
         return
     if event.key == 'up':
-        step(env, Actions.forward, extras)
+        # step(env, Actions.forward, extras)
+        step(env, Actions.up, extras)
         return
     if event.key == 'down':
-        step(env, Actions.stay, extras)
+        step(env, Actions.down, extras)
         return
-
 
     # Spacebar
     if event.key == ' ':
         step(env, Actions.interact, extras)
+        return
+    if event.key == 'tab':
+        step(env, Actions.stay, extras)
         return
     if event.key == 'enter':
         step(env, Actions.done, extras)
@@ -230,7 +232,7 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(False):
+    with jax.disable_jit(True):
         jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)

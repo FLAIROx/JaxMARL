@@ -25,13 +25,13 @@ from smax.gridworld.common import (
 
 class Actions(IntEnum):
     # Turn left, turn right, move forward
-    left = 0
-    right = 1
-    forward = 2
-    # down = 3
-    stay = 3
-    interact = 4
-    done = 5
+    right = 0
+    down = 1
+    left = 2
+    up = 3
+    stay = 4
+    interact = 5
+    done = 6
 
 
 @struct.dataclass
@@ -87,14 +87,14 @@ class Overcooked(Environment):
 
         # TODO: Change obs to make it global
         self.obs_shape = (agent_view_size, agent_view_size, 3)
-        # TODO: Change actions to match overcooked
+
         self.action_set = jnp.array([
-            Actions.left,
             Actions.right,
-            Actions.forward,
+            Actions.down,
+            Actions.left,
+            Actions.up,
             Actions.stay,
             Actions.interact,
-            Actions.done
         ])
 
         self.params = EnvParams(
@@ -294,13 +294,14 @@ class Overcooked(Environment):
         params = self.params
 
         # Update agent position (forward action)
-        # TODO: change dynamic here with 4 move directions
-        is_move_action = (action == Actions.forward)
-        is_move_action = jnp.expand_dims(is_move_action, 0).transpose()  # Necessary to broadcast correctly
+        is_move_action = jnp.logical_and(action != Actions.stay, action != Actions.interact)
+        is_move_action_transposed = jnp.expand_dims(is_move_action, 0).transpose()  # Necessary to broadcast correctly
 
         fwd_pos = jnp.minimum(
-            jnp.maximum(state.agent_pos + is_move_action * state.agent_dir, 0),
-            jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32))
+            jnp.maximum(state.agent_pos + is_move_action_transposed * DIR_TO_VEC[jnp.minimum(action, 3)] \
+                        + ~is_move_action_transposed * state.agent_dir, 0),
+            jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32)
+        )
 
         # Can't go past wall or goal
         def _wall_or_goal(fwd_position, wall_map, goal_pos):
@@ -312,7 +313,10 @@ class Overcooked(Environment):
 
         fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((params.n_agents, 1))
 
-        bounced = jnp.logical_or(fwd_pos_blocked, ~is_move_action)
+        bounced = jnp.logical_or(fwd_pos_blocked, ~is_move_action_transposed)
+
+        print("cur pos, fwd pos:", state.agent_pos, fwd_pos)
+        print("bounced", bounced)
 
         # Agents can't overlap
         # Hardcoded for 2 agents (call them Alice and Bob)
@@ -383,13 +387,8 @@ class Overcooked(Environment):
         fwd_pos = fwd_pos.at[1].set(bob_pos)
         agent_pos = fwd_pos.astype(jnp.uint32)
 
-        # Update agent direction (left_turn or right_turn action)
-        agent_dir_offset = \
-            0 \
-            + (action == Actions.left) * (-1) \
-            + (action == Actions.right) * 1
-
-        agent_dir_idx = (state.agent_dir_idx + agent_dir_offset) % 4
+        # Update agent direction
+        agent_dir_idx = ~is_move_action * state.agent_dir_idx + is_move_action * action
         agent_dir = DIR_TO_VEC[agent_dir_idx]
 
         # Handle interacts. Agent 1 first, agent 2 second, no collision handling.
