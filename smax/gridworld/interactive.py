@@ -230,7 +230,7 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(True):
+    with jax.disable_jit(False):
         jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)

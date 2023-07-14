@@ -7,32 +7,18 @@ import chex
 import jax
 
 
-# OBJECT_TO_INDEX = {
-# 	"unseen": 0,
-# 	"empty": 1,
-# 	"wall": 2,
-# 	"floor": 3,
-# 	"door": 4,
-# 	"key": 5,
-# 	"ball": 6,
-# 	"box": 7,
-# 	"goal": 8,
-# 	"lava": 9,
-# 	"agent": 10,
-# }
 OBJECT_TO_INDEX = {
 	"unseen": 0,
 	"empty": 1,
 	"wall": 2,
-	"floor": 3,
-	"onion": 4,
-	"onion_pile": 5,
-	"plate": 6,
-	"plate_pile": 7,
-	"goal": 8,
-	"pot": 9,
+	"onion": 3,
+	"onion_pile": 4,
+	"plate": 5,
+	"plate_pile": 6,
+	"goal": 7,
+	"pot": 8,
+	"dish": 9,
 	"agent": 10,
-	"dish": 11,
 }
 
 
@@ -59,6 +45,20 @@ COLOR_TO_INDEX = {
     'white' : 6,
 	'black' : 7,
 }
+
+OBJECT_INDEX_TO_VEC = jnp.array([
+	jnp.array([OBJECT_TO_INDEX['unseen'], 0, 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['wall'], COLOR_TO_INDEX['grey'], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['onion'], COLOR_TO_INDEX["yellow"], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['onion_pile'], COLOR_TO_INDEX["yellow"], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['plate'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['plate_pile'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['goal'], COLOR_TO_INDEX['green'], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['pot'], COLOR_TO_INDEX['black'], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['dish'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8),
+	jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red'], 0]),  					# Default color and direction
+])
 
 # Map of agent direction indices to vectors
 DIR_TO_VEC = jnp.array([

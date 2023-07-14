@@ -18,6 +18,7 @@ from smax.gridworld.common import (
     OBJECT_TO_INDEX,
     COLORS,
     COLOR_TO_INDEX,
+    OBJECT_INDEX_TO_VEC,
     DIR_TO_VEC,
     make_overcooked_map)
 
@@ -58,7 +59,7 @@ class EnvParams:
     see_agent: bool = False
     normalize_obs: bool = False
     sample_n_walls: bool = False  # Sample n_walls uniformly in [0, n_walls]
-    max_episode_steps: int = 250
+    max_episode_steps: int = 200
     singleton_seed: int = -1
     n_agents: int = 2
     fixed_layout: bool = False
@@ -66,7 +67,7 @@ class EnvParams:
 
 
 class Overcooked(Environment):
-    """Multi-agent Maze"""
+    """Vanilla Overcooked"""
     def __init__(
             self,
             height=13,
@@ -75,7 +76,7 @@ class Overcooked(Environment):
             agent_view_size=5,
             replace_wall_pos=False,
             see_agent=False,
-            max_episode_steps=250,
+            max_episode_steps=200,
             normalize_obs=False,
             singleton_seed=-1,
             n_agents=2,
@@ -197,7 +198,6 @@ class Overcooked(Environment):
         goal_idx = (1-fixed_layout)*goal_idx + fixed_layout*layout.get("goal_idx", goal_idx)
         goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).flatten()
 
-        # TODO: add support for randomized envs.
         onion_pile_idx = layout.get("onion_pile_idx")
         onion_pile_pos = jnp.array([onion_pile_idx % w, onion_pile_idx // w], dtype=jnp.uint32).transpose()
 
@@ -397,26 +397,29 @@ class Overcooked(Environment):
         fwd_pos = state.agent_pos + state.agent_dir
         maze_map = state.maze_map
         is_interact_action = (action == Actions.interact)
-        is_interact_action = jnp.expand_dims(is_interact_action, 0).transpose()
 
         # Compute the effect of interact first, then apply it if needed
-        candidate_maze_map, alice_inv, _ = self.process_interact(maze_map, state.wall_map, fwd_pos[0], state.agent_inv[0])
-        alice_interact = is_interact_action[0].item()
-        bob_interact = is_interact_action[1].item()
+        candidate_maze_map, alice_inv, alice_reward = self.process_interact(maze_map, state.wall_map, fwd_pos[0], state.agent_inv[0])
+        alice_interact = is_interact_action[0]
+        bob_interact = is_interact_action[1]
+
         maze_map = jax.lax.select(alice_interact,
                               candidate_maze_map,
                               maze_map)
         alice_inv = jax.lax.select(alice_interact,
                               alice_inv,
                               state.agent_inv[0])
+        alice_reward = jax.lax.select(alice_interact, alice_reward, 0.)
 
-        candidate_maze_map, bob_inv, _ = self.process_interact(maze_map, state.wall_map, fwd_pos[1], state.agent_inv[1])
+        candidate_maze_map, bob_inv, bob_reward = self.process_interact(maze_map, state.wall_map, fwd_pos[1], state.agent_inv[1])
         maze_map = jax.lax.select(bob_interact,
                               candidate_maze_map,
                               maze_map)
         bob_inv = jax.lax.select(bob_interact,
                               bob_inv,
                               state.agent_inv[1])
+        bob_reward = jax.lax.select(bob_interact, bob_reward, 0.)
+
         agent_inv = jnp.array([alice_inv, bob_inv])
 
         # Update agent component in maze_map
@@ -445,15 +448,11 @@ class Overcooked(Environment):
         pot_x = state.pot_pos[:, 0]
         pot_y = state.pot_pos[:, 1]
         pots = maze_map.at[padding + pot_y, padding + pot_x].get()
-
-        print("pots before update:", pots)
-
         pots = jax.vmap(_cook_pots, in_axes=0)(pots)
         maze_map = maze_map.at[padding + pot_y, padding + pot_x, :].set(pots)
 
-        print("pots after update:", pots)
-
-        reward = jnp.max((1.0 - 0.9 * ((state.time + 1) / params.max_episode_steps)) * fwd_pos_has_goal)
+        # reward = jnp.max((1.0 - 0.9 * ((state.time + 1) / params.max_episode_steps)) * fwd_pos_has_goal)
+        reward = alice_reward + bob_reward
 
         return (
             state.replace(
@@ -462,7 +461,7 @@ class Overcooked(Environment):
                 agent_dir=agent_dir,
                 agent_inv=agent_inv,
                 maze_map=maze_map,
-                terminal=fwd_pos_has_goal.any()),
+                terminal=False),
             reward
         )
 
@@ -474,32 +473,19 @@ class Overcooked(Environment):
             inventory: chex.Array):
         """Assume agent took interact actions."""
         padding = self.obs_shape[0] - 1
-        maze_objects = {
-            OBJECT_TO_INDEX["empty"] : jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8),
-            OBJECT_TO_INDEX["wall"] : jnp.array([OBJECT_TO_INDEX['wall'], COLOR_TO_INDEX['grey'], 0], dtype=jnp.uint8),
-            OBJECT_TO_INDEX["onion_pile"] : jnp.array([OBJECT_TO_INDEX['onion_pile'], COLOR_TO_INDEX["yellow"], 0]),
-            OBJECT_TO_INDEX["onion"]: jnp.array([OBJECT_TO_INDEX['onion'], COLOR_TO_INDEX["yellow"], 0]),
-            OBJECT_TO_INDEX["plate_pile"]: jnp.array([OBJECT_TO_INDEX['plate_pile'], COLOR_TO_INDEX["white"], 0]),
-            OBJECT_TO_INDEX["plate"]: jnp.array([OBJECT_TO_INDEX['plate'], COLOR_TO_INDEX["white"], 0]),
-            OBJECT_TO_INDEX["dish"]: jnp.array([OBJECT_TO_INDEX['dish'], COLOR_TO_INDEX["white"], 0]),
-        }
 
         maze_object_on_table = maze_map.at[padding + fwd_pos[1], padding + fwd_pos[0]].get()
         object_on_table = maze_object_on_table[0]  # Simple index
 
-        # TODO: Cannot use .item() in jitted function. Fix this.
-        maze_objects[object_on_table.item()] = maze_object_on_table
         object_is_pile = jnp.logical_or(object_on_table == OBJECT_TO_INDEX["plate_pile"], object_on_table == OBJECT_TO_INDEX["onion_pile"])
         object_is_pot = jnp.array(object_on_table == OBJECT_TO_INDEX["pot"])
         object_is_goal = jnp.array(object_on_table == OBJECT_TO_INDEX["goal"])
+        object_is_agent = jnp.array(object_on_table == OBJECT_TO_INDEX["agent"])
         object_is_pickable = jnp.logical_or(
             jnp.logical_or(object_on_table == OBJECT_TO_INDEX["plate"], object_on_table == OBJECT_TO_INDEX["onion"]),
             object_on_table == OBJECT_TO_INDEX["dish"]
         )
-        is_table = jnp.logical_and(
-            wall_map.at[fwd_pos[1], fwd_pos[0]].get(),
-            ~jnp.logical_or(object_is_pot, object_is_goal)
-        )
+        is_table = jnp.logical_and(wall_map.at[fwd_pos[1], fwd_pos[0]].get(), ~object_is_pot)
 
         table_is_empty = jnp.logical_or(object_on_table == OBJECT_TO_INDEX["wall"], object_on_table == OBJECT_TO_INDEX["empty"])
         inv_is_empty = jnp.array(inventory == OBJECT_TO_INDEX["empty"])
@@ -509,6 +495,7 @@ class Overcooked(Environment):
         pot_status = maze_object_on_table[-1]
         holding_onion = jnp.array(object_in_inv == OBJECT_TO_INDEX["onion"])
         holding_plate = jnp.array(object_in_inv == OBJECT_TO_INDEX["plate"])
+        holding_dish = jnp.array(object_in_inv == OBJECT_TO_INDEX["dish"])
 
         # 3 cases: add onion if missing, collect soup if ready, do nothing otherwise
         case_1 = (pot_status > 20) * holding_onion * object_is_pot
@@ -529,31 +516,37 @@ class Overcooked(Environment):
         # Interactions with onion/plate piles and objects on counter
         # Pickup if: table, not empty, room in inv & object is not something unpickable (e.g. pot or goal)
         successful_pickup = is_table * ~table_is_empty * inv_is_empty * jnp.logical_or(object_is_pile, object_is_pickable)
-        # TODO: Add cases for pot and goal
         successful_drop = is_table * table_is_empty * ~inv_is_empty
-        no_effect = jnp.logical_and(~successful_pickup, ~successful_drop)
+        successful_delivery = is_table * object_is_goal * holding_dish
+        no_effect = jnp.logical_and(jnp.logical_and(~successful_pickup, ~successful_drop), ~successful_delivery)
 
         new_object_on_table = \
             no_effect * object_on_table \
+            + successful_delivery * object_on_table \
             + successful_pickup * object_is_pile * object_on_table \
             + successful_pickup * object_is_pickable * OBJECT_TO_INDEX["wall"] \
             + successful_drop * object_in_inv
 
         new_object_in_inv = \
             no_effect * new_object_in_inv \
+            + successful_delivery * OBJECT_TO_INDEX["empty"] \
             + successful_pickup * object_is_pickable * object_on_table \
             + successful_pickup * (object_on_table == OBJECT_TO_INDEX["plate_pile"]) * OBJECT_TO_INDEX["plate"] \
             + successful_pickup * (object_on_table == OBJECT_TO_INDEX["onion_pile"]) * OBJECT_TO_INDEX["onion"] \
             + successful_drop * OBJECT_TO_INDEX["empty"]
 
         inventory = new_object_in_inv
-        new_object_on_table = jax.lax.select(object_is_pot,
-                                             maze_objects[new_object_on_table.item()].at[-1].set(new_pot_status),
-                                             maze_objects[new_object_on_table.item()])
-        maze_map = maze_map.at[padding + fwd_pos[1], padding + fwd_pos[0], :].set(new_object_on_table)
 
-        # TODO: add reward
-        return maze_map, inventory, -1
+        new_maze_object_on_table = \
+            object_is_pot * OBJECT_INDEX_TO_VEC[new_object_on_table].at[-1].set(new_pot_status) \
+            + ~object_is_pot * ~object_is_agent * OBJECT_INDEX_TO_VEC[new_object_on_table] \
+            + object_is_agent * maze_object_on_table
+
+
+        maze_map = maze_map.at[padding + fwd_pos[1], padding + fwd_pos[0], :].set(new_maze_object_on_table)
+
+        reward = jnp.array(successful_delivery, dtype=float)
+        return maze_map, inventory, reward
 
     def is_terminal(self, state: EnvState) -> bool:
         """Check whether state is terminal."""
