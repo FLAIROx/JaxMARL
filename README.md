@@ -23,7 +23,7 @@ actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enu
 # Perform the step transition.
 n_obs, n_state, reward, done, infos = env.step(key_step, state, action)
 ```
-An example environment loop can be found in `introduction.py`
+Tutorials can be found in the `tutorials` directory. An example environment loop can be found in `smax_introduction.py`
 
 ## Installation
 Using Conda, run the following commands (which can also be found in `env_commands`). You must ensure you install the correct JAX version, more information can be found [here](https://github.com/google/jax#installation)
