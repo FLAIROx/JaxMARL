@@ -230,7 +230,7 @@ class SimpleMPE(MultiAgentEnv):
 
         return self.action_decoder(self.agent_range, actions, params)
 
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    '''@partial(jax.vmap, in_axes=[None, 0, 0, None])
     def _set_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
         # NOTE only for continuous action space currently
         u = jnp.array([
@@ -241,7 +241,7 @@ class SimpleMPE(MultiAgentEnv):
         #print('params moveable', params.moveable[a_idx])
         u = u * params.accel[a_idx] * params.moveable[a_idx]
         c = action[5:] 
-        return u, c
+        return u, c'''
     
     @partial(jax.vmap, in_axes=[None, 0, 0, None])
     def _decode_continuous_action(self, a_idx:int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:

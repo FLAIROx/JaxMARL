@@ -72,6 +72,7 @@ class SimpleCryptoMPE(SimpleMPE):
                          agents=agents,
                          num_landmarks=num_landmarks,
                          landmarks=landmarks,
+                         action_type=action_type,
                          action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
