@@ -10,5 +10,6 @@ from .mpe import (
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
 )
+from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC
 from .switch_riddle import SwitchRiddle
 

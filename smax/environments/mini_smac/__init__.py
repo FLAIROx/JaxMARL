@@ -1,0 +1,2 @@
+from .mini_smac_env import MiniSMAC
+from .heuristic_enemy_mini_smac_env import HeuristicEnemyMiniSMAC
