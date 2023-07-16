@@ -1,8 +1,8 @@
 import jax
 import jax.numpy as jnp
 from smax.environments.mpe.simple_world_comm import SimpleWorldCommMPE
-from ._test_utils.rollout_manager import RolloutManager
-from pettingzoo.mpe import simple_world_comm_v2
+#from ._test_utils.rollout_manager import RolloutManager
+from pettingzoo.mpe import simple_v3, simple_tag_v3, simple_world_comm_v3
 import time
 
 # Simple world comm for 1000 steps, with randomly sampled actions
@@ -11,21 +11,25 @@ num_envs = 70
 
 
 ### PETTING ZOO BENCHMARK
-env = simple_world_comm_v2.parallel_env(max_cycles=max_steps)
+env = simple_world_comm_v3.parallel_env(max_cycles=max_steps)
 obs = env.reset()
 
 start_time = time.time()
 actions = {agent: env.action_space(agent).sample() for agent in env.agents} 
+
+print('obs spaces', env.observation_spaces, env.action_spaces)
 #while env.agents:
     #step += 1
 for _ in range(max_steps):    
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  # this is where you would insert your policy
+    print('actions', actions)
     observations, rewards, terminations, truncations, infos = env.step(actions)
     print('terms', terminations)
     raise
 zoo_time = time.time() - start_time
 
 
+raise
 ### JAX BENCHMARK
 key = jax.random.PRNGKey(0)
 

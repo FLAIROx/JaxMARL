@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
 from smax.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box
+from gymnax.environments.spaces import Box, Discrete
 
 # Obstacle Colours
 COLOUR_1 = jnp.array([[0.75, 0.25, 0.25]])
@@ -18,7 +18,8 @@ class SimpleReferenceMPE(SimpleMPE):
     def __init__(self,
                  num_agents=2,
                  num_landmarks=3,
-                 local_ratio=0.5):
+                 local_ratio=0.5,
+                 action_type=DISCRETE_ACT,):
 
         assert num_agents == 2, "SimpleReferenceMPE only supports 2 agents"        
         assert num_landmarks == 3, "SimpleReferenceMPE only supports 3 landmarks" 
@@ -31,8 +32,14 @@ class SimpleReferenceMPE(SimpleMPE):
 
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
 
-        # Action and observation spaces
-        action_spaces = {i: Box(0.0, 1.0, (15,)) for i in agents}
+        # Action and observation spaces        
+        if action_type == DISCRETE_ACT:
+            action_spaces = {i: Discrete(50) for i in agents}
+        elif action_type == CONTINUOUS_ACT:
+            action_spaces = {i: Box(0.0, 1.0, (15,)) for i in agents}
+        else:
+            raise NotImplementedError('Action type not implemented')
+        
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (21,)) for i in agents}
         colour = [AGENT_COLOUR] * num_agents + list(OBS_COLOUR)
         
@@ -40,6 +47,7 @@ class SimpleReferenceMPE(SimpleMPE):
                          agents=agents,
                          num_landmarks=num_landmarks,
                          landmarks=landmarks,
+                         action_type=action_type,
                          action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
@@ -112,6 +120,19 @@ class SimpleReferenceMPE(SimpleMPE):
         
         obs = {a: _agent(i) for i, a in enumerate(self.agents)}
         return obs
+    
+    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def _decode_discrete_action(self, a_idx:int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        u = jnp.zeros((self.dim_p,))    
+        c = jnp.zeros((self.dim_c,)) 
+        u_act = action % 5
+        c_act = action // 5
+        idx = jax.lax.select(u_act <= 2, 0, 1)
+        u_val = jax.lax.select(u_act % 2 == 0, 1.0, -1.0) * (u_act != 0)
+        u = u.at[idx].set(u_val)  
+        u = u * params.accel[a_idx] * params.moveable[a_idx] 
+        c = c.at[c_act].set(1.0)
+        return u, c
     
     def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
 
