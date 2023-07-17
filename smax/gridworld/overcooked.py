@@ -76,7 +76,7 @@ class Overcooked(Environment):
             agent_view_size=5,
             replace_wall_pos=False,
             see_agent=False,
-            max_episode_steps=200,
+            max_episode_steps=400,
             normalize_obs=False,
             singleton_seed=-1,
             n_agents=2,
@@ -86,7 +86,10 @@ class Overcooked(Environment):
         super().__init__()
 
         # TODO: Change obs to make it global
-        self.obs_shape = (agent_view_size, agent_view_size, 3)
+        # self.obs_shape = (agent_view_size, agent_view_size, 3)
+        # Observations given by 26 channels, most of which are boolean masks
+        # self.obs_shape = (agent_view_size, agent_view_size, 3)
+        self.obs_shape = (width, height, 26)
 
         self.action_set = jnp.array([
             Actions.right,
@@ -133,7 +136,8 @@ class Overcooked(Environment):
         done = self.is_terminal(state)
         state = state.replace(terminal=done)
 
-        obs_array = jax.vmap(self.get_obs, in_axes=(None, 0))(state, jnp.arange(self.params.n_agents))
+        obs_array = self.get_obs(state)
+        # obs_array = jax.vmap(self.get_partial_obs, in_axes=(None, 0))(state, jnp.arange(self.params.n_agents))
 
         return (
             lax.stop_gradient(obs_array),
@@ -207,6 +211,9 @@ class Overcooked(Environment):
         pot_idx = layout.get("pot_idx")
         pot_pos = jnp.array([pot_idx % w, pot_idx // w], dtype=jnp.uint32).transpose()
 
+        # TODO: FIGURE OUT PADDING. DAMMIT.
+
+
         maze_map = make_overcooked_map(
             params,
             wall_map,
@@ -234,12 +241,94 @@ class Overcooked(Environment):
             time=0,
             terminal=False,
         )
-        obs_array = jax.vmap(self.get_obs, in_axes=(None, 0))(state, jnp.arange(n_agents))
+
+        obs_array = self.get_obs(state)
+        # obs_array = jax.vmap(self.get_partial_obs, in_axes=(None, 0))(state, jnp.arange(n_agents))
 
         return obs_array, state
 
-    def get_obs(self, state: EnvState, agent_idx: int) -> chex.Array:
-        """Return limited grid view ahead of agent."""
+    def get_obs(self, state: EnvState) -> chex.Array:
+        """Return a full observation, of size width x height x 26.
+        Env channels are the same for both agents. Agent-related channels are reordered to have the active agent first.
+        Channels:
+        - Agent positions (2 channels)
+        - Agent orientations (8 channels)
+        - Environment state (object positions and soup states) (16 channels)"""
+
+        width = self.obs_shape[0]
+        height = self.obs_shape[1]
+        n_channels = self.obs_shape[2]
+        padding = (state.maze_map.shape[0]-height) // 2
+
+        maze_map = state.maze_map[padding:-padding, padding:-padding, 0]
+        soup_loc = jnp.array(maze_map == OBJECT_TO_INDEX["dish"], dtype=jnp.uint8)
+
+        pot_loc_layer = jnp.array(maze_map == OBJECT_TO_INDEX["pot"], dtype=jnp.uint8)
+        pot_status = state.maze_map[padding:-padding, padding:-padding, 2] * pot_loc_layer
+        onions_in_pot_layer = jnp.minimum(23 - pot_status, 3) * (pot_status >= 20)    # 0/1/2/3, as long as not cooking or not done
+        onions_in_soup_layer = jnp.minimum(23 - pot_status, 3) * (pot_status < 20) * pot_loc_layer + 3 * soup_loc   # 0/3, as long as cooking or done
+        pot_cooking_time_layer = pot_status * (pot_status < 20)                           # Timer: 19 to 0
+        soup_ready_layer = pot_loc_layer * (pot_status == 0) + soup_loc                 # Ready soups, plated or not
+        urgency_layer = jnp.ones(maze_map.shape, dtype=jnp.uint8) * ((self.max_episode_steps() - state.time) < 40)
+
+        agent_pos_layers = jnp.zeros((2, height, width))
+        agent_pos_layers = agent_pos_layers.at[0, state.agent_pos[0, 1], state.agent_pos[0, 0]].set(1)
+        agent_pos_layers = agent_pos_layers.at[1, state.agent_pos[1, 1], state.agent_pos[1, 0]].set(1)
+
+        # Add agent inv: This works because loose items and agent cannot overlap
+        agent_inv_items = jnp.expand_dims(state.agent_inv,(1,2)) * agent_pos_layers
+        maze_map = jnp.where(jnp.sum(agent_pos_layers,0), agent_inv_items.sum(0), maze_map)
+        soup_ready_layer = soup_ready_layer \
+                           + (jnp.sum(agent_inv_items,0) == OBJECT_TO_INDEX["dish"]) * jnp.sum(agent_pos_layers,0)
+
+        env_layers = [
+            jnp.array(maze_map == OBJECT_TO_INDEX["pot"], dtype=jnp.uint8),         # Channel 10
+            jnp.array(maze_map == OBJECT_TO_INDEX["wall"], dtype=jnp.uint8),
+            jnp.array(maze_map == OBJECT_TO_INDEX["onion_pile"], dtype=jnp.uint8),
+            jnp.zeros(maze_map.shape, dtype=jnp.uint8),                           # tomato pile
+            jnp.array(maze_map == OBJECT_TO_INDEX["plate_pile"], dtype=jnp.uint8),
+            jnp.array(maze_map == OBJECT_TO_INDEX["goal"], dtype=jnp.uint8),        # 15
+            jnp.array(onions_in_pot_layer, dtype=jnp.uint8),
+            jnp.zeros(maze_map.shape, dtype=jnp.uint8),                           # tomatoes in pot
+            jnp.array(onions_in_soup_layer, dtype=jnp.uint8),
+            jnp.zeros(maze_map.shape, dtype=jnp.uint8),                           # tomatoes in soup
+            jnp.array(pot_cooking_time_layer, dtype=jnp.uint8),                     # 20
+            jnp.array(soup_ready_layer, dtype=jnp.uint8),
+            jnp.array(maze_map == OBJECT_TO_INDEX["plate"], dtype=jnp.uint8),
+            jnp.array(maze_map == OBJECT_TO_INDEX["onion"], dtype=jnp.uint8),
+            jnp.zeros(maze_map.shape, dtype=jnp.uint8),                           # tomatoes
+            urgency_layer,                                                          # 25
+        ]
+
+        # Agent related layers
+        agent_direction_layers = jnp.zeros((8, height, width))
+        dir_layer_idx = state.agent_dir_idx+jnp.array([0,4])
+        agent_direction_layers = agent_direction_layers.at[dir_layer_idx,:,:].set(agent_pos_layers)
+
+        # Both agent see their layers first, then the other layer
+        alice_obs = jnp.zeros((n_channels, height, width), dtype=jnp.uint8)
+        alice_obs = alice_obs.at[0:2].set(agent_pos_layers)
+
+        alice_obs = alice_obs.at[2:10].set(agent_direction_layers)
+        alice_obs = alice_obs.at[10:].set(jnp.stack(env_layers))
+
+        bob_obs = jnp.zeros((n_channels, height, width), dtype=jnp.uint8)
+        bob_obs = bob_obs.at[0].set(agent_pos_layers[1]).at[1].set(agent_pos_layers[0])
+        bob_obs = bob_obs.at[2:6].set(agent_direction_layers[4:]).at[6:10].set(agent_direction_layers[0:4])
+        bob_obs = bob_obs.at[10:].set(jnp.stack(env_layers))
+
+        alice_obs = jnp.transpose(alice_obs, (1, 2, 0))
+        bob_obs = jnp.transpose(bob_obs, (1, 2, 0))
+
+        obs = OrderedDict(dict(
+            image=jnp.array([alice_obs, bob_obs]),
+            agent_dir=state.agent_dir_idx
+        ))
+
+        return obs
+
+    def get_partial_obs(self, state: EnvState, agent_idx: int) -> chex.Array:
+        """Return limited (partial) grid view ahead of agent. Currently not used"""
         obs = jnp.zeros(self.obs_shape, dtype=jnp.uint8)
         agent_pos = state.agent_pos[agent_idx]
         agent_dir = state.agent_dir[agent_idx]
@@ -314,9 +403,6 @@ class Overcooked(Environment):
         fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((params.n_agents, 1))
 
         bounced = jnp.logical_or(fwd_pos_blocked, ~is_move_action_transposed)
-
-        print("cur pos, fwd pos:", state.agent_pos, fwd_pos)
-        print("bounced", bounced)
 
         # Agents can't overlap
         # Hardcoded for 2 agents (call them Alice and Bob)
@@ -471,7 +557,10 @@ class Overcooked(Environment):
             fwd_pos: chex.Array,
             inventory: chex.Array):
         """Assume agent took interact actions."""
-        padding = self.obs_shape[0] - 1
+
+        # TODO: Verify if padding is affected by change to obs.
+        height = self.obs_shape[1]
+        padding = (maze_map.shape[0] - height) // 2
 
         maze_object_on_table = maze_map.at[padding + fwd_pos[1], padding + fwd_pos[0]].get()
         object_on_table = maze_object_on_table[0]  # Simple index
@@ -501,6 +590,8 @@ class Overcooked(Environment):
         case_2 = (pot_status == 0) * holding_plate * object_is_pot
         case_3 = (pot_status > 0) * (pot_status <= 20) * object_is_pot
         else_case = ~case_1 * ~case_2 * ~case_3
+
+        # TODO: Do not start cooking until an interact trigger
         new_pot_status = \
             case_1 * (pot_status - 1) \
             + case_2 * 23 \
@@ -541,10 +632,10 @@ class Overcooked(Environment):
             + ~object_is_pot * ~object_is_agent * OBJECT_INDEX_TO_VEC[new_object_on_table] \
             + object_is_agent * maze_object_on_table
 
-
         maze_map = maze_map.at[padding + fwd_pos[1], padding + fwd_pos[0], :].set(new_maze_object_on_table)
 
-        reward = jnp.array(successful_delivery, dtype=float)
+        # Reward of 20 for a soup delivery
+        reward = jnp.array(successful_delivery, dtype=float)*20
         return maze_map, inventory, reward
 
     def is_terminal(self, state: EnvState) -> bool:

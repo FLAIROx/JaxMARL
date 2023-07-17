@@ -55,10 +55,10 @@ class OvercookedVisualizer:
 
 		agent_view_size = params.agent_view_size
 		padding = agent_view_size-2 # show
-		grid = np.asarray(state.maze_map[padding:-padding,padding:-padding,:])
+		grid = np.asarray(state.maze_map[padding:-padding, padding:-padding, :])
 		grid_offset = np.array([1,1])
-		h,w = grid.shape[:2]
-		
+		h, w = grid.shape[:2]
+
 		# === Compute highlight mask
 		highlight_mask = np.zeros(shape=(h,w), dtype=np.bool)
 
@@ -94,7 +94,6 @@ class OvercookedVisualizer:
 			agent_dir_idx=state.agent_dir_idx,
 			agent_inv=state.agent_inv
 		)
-
 		self.window.show_img(img)
 
 	@classmethod
