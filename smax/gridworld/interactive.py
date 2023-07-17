@@ -39,10 +39,38 @@ def step(env, action, extras):
     key, subkey = jax.random.split(extras['rng'])
 
     print("action:", jnp.array([action, action.left]))
-    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, Actions.left]))
+    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, action]))
     extras['obs'] = obs
     extras['state'] = state
     print(f"reward={reward}, agent_dir={obs['agent_dir']}, agent_inv={state.agent_inv}")
+    
+    if extras["debug"]:
+        layers = [f"player_{i}_loc" for i in range(2)]
+        layers.extend([f"player_{i // 4}_orientation_{i % 4}" for i in range(8)])
+        layers.extend([
+            "pot_loc",
+            "counter_loc",
+            "onion_disp_loc",
+            "tomato_disp_loc",
+            "plate_disp_loc",
+            "serve_loc",
+            "onions_in_pot",
+            "tomatoes_in_pot",
+            "onions_in_soup",
+            "tomatoes_in_soup",
+            "soup_cook_time_remaining",
+            "soup_done",
+            "plates",
+            "onions",
+            "tomatoes",
+            "urgency"
+        ])
+        print("obs_shape: ", obs["image"].shape)
+        print("OBS: \n", obs["image"][1])
+        debug_obs = jnp.transpose(obs["image"][1], (2,0,1))
+        for i, layer in enumerate(layers):
+            print(layer)
+            print(debug_obs[i])
     # print(f"agent obs =\n {obs}")
 
     if done or (jnp.array([action, action]) == Actions.done).any():
@@ -176,6 +204,12 @@ if __name__ == '__main__':
         type=int,
         help="Number of walls",
     )
+    parser.add_argument(
+        '--debug',
+        default=False,
+        help="Debug mode",
+        action='store_true'
+    )
     args = parser.parse_args()
 
     if args.env == "Maze":
@@ -256,7 +290,8 @@ if __name__ == '__main__':
             'obs_viz': obs_viz,
             'obs_viz2': obs_viz2,
             'jit_reset': jit_reset,
-            'env': args.env
+            'env': args.env,
+            'debug': args.debug
         }
 
         if args.env == "Overcooked":
