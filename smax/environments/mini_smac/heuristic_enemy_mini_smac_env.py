@@ -70,6 +70,7 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         enemy_actions = {
             agent: enemy_actions[self._env.agent_ids[agent]] for agent in self.enemy_agents
         }
+        actions = {k: v.squeeze() for k, v in actions.items()}
         actions = {**enemy_actions, **actions}
         obs, state, rewards, dones, infos = self._env.step_env(
             key, state, actions, params
