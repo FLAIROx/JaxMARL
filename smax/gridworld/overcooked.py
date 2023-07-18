@@ -85,10 +85,8 @@ class Overcooked(Environment):
     ):
         super().__init__()
 
-        # TODO: Change obs to make it global
         # self.obs_shape = (agent_view_size, agent_view_size, 3)
         # Observations given by 26 channels, most of which are boolean masks
-        # self.obs_shape = (agent_view_size, agent_view_size, 3)
         self.obs_shape = (width, height, 26)
 
         self.action_set = jnp.array([
@@ -210,9 +208,6 @@ class Overcooked(Environment):
 
         pot_idx = layout.get("pot_idx")
         pot_pos = jnp.array([pot_idx % w, pot_idx // w], dtype=jnp.uint32).transpose()
-
-        # TODO: FIGURE OUT PADDING. DAMMIT.
-
 
         maze_map = make_overcooked_map(
             params,
@@ -558,7 +553,6 @@ class Overcooked(Environment):
             inventory: chex.Array):
         """Assume agent took interact actions."""
 
-        # TODO: Verify if padding is affected by change to obs.
         height = self.obs_shape[1]
         padding = (maze_map.shape[0] - height) // 2
 
