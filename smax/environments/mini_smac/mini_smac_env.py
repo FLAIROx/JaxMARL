@@ -150,7 +150,7 @@ class MiniSMAC(MultiAgentEnv):
         dones["__all__"] = state.terminal
         world_state = self.get_world_state(state, params)
         infos = {}
-        infos["world_state"] = jax.lax.stop_gradient(world_state)
+        obs["world_state"] = jax.lax.stop_gradient(world_state)
         return (
             jax.lax.stop_gradient(obs),
             jax.lax.stop_gradient(state),
