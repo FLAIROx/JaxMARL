@@ -5,6 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
 from gymnax.environments.spaces import Box
+from smax.environments.mpe.default_params import *
 
 
 class SimpleTagMPE(SimpleMPE):
@@ -12,7 +13,8 @@ class SimpleTagMPE(SimpleMPE):
     def __init__(self,
                  num_good_agents=1,
                  num_adversaries=3,
-                 num_obs=2,):
+                 num_obs=2,
+                 action_type=DISCRETE_ACT,):
         
         dim_c = 2 # NOTE follows code rather than docs
 
@@ -28,7 +30,7 @@ class SimpleTagMPE(SimpleMPE):
         landmarks = ["landmark {}".format(i) for i in range(num_obs)]
 
         # Action and observation spaces
-        action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
+        #action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (16,)) for i in self.adversaries }
         observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (14,)) for i in self.good_agents})
@@ -41,7 +43,7 @@ class SimpleTagMPE(SimpleMPE):
                          agents=agents,
                          num_landmarks=num_landmarks,
                          landmarks=landmarks,
-                         action_spaces=action_spaces,
+                         action_type=action_type,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
                          colour=colour)

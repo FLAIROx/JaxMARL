@@ -6,7 +6,7 @@ from flax import struct
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
 from smax.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box
+from gymnax.environments.spaces import Box, Discrete
 
 SPEAKER = "speaker_0"
 LISTENER = "listener_0"
@@ -24,6 +24,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         self,
         num_agents=2,
         num_landmarks=3,
+        action_type=DISCRETE_ACT,
     ):
         assert num_agents==2, "SimpleSpeakerListnerMPE only supports 2 agents"
         assert num_landmarks==3, "SimpleSpeakerListnerMPE only supports 3 landmarks"
@@ -36,10 +37,20 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
         
         # Action and observation spaces
-        action_spaces = {
-            SPEAKER: Box(0.0, 1.0, (3,)),
-            LISTENER: Box(0.0, 1.0, (5,)),
-        }
+        
+        if action_type == DISCRETE_ACT:
+            action_spaces = {
+                SPEAKER: Discrete(3),
+                LISTENER: Discrete(5),
+            }
+        elif action_type == CONTINUOUS_ACT:
+            action_spaces = {
+                SPEAKER: Box(0.0, 1.0, (3,)),
+                LISTENER: Box(0.0, 1.0, (5,)),
+            }
+        else:
+            raise NotImplementedError('Action type not implemented')
+
 
         observation_spaces = {
             SPEAKER: Box(-jnp.inf, jnp.inf, (3,)),
@@ -52,6 +63,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
                          agents=agents,
                          num_landmarks=num_landmarks,
                          landmarks=landmarks,
+                         action_type=action_type,
                          action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
@@ -103,13 +115,17 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
     
     def set_actions(self, actions: Dict, params: EnvParams):
         """ Extract u and c actions for all agents from actions Dict."""
-        # NOTE only continuous actions
+        
+        '''actions = jnp.array([actions[i] for i in self.agents]).reshape((self.num_agents, -1))'''
+
+        return self.action_decoder(None, actions, params)
+    
+    def _decode_continuous_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
         u = jnp.zeros((self.num_agents, self.dim_p))
         c = jnp.zeros((self.num_agents, self.dim_c))
+        c = c.at[0].set(action[SPEAKER])
         
-        c = c.at[0].set(actions[SPEAKER])
-        
-        u_act = actions[LISTENER]
+        u_act = action[LISTENER]
         
         u_act = jnp.array([
             u_act[1] - u_act[2],
@@ -117,6 +133,18 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         ]) * params.accel[1]
         u = u.at[1].set(u_act)
 
+        return u, c
+    
+    def _decode_discrete_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        u = jnp.zeros((self.num_agents, self.dim_p))
+        c = jnp.zeros((self.num_agents, self.dim_c))
+        
+        c = c.at[0, action[SPEAKER]].set(1.0)
+        
+        idx = jax.lax.select(action[LISTENER] <= 2, 0, 1)
+        u_val = jax.lax.select(action[LISTENER] % 2 == 0, 1.0, -1.0) * (action[LISTENER] != 0)
+        u = u.at[1, idx].set(u_val)  
+        u = u * params.accel[1] * params.moveable[1] 
         return u, c
 
     

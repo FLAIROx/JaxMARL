@@ -12,7 +12,8 @@ class SimpleSpreadMPE(SimpleMPE):
     def __init__(self,
                  num_agents=3,
                  num_landmarks=3,
-                 local_ratio=0.5):
+                 local_ratio=0.5,
+                 action_type=DISCRETE_ACT,):
         
         dim_c = 2 # NOTE follows code rather than docs
         
@@ -20,7 +21,6 @@ class SimpleSpreadMPE(SimpleMPE):
         agents = ["agent_{}".format(i) for i in range(num_agents)]
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
         
-        action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (18,)) for i in agents}
         
         colour = [AGENT_COLOUR] * num_agents + [OBS_COLOUR] * num_landmarks
@@ -33,7 +33,7 @@ class SimpleSpreadMPE(SimpleMPE):
                         agents=agents,
                         num_landmarks=num_landmarks,
                         landmarks=landmarks,
-                        action_spaces=action_spaces,
+                        action_type=action_type,
                         observation_spaces=observation_spaces,
                         dim_c=dim_c,
                         colour=colour)
@@ -119,10 +119,10 @@ class SimpleSpreadMPE(SimpleMPE):
 
         def _good(aidx, collisions):
 
-            rew = -1 * jnp.sum(collisions[aidx]) 
-            #jax.debug.print('jax agent reward {rew}', rew=rew)
+            rew = -1 * jnp.sum(collisions[aidx]) + 1
             #mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
             #rew -= mr
+            
             return rew 
         
         def _land(land_pos):
@@ -131,7 +131,6 @@ class SimpleSpreadMPE(SimpleMPE):
             return -1 * jnp.min(jnp.linalg.norm(d, axis=1))
 
         global_rew = jnp.sum(jax.vmap(_land)(state.p_pos[self.num_agents:]))
-        #jax.debug.print('global_rew {global_rew}', global_rew=global_rew)
 
         rew = {a: _good(i, c) * self.local_ratio + global_rew * (1-self.local_ratio)
                for i, a in enumerate(self.agents)}

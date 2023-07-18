@@ -13,7 +13,7 @@ import numpy as onp
 from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.mpe.default_params import *
 import chex
-from gymnax.environments.spaces import Box
+from gymnax.environments.spaces import Box, Discrete
 from flax import struct
 from typing import Tuple, Optional, Dict
 from functools import partial
@@ -54,6 +54,7 @@ class SimpleMPE(MultiAgentEnv):
     
     def __init__(self, 
                  num_agents=1, 
+                 action_type=DISCRETE_ACT,
                  agents=None,
                  num_landmarks=1,
                  landmarks=None,
@@ -87,10 +88,14 @@ class SimpleMPE(MultiAgentEnv):
         self.l_to_i = {l: i+self.num_agents for i, l in enumerate(self.landmarks)}
 
         if action_spaces is None:
-            self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in self.agents}
+            if action_type == DISCRETE_ACT:
+                self.action_spaces = {i: Discrete(5) for i in self.agents}
+            elif action_type == CONTINUOUS_ACT:
+                self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in self.agents}
         else:
             assert len(action_spaces.keys()) == num_agents, f"Number of action spaces {len(action_spaces.keys())} does not match number of agents {num_agents}"
             self.action_spaces = action_spaces
+            
         if observation_spaces is None:
             self.observation_spaces = {i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.agents}
         else:
@@ -98,6 +103,14 @@ class SimpleMPE(MultiAgentEnv):
             self.observation_spaces = observation_spaces
         
         self.colour = colour if colour is not None else [AGENT_COLOUR] * num_agents + [OBS_COLOUR] * num_landmarks
+        
+        # Action type
+        if action_type == DISCRETE_ACT:
+            self.action_decoder = self._decode_discrete_action
+        elif action_type == CONTINUOUS_ACT:
+            self.action_decoder = self._decode_continuous_action
+        else:
+            raise NotImplementedError(f"Action type: {action_type} is not supported")
         
         # World dimensions
         self.dim_c = dim_c  # communication channel dimensionality
@@ -215,9 +228,9 @@ class SimpleMPE(MultiAgentEnv):
         
         actions = jnp.array([actions[i] for i in self.agents]).reshape((self.num_agents, -1))
 
-        return self._set_action(self.agent_range, actions, params)
+        return self.action_decoder(self.agent_range, actions, params)
 
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    '''@partial(jax.vmap, in_axes=[None, 0, 0, None])
     def _set_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
         # NOTE only for continuous action space currently
         u = jnp.array([
@@ -228,8 +241,28 @@ class SimpleMPE(MultiAgentEnv):
         #print('params moveable', params.moveable[a_idx])
         u = u * params.accel[a_idx] * params.moveable[a_idx]
         c = action[5:] 
+        return u, c'''
+    
+    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def _decode_continuous_action(self, a_idx:int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        u = jnp.array([
+            action[1] - action[2],
+            action[3] - action[4]
+        ])
+        
+        u = u * params.accel[a_idx] * params.moveable[a_idx]
+        c = action[5:] 
         return u, c
-
+    
+    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    def _decode_discrete_action(self, a_idx:int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        u = jnp.zeros((self.dim_p,))        
+        idx = jax.lax.select(action <= 2, 0, 1)
+        u_val = jax.lax.select(action % 2 == 0, 1.0, -1.0) * (action != 0)
+        u = u.at[idx].set(u_val)  
+        u = u * params.accel[a_idx] * params.moveable[a_idx] 
+        return u, jnp.zeros((self.dim_c,))     
+    
     # return all entities in the world
     @property
     def entities(self):
@@ -304,6 +337,7 @@ class SimpleMPE(MultiAgentEnv):
     def _integrate_state(self, p_force, p_pos, p_vel, mass, moveable, max_speed, params: EnvParams):
         """ integrate physical state """
         
+        p_pos += p_vel * params.dt
         p_vel = p_vel * (1 - params.damping)
         
         p_vel += (p_force / mass) * params.dt * moveable
@@ -314,7 +348,7 @@ class SimpleMPE(MultiAgentEnv):
         over_max = (p_vel / jnp.sqrt(jnp.square(p_vel[0]) + jnp.square(p_vel[1])) * max_speed)
         
         p_vel = jax.lax.select((speed > max_speed) & (max_speed >= 0), over_max, p_vel)
-        p_pos += p_vel * params.dt  
+          
         return p_pos, p_vel  
         
     def _update_agent_state(self, agent): # TODO

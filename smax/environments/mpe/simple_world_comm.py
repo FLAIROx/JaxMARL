@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, State, EnvParams, AGENT_COLOUR, ADVERSARY_COLOUR, OBS_COLOUR
 from smax.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box
+from gymnax.environments.spaces import Box, Discrete
 
 
 # NOTE food and forests are part of world.landmarks
@@ -22,7 +22,8 @@ class SimpleWorldCommMPE(SimpleMPE):
                  num_adversaries=4, 
                  num_obs=1,
                  num_food=2,
-                 num_forests=2,):
+                 num_forests=2,
+                 action_type=DISCRETE_ACT,):
         
         # Fixed parameters
         dim_c = 4  # communication channel dimension
@@ -48,9 +49,15 @@ class SimpleWorldCommMPE(SimpleMPE):
         self.leader_map = jnp.insert(jnp.zeros((num_agents-1)), 0, 1)
         self.leader_idx = 0
         
-        # Action and observation spaces
-        action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
-        action_spaces[self.leader] = Box(0.0, 1.0, (9,))
+        # Action and observation spaces        
+        if action_type == DISCRETE_ACT:
+            action_spaces = {i: Discrete(5) for i in agents}
+            action_spaces[self.leader] = Discrete(20)
+        elif action_type == CONTINUOUS_ACT:
+            action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
+            action_spaces[self.leader] = Box(0.0, 1.0, (9,))
+        else:
+            raise NotImplementedError('Action type not implemented')
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (34,)) for i in self.adversaries + [self.leader]}
         observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (28,)) for i in self.good_agents})
@@ -62,6 +69,7 @@ class SimpleWorldCommMPE(SimpleMPE):
                          agents=agents,
                          num_landmarks=num_landmarks,
                          landmarks=landmarks,
+                         action_type=action_type,
                          action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
@@ -97,6 +105,32 @@ class SimpleWorldCommMPE(SimpleMPE):
     
     def set_actions(self, actions: dict, params: EnvParams):
         """ Extract actions for each agent from their action array."""
+        return self.action_decoder(None, actions, params)
+    
+    def _decode_discrete_action(self, a_idx:int, actions: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+        
+        @partial(jax.vmap, in_axes=[0, 0])
+        def u_decoder(a_idx, a):
+            u = jnp.zeros((self.dim_p))
+            idx = jax.lax.select(a <= 2, 0, 1)
+            u_val = jax.lax.select(a % 2 == 0, 1.0, -1.0) * (a != 0)
+            u = u.at[idx].set(u_val)  
+            u = u * params.accel[a_idx] * params.moveable[a_idx]
+            return u 
+        
+        lact = actions[self.leader]
+        aact = jnp.array([actions[a] for a in self.adversaries])
+        gact = jnp.array([actions[a] for a in self.good_agents])
+        luact = lact % 5
+        u_acts = jnp.concatenate((luact[None], aact, gact))
+        u = u_decoder(self.agent_range, u_acts)
+        
+        c = jnp.zeros((self.num_agents, self.dim_c,)) 
+        lcact = lact // 5
+        c = c.at[0, lcact].set(1.0)
+        return u, c
+    
+    def _decode_continuous_action(self, a_idx: int, actions: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
         
         @partial(jax.vmap, in_axes=[0, 0, None])
         def _set_u(a_idx, action, params):
@@ -115,7 +149,6 @@ class SimpleWorldCommMPE(SimpleMPE):
 
         c = jnp.zeros((self.num_agents, self.dim_c))
         c = c.at[self.leader_idx].set(lact[5:])
-
         return u, c
     
     def get_obs(self, state: State, params: EnvParams) -> dict:        

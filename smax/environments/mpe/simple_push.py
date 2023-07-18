@@ -17,7 +17,8 @@ class SimplePushMPE(SimpleMPE):
     def __init__(self,
                  num_good_agents=1,
                  num_adversaries=1,
-                 num_landmarks=2,):
+                 num_landmarks=2,
+                 action_type=DISCRETE_ACT):
         
         assert num_landmarks == 2, "SimplePushMPE only supports 2 landmarks (yes, this is a departure from the docs but follows the code)" 
         
@@ -35,7 +36,7 @@ class SimplePushMPE(SimpleMPE):
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
 
         # Action and observation spaces
-        action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
+        #action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (8,)) for i in self.adversaries }
         observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (19,)) for i in self.good_agents})
@@ -47,7 +48,8 @@ class SimplePushMPE(SimpleMPE):
                          agents=agents,
                          num_landmarks=num_landmarks,
                          landmarks=landmarks,
-                         action_spaces=action_spaces,
+                         #action_spaces=action_spaces,
+                         action_type=action_type,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
                          colour=colour)
