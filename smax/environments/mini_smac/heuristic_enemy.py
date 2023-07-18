@@ -20,8 +20,8 @@ def create_heuristic_policy(env, params: EnvParams, team: int):
                 -- Otherwise just take random move actions
         """
         attack_range = params.unit_type_attack_ranges[0]
-        first_enemy_idx = (params.num_agents_per_team - 1) * num_unit_features
-        own_feats_idx = (params.num_agents_per_team * 2 - 1) * num_unit_features
+        first_enemy_idx = (env.num_agents_per_team - 1) * num_unit_features
+        own_feats_idx = (env.num_agents_per_team * 2 - 1) * num_unit_features
 
         def scaled_position_to_map(position, x_scale, y_scale):
             return position * jnp.array([x_scale, y_scale])
@@ -31,7 +31,7 @@ def create_heuristic_policy(env, params: EnvParams, team: int):
             params.map_width,
             params.map_height,
         )
-        enemy_positions = jnp.zeros((params.num_agents_per_team, 2))
+        enemy_positions = jnp.zeros((env.num_agents_per_team, 2))
         enemy_positions = enemy_positions.at[:, 0].set(
             obs[first_enemy_idx + 1 : own_feats_idx : num_unit_features],
         )
@@ -51,7 +51,7 @@ def create_heuristic_policy(env, params: EnvParams, team: int):
         can_shoot = jnp.any(shootable_enemy_mask)
         attack_action = jax.random.choice(
             key,
-            jnp.arange(num_move_actions, params.num_agents_per_team + num_move_actions),
+            jnp.arange(num_move_actions, env.num_agents_per_team + num_move_actions),
             p=(shootable_enemy_mask / jnp.sum(shootable_enemy_mask)),
         )
         # compute the correct movement action

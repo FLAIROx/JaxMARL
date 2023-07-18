@@ -19,6 +19,7 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         )
         # only one team
         self.num_agents = num_agents_per_team
+        self.num_agents_per_team = num_agents_per_team
         self.agents = [f"ally_{i}" for i in range(self.num_agents)]
         self.enemy_agents = [f"enemy_{i}" for i in range(self.num_agents)]
         self.all_agents = self.agents + self.enemy_agents
@@ -52,6 +53,7 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         obs = {agent: obs[agent] for agent in self.agents}
         return obs, state
 
+    @partial(jax.jit, static_argnums=(0,))
     def step_env(
         self,
         key: chex.PRNGKey,
@@ -63,7 +65,7 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         obs = self._env.get_obs(state, params)
         enemy_obs = jnp.array([obs[agent] for agent in self.enemy_agents])
         key, heuristic_action_key = jax.random.split(key)
-        heuristic_action_key = jax.random.split(heuristic_action_key, num=params.num_agents_per_team)
+        heuristic_action_key = jax.random.split(heuristic_action_key, num=self.num_agents_per_team)
         enemy_actions = jax.vmap(heuristic_policy)(heuristic_action_key, enemy_obs)
         enemy_actions = {
             agent: enemy_actions[self._env.agent_ids[agent]] for agent in self.enemy_agents
