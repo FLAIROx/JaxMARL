@@ -4,7 +4,7 @@ import numpy as np
 
 from smax.viz.window import Window
 import smax.viz.grid_rendering as rendering
-from smax.gridworld.overcooked import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
+from smax.environments.overcooked.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
 
 
 INDEX_TO_COLOR = [k for k,v in COLOR_TO_INDEX.items()]

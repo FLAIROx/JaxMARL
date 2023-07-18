@@ -1,26 +1,24 @@
-from dataclasses import dataclass
-from collections import namedtuple, OrderedDict
-from functools import partial
+from collections import OrderedDict
 from enum import IntEnum
 
 import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import lax
-from smax.gridworld.env import Environment
+from smax.environments import MultiAgentEnv
 from smax.environments import spaces
-from typing import Tuple, Optional
+from typing import Tuple, Dict
 import chex
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 
-from smax.gridworld.common import (
+from smax.environments.overcooked.common import (
     OBJECT_TO_INDEX,
-    COLORS,
     COLOR_TO_INDEX,
     OBJECT_INDEX_TO_VEC,
     DIR_TO_VEC,
     make_overcooked_map)
+from smax.environments.overcooked.layouts import layouts
 
 
 class Actions(IntEnum):
@@ -35,7 +33,7 @@ class Actions(IntEnum):
 
 
 @struct.dataclass
-class EnvState:
+class State:
     agent_pos: chex.Array
     agent_dir: chex.Array
     agent_dir_idx: int
@@ -48,42 +46,32 @@ class EnvState:
     terminal: bool
 
 
+# TODO: Cleanup params and layout handling
 @struct.dataclass
 class EnvParams:
-    height: int = 15
-    width: int = 15
-    n_walls: int = 25
     agent_view_size: int = 5
     replace_wall_pos: bool = False
     see_through_walls: bool = True
-    see_agent: bool = False
+    see_agent: bool = True
     normalize_obs: bool = False
     sample_n_walls: bool = False  # Sample n_walls uniformly in [0, n_walls]
-    max_episode_steps: int = 200
-    singleton_seed: int = -1
-    n_agents: int = 2
-    fixed_layout: bool = False
-    layout: FrozenDict = FrozenDict({})
+    max_steps: int = 400
+    fixed_layout: bool = True
 
 
-class Overcooked(Environment):
+class Overcooked(MultiAgentEnv):
     """Vanilla Overcooked"""
     def __init__(
             self,
-            height=13,
-            width=13,
-            n_walls=25,
+            height=4,
+            width=5,
+            n_walls=1,
             agent_view_size=5,
+            layout = FrozenDict(layouts["cramped_room"]),
             replace_wall_pos=False,
-            see_agent=False,
-            max_episode_steps=400,
             normalize_obs=False,
-            singleton_seed=-1,
-            n_agents=2,
-            fixed_layout = False,
-            layout = {}
     ):
-        super().__init__()
+        super().__init__(num_agents=2)
 
         # self.obs_shape = (agent_view_size, agent_view_size, 3)
         # Observations given by 26 channels, most of which are boolean masks
@@ -98,20 +86,26 @@ class Overcooked(Environment):
             Actions.interact,
         ])
 
-        self.params = EnvParams(
-            height=height,
-            width=width,
-            n_walls=n_walls,
-            agent_view_size=agent_view_size,
-            replace_wall_pos=replace_wall_pos and not sample_n_walls,
-            see_agent=see_agent,
-            max_episode_steps=max_episode_steps,
-            normalize_obs=normalize_obs,
-            singleton_seed=-1,
-            n_agents=n_agents,
-            fixed_layout=fixed_layout,
-            layout=layout
-        )
+        self.height = height
+        self.width = width
+        self.n_walls = n_walls     # Here for future compatibility reasons with randomized starts
+
+        self.agent_view_size = agent_view_size
+        self.layout = layout
+
+        # self.params = EnvParams(
+        #     height=height,
+        #     width=width,
+        #     n_walls=n_walls,
+        #     agent_view_size=agent_view_size,
+        #     replace_wall_pos=replace_wall_pos and not sample_n_walls,
+        #     see_agent=see_agent,
+        #     max_steps=max_steps,
+        #     normalize_obs=normalize_obs,
+        #     n_agents=n_agents,
+        #     fixed_layout=fixed_layout,
+        #     layout=layout
+        # )
 
     @property
     def default_params(self) -> EnvParams:
@@ -121,55 +115,60 @@ class Overcooked(Environment):
     def step_env(
             self,
             key: chex.PRNGKey,
-            state: EnvState,
-            actions: chex.Array,
-    ) -> Tuple[chex.Array, EnvState, float, bool, dict]:
+            state: State,
+            actions: Dict[str, chex.Array],
+            params: EnvParams
+    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Perform single timestep state transition."""
 
-        acts = self.action_set.take(indices=jnp.array(actions))
+        acts = self.action_set.take(indices=jnp.array([actions["agent_0"], actions["agent_1"]]))
 
-        state, reward = self.step_agents(key, state, acts)
+        state, reward = self.step_agents(key, state, acts, params)
         # Check game condition & no. steps for termination condition
         state = state.replace(time=state.time + 1)
-        done = self.is_terminal(state)
+        done = self.is_terminal(state, params)
         state = state.replace(terminal=done)
 
-        obs_array = self.get_obs(state)
-        # obs_array = jax.vmap(self.get_partial_obs, in_axes=(None, 0))(state, jnp.arange(self.params.n_agents))
+        obs = self.get_obs(state, params)
+        rewards = {"agent_0": reward, "agent_1": reward}
+        dones = {"agent_0": done, "agent_1": done, "__all__": done}
 
         return (
-            lax.stop_gradient(obs_array),
+            lax.stop_gradient(obs),
             lax.stop_gradient(state),
-            reward.astype(jnp.float32),
-            done,
+            rewards,
+            dones,
             {},
         )
 
     def reset_env(
             self,
             key: chex.PRNGKey,
-    ) -> Tuple[chex.Array, EnvState]:
+            params: EnvParams
+    ) -> Tuple[Dict[str, chex.Array], State]:
         """Reset environment state by resampling contents of maze_map
         - initial agent position
         - goal position
         - wall positions
         """
-        params = self.params
-        fixed_layout = params.fixed_layout
-        layout = params.layout
 
-        h = params.height
-        w = params.width
+        fixed_layout = params.fixed_layout
+        layout = self.layout
+
+        h = self.height
+        w = self.width
         assert (1 - fixed_layout) or (h == layout.get("height", -1))
         assert (1 - fixed_layout) or (w == layout.get("width", -1))
-        n_agents = params.n_agents
+        num_agents = self.num_agents
         all_pos = np.arange(np.prod([h, w]), dtype=jnp.uint32)
 
+
+        # TODO: Cleanup random map generation
         # Reset wall map, with shape H x W, and value of 1 at (i,j) iff there is a wall at (i,j)
         key, subkey = jax.random.split(key)
         wall_idx = jax.random.choice(
             subkey, all_pos,
-            shape=(params.n_walls,),
+            shape=(self.n_walls,),
             replace=params.replace_wall_pos)
 
         # Replace wall_idx with fixed layout if applicable
@@ -181,7 +180,7 @@ class Overcooked(Environment):
 
         # Reset agent position + dir
         key, subkey = jax.random.split(key)
-        agent_idx = jax.random.choice(subkey, all_pos, shape=(n_agents,),
+        agent_idx = jax.random.choice(subkey, all_pos, shape=(num_agents,),
                                       p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
         # Replace with fixed layout if applicable
         agent_idx = (1-fixed_layout)*agent_idx + fixed_layout*layout.get("agent_idx", agent_idx)
@@ -189,7 +188,7 @@ class Overcooked(Environment):
         agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32).transpose() # dim = n_agents x 2
 
         key, subkey = jax.random.split(key)
-        agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8), shape=(n_agents,))
+        agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8), shape=(num_agents,))
         agent_dir = DIR_TO_VEC.at[agent_dir_idx].get() # dim = n_agents x 2
 
         # Reset goal position
@@ -218,13 +217,16 @@ class Overcooked(Environment):
             plate_pile_pos,
             onion_pile_pos,
             pot_pos,
-            pad_obs=True)
+            pad_obs=True,
+            num_agents=self.num_agents,
+            agent_view_size=self.agent_view_size
+        )
 
         # agent inventory
         empty = OBJECT_TO_INDEX['empty']
         agent_inv = jnp.array([empty, empty])
 
-        state = EnvState(
+        state = State(
             agent_pos=agent_pos,
             agent_dir=agent_dir,
             agent_dir_idx=agent_dir_idx,
@@ -237,12 +239,11 @@ class Overcooked(Environment):
             terminal=False,
         )
 
-        obs_array = self.get_obs(state)
-        # obs_array = jax.vmap(self.get_partial_obs, in_axes=(None, 0))(state, jnp.arange(n_agents))
+        obs = self.get_obs(state, params)
 
-        return obs_array, state
+        return obs, state
 
-    def get_obs(self, state: EnvState) -> chex.Array:
+    def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
         """Return a full observation, of size width x height x 26.
         Env channels are the same for both agents. Agent-related channels are reordered to have the active agent first.
         Channels:
@@ -264,7 +265,7 @@ class Overcooked(Environment):
         onions_in_soup_layer = jnp.minimum(23 - pot_status, 3) * (pot_status < 20) * pot_loc_layer + 3 * soup_loc   # 0/3, as long as cooking or done
         pot_cooking_time_layer = pot_status * (pot_status < 20)                           # Timer: 19 to 0
         soup_ready_layer = pot_loc_layer * (pot_status == 0) + soup_loc                 # Ready soups, plated or not
-        urgency_layer = jnp.ones(maze_map.shape, dtype=jnp.uint8) * ((self.max_episode_steps() - state.time) < 40)
+        urgency_layer = jnp.ones(maze_map.shape, dtype=jnp.uint8) * ((self.max_steps(params) - state.time) < 40)
 
         agent_pos_layers = jnp.zeros((2, height, width))
         agent_pos_layers = agent_pos_layers.at[0, state.agent_pos[0, 1], state.agent_pos[0, 0]].set(1)
@@ -315,68 +316,69 @@ class Overcooked(Environment):
         alice_obs = jnp.transpose(alice_obs, (1, 2, 0))
         bob_obs = jnp.transpose(bob_obs, (1, 2, 0))
 
-        obs = OrderedDict(dict(
-            image=jnp.array([alice_obs, bob_obs]),
-            agent_dir=state.agent_dir_idx
-        ))
+        # obs = OrderedDict(dict(
+        #     image=jnp.array([alice_obs, bob_obs]),
+        #     agent_dir=state.agent_dir_idx
+        # ))
 
-        return obs
+        return {"agent_0" : alice_obs, "agent_1" : bob_obs}
 
-    def get_partial_obs(self, state: EnvState, agent_idx: int) -> chex.Array:
-        """Return limited (partial) grid view ahead of agent. Currently not used"""
-        obs = jnp.zeros(self.obs_shape, dtype=jnp.uint8)
-        agent_pos = state.agent_pos[agent_idx]
-        agent_dir = state.agent_dir[agent_idx]
-        agent_dir_idx = state.agent_dir_idx[agent_idx]
+    # def get_partial_obs(self, state: State, agent_idx: int) -> chex.Array:
+    #     """Return limited (partial) grid view ahead of agent. Currently not used"""
+    #     obs = jnp.zeros(self.obs_shape, dtype=jnp.uint8)
+    #     agent_pos = state.agent_pos[agent_idx]
+    #     agent_dir = state.agent_dir[agent_idx]
+    #     agent_dir_idx = state.agent_dir_idx[agent_idx]
+    #
+    #     agent_x, agent_y = agent_pos
+    #
+    #     obs_fwd_bound1 = agent_pos
+    #     obs_fwd_bound2 = agent_pos + agent_dir * (self.obs_shape[0] - 1)
+    #
+    #     side_offset = self.obs_shape[0] // 2
+    #     obs_side_bound1 = agent_pos + (agent_dir == 0) * side_offset
+    #     obs_side_bound2 = agent_pos - (agent_dir == 0) * side_offset
+    #
+    #     all_bounds = jnp.stack([obs_fwd_bound1, obs_fwd_bound2, obs_side_bound1, obs_side_bound2])
+    #
+    #     # Clip obs to grid bounds appropriately
+    #     padding = obs.shape[0] - 1
+    #     obs_bounds_min = np.min(all_bounds, 0) + padding
+    #     obs_range_x = jnp.arange(obs.shape[0]) + obs_bounds_min[1]
+    #     obs_range_y = jnp.arange(obs.shape[0]) + obs_bounds_min[0]
+    #
+    #     meshgrid = jnp.meshgrid(obs_range_y, obs_range_x)
+    #     coord_y = meshgrid[1].flatten()
+    #     coord_x = meshgrid[0].flatten()
+    #
+    #     obs = state.maze_map.at[
+    #           coord_y, coord_x, :].get().reshape(obs.shape[0], obs.shape[1], 3)
+    #
+    #     obs = (agent_dir_idx == 0) * jnp.rot90(obs, 1) + \
+    #           (agent_dir_idx == 1) * jnp.rot90(obs, 2) + \
+    #           (agent_dir_idx == 2) * jnp.rot90(obs, 3) + \
+    #           (agent_dir_idx == 3) * jnp.rot90(obs, 4)
+    #
+    #     if not self.params.see_agent:
+    #         obs = obs.at[-1, side_offset].set(
+    #             jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
+    #         )
+    #
+    #     image = obs.astype(jnp.uint8)
+    #     if self.params.normalize_obs:
+    #         image = image / 10.0
+    #
+    #     obs_dict = dict(
+    #         image=image,
+    #         agent_dir=agent_dir_idx
+    #     )
+    #
+    #     return OrderedDict(obs_dict)
 
-        agent_x, agent_y = agent_pos
 
-        obs_fwd_bound1 = agent_pos
-        obs_fwd_bound2 = agent_pos + agent_dir * (self.obs_shape[0] - 1)
-
-        side_offset = self.obs_shape[0] // 2
-        obs_side_bound1 = agent_pos + (agent_dir == 0) * side_offset
-        obs_side_bound2 = agent_pos - (agent_dir == 0) * side_offset
-
-        all_bounds = jnp.stack([obs_fwd_bound1, obs_fwd_bound2, obs_side_bound1, obs_side_bound2])
-
-        # Clip obs to grid bounds appropriately
-        padding = obs.shape[0] - 1
-        obs_bounds_min = np.min(all_bounds, 0) + padding
-        obs_range_x = jnp.arange(obs.shape[0]) + obs_bounds_min[1]
-        obs_range_y = jnp.arange(obs.shape[0]) + obs_bounds_min[0]
-
-        meshgrid = jnp.meshgrid(obs_range_y, obs_range_x)
-        coord_y = meshgrid[1].flatten()
-        coord_x = meshgrid[0].flatten()
-
-        obs = state.maze_map.at[
-              coord_y, coord_x, :].get().reshape(obs.shape[0], obs.shape[1], 3)
-
-        obs = (agent_dir_idx == 0) * jnp.rot90(obs, 1) + \
-              (agent_dir_idx == 1) * jnp.rot90(obs, 2) + \
-              (agent_dir_idx == 2) * jnp.rot90(obs, 3) + \
-              (agent_dir_idx == 3) * jnp.rot90(obs, 4)
-
-        if not self.params.see_agent:
-            obs = obs.at[-1, side_offset].set(
-                jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
-            )
-
-        image = obs.astype(jnp.uint8)
-        if self.params.normalize_obs:
-            image = image / 10.0
-
-        obs_dict = dict(
-            image=image,
-            agent_dir=agent_dir_idx
-        )
-
-        return OrderedDict(obs_dict)
-
-    def step_agents(self, key: chex.PRNGKey, state: EnvState, action: chex.Array) -> Tuple[EnvState, float]:
-        params = self.params
-
+    def step_agents(
+            self, key: chex.PRNGKey, state: State, action: chex.Array, params: EnvParams,
+    ) -> Tuple[State, float]:
         # Update agent position (forward action)
         is_move_action = jnp.logical_and(action != Actions.stay, action != Actions.interact)
         is_move_action_transposed = jnp.expand_dims(is_move_action, 0).transpose()  # Necessary to broadcast correctly
@@ -384,7 +386,7 @@ class Overcooked(Environment):
         fwd_pos = jnp.minimum(
             jnp.maximum(state.agent_pos + is_move_action_transposed * DIR_TO_VEC[jnp.minimum(action, 3)] \
                         + ~is_move_action_transposed * state.agent_dir, 0),
-            jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32)
+            jnp.array((self.width - 1, self.height - 1), dtype=jnp.uint32)
         )
 
         # Can't go past wall or goal
@@ -395,7 +397,7 @@ class Overcooked(Environment):
 
         fwd_pos_has_wall, fwd_pos_has_goal = jax.vmap(_wall_or_goal, in_axes=(0, None, None))(fwd_pos, state.wall_map, state.goal_pos)
 
-        fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((params.n_agents, 1))
+        fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((self.num_agents, 1))
 
         bounced = jnp.logical_or(fwd_pos_blocked, ~is_move_action_transposed)
 
@@ -510,7 +512,7 @@ class Overcooked(Environment):
             return agent_x, agent_y, agent_x_prev, agent_y_prev, agent
 
         vec_update = jax.vmap(_get_agent_updates, in_axes=(0, 0, 0, 0))
-        agent_x, agent_y, agent_x_prev, agent_y_prev, agent_vec = vec_update(agent_dir_idx, agent_pos, agent_pos_prev, jnp.arange(params.n_agents))
+        agent_x, agent_y, agent_x_prev, agent_y_prev, agent_vec = vec_update(agent_dir_idx, agent_pos, agent_pos_prev, jnp.arange(self.num_agents))
         empty = jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
         padding = self.obs_shape[0] - 1
 
@@ -531,7 +533,6 @@ class Overcooked(Environment):
         pots = jax.vmap(_cook_pots, in_axes=0)(pots)
         maze_map = maze_map.at[padding + pot_y, padding + pot_x, :].set(pots)
 
-        # reward = jnp.max((1.0 - 0.9 * ((state.time + 1) / params.max_episode_steps)) * fwd_pos_has_goal)
         reward = alice_reward + bob_reward
 
         return (
@@ -632,9 +633,9 @@ class Overcooked(Environment):
         reward = jnp.array(successful_delivery, dtype=float)*20
         return maze_map, inventory, reward
 
-    def is_terminal(self, state: EnvState) -> bool:
+    def is_terminal(self, state: State, params: EnvParams) -> bool:
         """Check whether state is terminal."""
-        done_steps = state.time >= self.params.max_episode_steps
+        done_steps = state.time >= params.max_steps
         return jnp.logical_or(done_steps, state.terminal)
 
     def get_eval_solved_rate_fn(self):
@@ -646,7 +647,7 @@ class Overcooked(Environment):
     @property
     def name(self) -> str:
         """Environment name."""
-        return "Maze"
+        return "Overcooked"
 
     @property
     def num_actions(self) -> int:
@@ -669,20 +670,19 @@ class Overcooked(Environment):
 
         return spaces.Dict(spaces_dict)
 
-    def state_space(self) -> spaces.Dict:
+    def state_space(self, params) -> spaces.Dict:
         """State space of the environment."""
-        params = self.params
-        h = params.height
-        w = params.width
-        agent_view_size = params.agent_view_size
+        h = self.height
+        w = self.width
+        agent_view_size = se;f.agent_view_size
         return spaces.Dict({
             "agent_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
             "agent_dir": spaces.Discrete(4),
             "goal_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
             "maze_map": spaces.Box(0, 255, (w + agent_view_size, h + agent_view_size, 3), dtype=jnp.uint32),
-            "time": spaces.Discrete(params.max_episode_steps),
+            "time": spaces.Discrete(params.max_steps),
             "terminal": spaces.Discrete(2),
         })
 
-    def max_episode_steps(self) -> int:
-        return self.params.max_episode_steps
+    def max_steps(self, params) -> int:
+        return params.max_steps

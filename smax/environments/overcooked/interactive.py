@@ -5,8 +5,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from smax.gridworld.maze import Maze #, Actions
-from smax.gridworld.ma_maze import MAMaze
+# from smax.gridworld.maze import Maze #, Actions
+# from smax.gridworld.ma_maze import MAMaze
 from smax.environments.overcooked.overcooked import Overcooked
 from smax.environments.overcooked.layouts import layouts
 
@@ -14,17 +14,17 @@ from smax.environments.overcooked.layouts import layouts
 def redraw(state, obs, extras):
     extras['viz'].render(extras['params'], state, highlight=False)
 
-    if extras['obs_viz'] is not None:
-        if extras['env'] == "MAMaze" or "Overcooked":
-            obs_viz.render_grid(np.asarray(obs['image'][0]), k_rot90=3, agent_dir_idx=[3])
-            obs_viz2.render_grid(np.asarray(obs['image'][1]), k_rot90=3, agent_dir_idx=[3])
-        else:
-            obs_viz.render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
+    # if extras['obs_viz'] is not None:
+    #     if extras['env'] == "MAMaze" or "Overcooked":
+    #         obs_viz.render_grid(np.asarray(obs['image'][0]), k_rot90=3, agent_dir_idx=[3])
+    #         obs_viz2.render_grid(np.asarray(obs['image'][1]), k_rot90=3, agent_dir_idx=[3])
+    #     else:
+    #         obs_viz.render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
 
 
 def reset(key, env, extras):
     key, subkey = jax.random.split(extras['rng'])
-    obs, state = extras['jit_reset'](subkey)
+    obs, state = extras['jit_reset'](subkey, extras['params'])
 
     extras['rng'] = key
     extras['obs'] = obs
@@ -34,14 +34,15 @@ def reset(key, env, extras):
 
 
 def step(env, action, extras):
-    # TODO: Handle actions better (e.g. choose which agent to control)
+    # TODO: FIX OBSERVATION HANDLING
     key, subkey = jax.random.split(extras['rng'])
 
-    print("action:", jnp.array([action, action.left]))
-    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, action]))
+    actions = {"agent_0" : jnp.array(action), "agent_1" : jnp.array(action)}
+    print("Actions : ", actions)
+    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], actions, extras['params'])
     extras['obs'] = obs
     extras['state'] = state
-    print(f"reward={reward}, agent_dir={obs['agent_dir']}, agent_inv={state.agent_inv}")
+    print(f"reward={reward}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done}")
     
     if extras["debug"]:
         layers = [f"player_{i}_loc" for i in range(2)]
@@ -72,7 +73,7 @@ def step(env, action, extras):
             print(debug_obs[i])
     # print(f"agent obs =\n {obs}")
 
-    if done or (jnp.array([action, action]) == Actions.done).any():
+    if done["__all__"] or (jnp.array([action, action]) == Actions.done).any():
         key, subkey = jax.random.split(subkey)
         reset(subkey, env, extras)
     else:
@@ -221,6 +222,8 @@ if __name__ == '__main__':
         from smax.gridworld.grid_viz import GridVisualizer as Visualizer
         from smax.gridworld.maze import Actions
 
+        params = env.params
+
     elif args.env == "MAMaze":
         env = MAMaze(
             height=13,
@@ -232,6 +235,8 @@ if __name__ == '__main__':
         from smax.gridworld.grid_viz import GridVisualizer as Visualizer
         from smax.gridworld.maze import Actions
 
+        params = env.params
+
     elif args.env == "Overcooked":
         if len(args.layout) > 0:
             layout = layouts[args.layout]
@@ -239,9 +244,6 @@ if __name__ == '__main__':
                 height=layout["height"],
                 width=layout["width"],
                 n_walls=1,
-                see_agent=True,
-                n_agents=2,
-                fixed_layout=True,
                 layout=layout
             )
         else:
@@ -255,7 +257,18 @@ if __name__ == '__main__':
         from smax.viz.overcooked_viz import OvercookedVisualizer as Visualizer
         from smax.environments.overcooked.overcooked import Actions
 
-    params = env.params
+        params = env.default_params
+        # params = params.replace(
+        #     # height=layout["height"],
+        #     # width=layout["width"],
+        #     # n_walls=1,
+        #     # see_agent=True,
+        #     # n_agents=2,
+        #     # fixed_layout=True,
+        #     # layout=layout
+        # )
+
+
 
     viz = Visualizer()
     obs_viz = None
@@ -265,19 +278,20 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(True):
+    with jax.disable_jit(False):
         jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)
         key, subkey = jax.random.split(key)
-        o0, s0 = jit_reset(subkey)
+        o0, s0 = jit_reset(subkey, params)
         viz.render(params, s0, highlight=False)
-        if obs_viz is not None:
-            if args.env == "MAMaze" or args.env == "Overcooked":
-                obs_viz.render_grid(np.asarray(o0['image'][0]), k_rot90=3, agent_dir_idx=[3])
-                obs_viz2.render_grid(np.asarray(o0['image'][1]), k_rot90=3, agent_dir_idx=[3])
-            else:
-                obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
+        ## TODO: Fix obs_viz
+        # if obs_viz is not None:
+        #     if args.env == "MAMaze" or args.env == "Overcooked":
+        #         obs_viz.render_grid(np.asarray(o0['image'][0]), k_rot90=3, agent_dir_idx=[3])
+        #         obs_viz2.render_grid(np.asarray(o0['image'][1]), k_rot90=3, agent_dir_idx=[3])
+        #     else:
+        #         obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
 
         key, subkey = jax.random.split(key)
         extras = {

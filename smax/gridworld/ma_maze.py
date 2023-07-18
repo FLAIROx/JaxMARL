@@ -1,6 +1,4 @@
-from dataclasses import dataclass
-from collections import namedtuple, OrderedDict
-from functools import partial
+from collections import OrderedDict
 from enum import IntEnum
 
 import numpy as np
@@ -9,14 +7,12 @@ import jax.numpy as jnp
 from jax import lax
 from smax.gridworld.env import Environment
 from smax.environments import spaces
-from typing import Tuple, Optional
+from typing import Tuple
 import chex
 from flax import struct
-from flax.core.frozen_dict import FrozenDict
 
-from smax.gridworld.common import (
+from smax.environments.overcooked.common import (
     OBJECT_TO_INDEX,
-    COLORS,
     COLOR_TO_INDEX,
     DIR_TO_VEC,
     make_maze_map)
