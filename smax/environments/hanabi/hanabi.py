@@ -7,7 +7,8 @@ from flax import struct
 from typing import Tuple, Dict
 from functools import partial
 from gymnax.environments.spaces import Discrete
-from smax.environments.multi_agent_env import MultiAgentEnv
+# from smax.environments.multi_agent_env import MultiAgentEnv
+from multi_agent_env import MultiAgentEnv
 
 
 @struct.dataclass
@@ -30,18 +31,14 @@ class State:
 
 @struct.dataclass
 class EnvParams:
-    num_colors: int
-    num_ranks: int
-    hand_size: int
-    max_info_tokens: int
-    max_life_tokens: int
-    num_cards_of_rank: chex.Array
+    turn_limit: int
 
 
 class HanabiGame(MultiAgentEnv):
 
-    def __init__(self, num_agents=2, agents=None, action_spaces=None, observation_spaces=None, obs_size=None,
-                 num_moves=None, params=None):
+    def __init__(self, num_agents=2, num_colors=5, num_ranks=5, hand_size=5, max_info_tokens=8, max_life_tokens=3,
+                 num_cards_of_rank=np.array([3, 2, 2, 2, 1]), agents=None, action_spaces=None, observation_spaces=None,
+                 obs_size=None, num_moves=None, params=None):
         super().__init__(num_agents)
 
         if params is None:
@@ -49,6 +46,12 @@ class HanabiGame(MultiAgentEnv):
 
         self.num_agents = num_agents
         self.agent_range = jnp.arange(num_agents)
+        self.num_colors = num_colors
+        self.num_ranks = num_ranks
+        self.hand_size = hand_size
+        self.max_info_tokens = max_info_tokens
+        self.max_life_tokens = max_life_tokens
+        self.num_cards_of_rank = num_cards_of_rank
 
         if agents is None:
             self.agents = [f"agent_{i}" for i in range(num_agents)]
@@ -60,17 +63,17 @@ class HanabiGame(MultiAgentEnv):
         if num_moves is None:
             self.num_moves = np.sum(np.array([
                 # discard, play
-                params.hand_size * 2,
+                hand_size * 2,
                 # hint color, rank
-                num_agents * (params.num_colors + params.num_ranks)
+                num_agents * (num_colors + num_ranks)
             ])).squeeze()
 
         if obs_size is None:
             self.obs_size = (
-                    (params.hand_size * (params.num_colors + params.num_ranks)) +
-                    ((num_agents - 1) * params.hand_size * params.num_colors * params.num_ranks) +
-                    self.num_moves + (params.num_colors * params.num_ranks) + params.max_info_tokens +
-                    params.max_life_tokens + (num_agents * self.num_moves) + num_agents
+                    (hand_size * (num_colors + num_ranks)) +
+                    ((num_agents - 1) * hand_size * num_colors * num_ranks) +
+                    self.num_moves + (num_colors * num_ranks) + max_info_tokens +
+                    max_life_tokens + (num_agents * self.num_moves) + num_agents
             )
 
         self.action_set = jnp.arange(self.num_moves)
@@ -82,12 +85,7 @@ class HanabiGame(MultiAgentEnv):
     @property
     def default_params(self) -> EnvParams:
         params = EnvParams(
-            num_colors=5,
-            num_ranks=5,
-            hand_size=5,
-            max_info_tokens=8,
-            max_life_tokens=3,
-            num_cards_of_rank=np.array([3, 2, 2, 2, 1])
+            turn_limit=1e6
         )
 
         return params
@@ -106,11 +104,11 @@ class HanabiGame(MultiAgentEnv):
             hands, fireworks, info_tokens, aidx = carry
             legal_moves = jnp.zeros(self.num_moves)
             # discard always legal
-            legal_moves = legal_moves.at[1:params.hand_size].set(1)
-            move_idx += params.hand_size
+            legal_moves = legal_moves.at[1:self.hand_size].set(1)
+            move_idx += self.hand_size
             # play moves always legal
-            legal_moves = legal_moves.at[move_idx:move_idx + params.hand_size].set(1)
-            move_idx += params.hand_size
+            legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(1)
+            move_idx += self.hand_size
             # hints depend on other player cards
             other_hands = jnp.delete(hands, aidx, axis=0, assume_unique_indices=True)
 
@@ -129,7 +127,7 @@ class HanabiGame(MultiAgentEnv):
 
             _, valid_hints = lax.scan(_get_hints_for_hand, (0, other_hands), None, self.num_agents - 1)
             valid_hints = jnp.roll(valid_hints, aidx)
-            num_hints = (self.num_agents - 1) * (params.num_colors + params.num_ranks)
+            num_hints = (self.num_agents - 1) * (self.num_colors + self.num_ranks)
             valid_hints = jnp.concatenate(valid_hints, axis=0)
             info_tokens_available = (jnp.sum(info_tokens) != 0)
             valid_hints *= info_tokens_available
@@ -147,46 +145,45 @@ class HanabiGame(MultiAgentEnv):
         return legal_moves
 
     def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[Dict, State]:
-        params = self.default_params
 
         def _gen_cards(aidx, unused):
             color, rank = shuffled_pairs[aidx]
-            card = jnp.zeros((params.num_colors, params.num_ranks))
+            card = jnp.zeros((self.num_colors, self.num_ranks))
             card = card.at[color, rank].set(1)
             return aidx + 1, card
 
-        colors = jnp.arange(params.num_colors)
-        ranks = jnp.arange(params.num_ranks)
-        ranks = jnp.repeat(ranks, params.num_cards_of_rank)
+        colors = jnp.arange(self.num_colors)
+        ranks = jnp.arange(self.num_ranks)
+        ranks = jnp.repeat(ranks, self.num_cards_of_rank)
         color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
         key, _key = jax.random.split(key)
         shuffled_pairs = jax.random.permutation(_key, color_rank_pairs, axis=0)
-        deck_size = np.sum(params.num_cards_of_rank) * params.num_colors
+        deck_size = np.sum(self.num_cards_of_rank) * self.num_colors
         _, deck = lax.scan(_gen_cards, 0, None, deck_size)
 
         # top of deck is first array element, not last
         def _deal_cards(aidx, unused):
-            start = aidx * params.hand_size
-            hand = lax.dynamic_slice(deck, (start, 0, 0), (params.hand_size, params.num_colors, params.num_ranks))
+            start = aidx * self.hand_size
+            hand = lax.dynamic_slice(deck, (start, 0, 0), (self.hand_size, self.num_colors, self.num_ranks))
             return aidx + 1, hand
 
         _, hands = lax.scan(_deal_cards, 0, None, self.num_agents)
 
         # start off with all color, rank combinations being possible for all cards
-        card_knowledge = jnp.ones((self.num_agents, params.hand_size, params.num_colors + params.num_ranks))
+        card_knowledge = jnp.ones((self.num_agents, self.hand_size, self.num_colors + self.num_ranks))
 
         # remove dealt cards from deck
-        num_cards_dealt = self.num_agents * params.hand_size
-        deck = deck.at[:num_cards_dealt].set(jnp.zeros((params.num_colors, params.num_ranks)))
+        num_cards_dealt = self.num_agents * self.hand_size
+        deck = deck.at[:num_cards_dealt].set(jnp.zeros((self.num_colors, self.num_ranks)))
 
         # init discard pile
         discard_pile = jnp.zeros_like(deck)
         num_cards_discarded = 0
 
         # thermometer encoded
-        life_tokens = jnp.ones(params.max_life_tokens)
-        info_tokens = jnp.ones(params.max_info_tokens).astype(int)
-        fireworks = jnp.zeros((params.num_colors, params.num_ranks))
+        life_tokens = jnp.ones(self.max_life_tokens)
+        info_tokens = jnp.ones(self.max_info_tokens).astype(int)
+        fireworks = jnp.zeros((self.num_colors, self.num_ranks))
 
         # other state variable inits
         score = 0
@@ -238,35 +235,38 @@ class HanabiGame(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=(0,))
     def step_env(self, key: chex.PRNGKey, state: State, action: int,
-                 params: EnvParams) -> Tuple[chex.Array, State, int, bool, Dict]:
+                 params: EnvParams) -> Tuple[chex.Array, State, Dict, Dict, Dict]:
         state, reward = self.step_agent(key, state, action, params)
 
         done = self.terminal(state)
+        dones = {agent: done for agent in self.agents}
+        dones["_all__"] = done
+
+        rewards = {agent: reward for agent in self.agents}
 
         info = {}
 
         return (
             lax.stop_gradient(self.get_obs(state, params)),
             lax.stop_gradient(state),
-            reward,
-            done,
+            rewards,
+            dones,
             info
         )
 
     def step_agent(self, key: chex.PRNGKey, state: State, action: int,
                     params: EnvParams) -> Tuple[State, int]:
-        params = self.default_params
 
         aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
         reward = 0
 
-        is_discard = (action < params.hand_size)
-        is_hint = ((2 * params.hand_size) <= action)
+        is_discard = (action < self.hand_size)
+        is_hint = ((2 * self.hand_size) <= action)
 
         def _discard_play_fn(state, action):
             action -= 1
             hand_before = state.player_hands.at[aidx].get()
-            card_idx = ((is_discard * action) + (jnp.logical_not(is_discard) * (action - params.hand_size))
+            card_idx = ((is_discard * action) + (jnp.logical_not(is_discard) * (action - self.hand_size))
                         ).astype(int)
             card = hand_before.at[card_idx].get()
             # discard selected card if discard action
@@ -274,7 +274,7 @@ class HanabiGame(MultiAgentEnv):
             discard_pile = state.discard_pile.at[state.num_cards_discarded].set(discard_card)
             num_cards_discarded = state.num_cards_discarded + is_discard
             infos_remaining = jnp.sum(state.info_tokens)
-            infos_depleted = (infos_remaining < params.max_info_tokens)
+            infos_depleted = (infos_remaining < self.max_info_tokens)
             new_infos = (infos_remaining + (is_discard * infos_depleted)).astype(int)
             info_tokens = state.info_tokens.at[new_infos - 1].set(1)
             # play selected card if play action
@@ -292,7 +292,7 @@ class HanabiGame(MultiAgentEnv):
             # remove knowledge of selected card
             player_knowledge = state.card_knowledge.at[aidx].get()
             player_knowledge = player_knowledge.at[card_idx].set(jnp.ones(
-                params.num_colors + params.num_ranks))
+                self.num_colors + self.num_ranks))
             card_knowledge = state.card_knowledge.at[aidx].set(player_knowledge)
             # deal a new card
             new_card = state.deck.at[state.num_cards_dealt].get()
@@ -316,8 +316,8 @@ class HanabiGame(MultiAgentEnv):
 
         def _hint_fn(state, action):
             action -= 1
-            action_idx = action - (2 * params.hand_size)
-            hints_per_player = params.num_colors + params.num_ranks
+            action_idx = action - (2 * self.hand_size)
+            hints_per_player = self.num_colors + self.num_ranks
             # get player hint is being given to
             hint_player_before = jnp.floor(action_idx / hints_per_player).astype(int)
             hint_player = ((aidx + 1 + hint_player_before) % self.num_agents).astype(int)
@@ -325,14 +325,14 @@ class HanabiGame(MultiAgentEnv):
             # define hint as possibilities to remove
             hint = jnp.ones(hints_per_player)
             hint = hint.at[hint_idx].set(0)
-            is_color_hint = (hint_idx < params.num_colors)
+            is_color_hint = (hint_idx < self.num_colors)
             is_rank_hint = jnp.logical_not(is_color_hint)
-            hint_color = (hint.at[:params.num_colors].get() * is_color_hint).astype(int)
-            hint_rank = (hint.at[params.num_colors:].get() * is_rank_hint).astype(int)
+            hint_color = (hint.at[:self.num_colors].get() * is_color_hint).astype(int)
+            hint_rank = (hint.at[self.num_colors:].get() * is_rank_hint).astype(int)
             # get current card knowledge of relevant player
             cur_knowledge = state.card_knowledge.at[hint_player].get()
-            cur_color_knowledge = cur_knowledge.at[:, :params.num_colors].get()
-            cur_rank_knowledge = cur_knowledge.at[:, params.num_colors:].get()
+            cur_color_knowledge = cur_knowledge.at[:, :self.num_colors].get()
+            cur_rank_knowledge = cur_knowledge.at[:, self.num_colors:].get()
             # get relevant player's hand
             cards = state.player_hands.at[hint_player].get()
             card_colors = jnp.sum(cards, axis=2)
@@ -356,7 +356,7 @@ class HanabiGame(MultiAgentEnv):
             card_knowledge = state.card_knowledge.at[hint_player].set(updated_knowledge)
             # remove an info token
             num_info_tokens = jnp.sum(state.info_tokens).astype(int) - 1
-            info_tokens = jnp.arange(params.max_info_tokens)
+            info_tokens = jnp.arange(self.max_info_tokens)
             info_tokens = (info_tokens < num_info_tokens).astype(int)
             return state.replace(
                 card_knowledge=card_knowledge,
@@ -367,7 +367,7 @@ class HanabiGame(MultiAgentEnv):
         state = lax.cond(is_hint, _hint_fn, _discard_play_fn, state, action)
         fireworks_after = jnp.sum(state.fireworks, axis=(0, 1))
         out_of_lives = (jnp.sum(state.life_tokens) == 0)
-        game_won = (fireworks_after == (params.num_colors * params.num_ranks))
+        game_won = (fireworks_after == (self.num_colors * self.num_ranks))
         deck_empty = (state.num_cards_dealt >= state.deck_size)
         terminal = jnp.logical_or(jnp.logical_or(out_of_lives, game_won), deck_empty)
         cur_player = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
