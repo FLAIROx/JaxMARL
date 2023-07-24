@@ -86,6 +86,7 @@ class MiniSMACVisualizer(Visualizer):
                 obs = jnp.array([obs[agent] for agent in self.env.enemy_agents])
                 enemy_actions = jax.vmap(self.heuristic_policy)(key_action, obs)
                 enemy_actions = {agent: enemy_actions[self.env.agent_ids[agent]] for agent in self.env.enemy_agents}
+                actions = {k: v.squeeze() for k, v in actions.items()}
                 actions = {**enemy_actions, **actions}
             else:
                 agents = self.env.agents
