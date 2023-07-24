@@ -65,9 +65,9 @@ def step(env, action, extras):
             "tomatoes",
             "urgency"
         ])
-        print("obs_shape: ", obs["image"].shape)
-        print("OBS: \n", obs["image"][1])
-        debug_obs = jnp.transpose(obs["image"][1], (2,0,1))
+        print("obs_shape: ", obs["agent_0"].shape)
+        print("OBS: \n", obs["agent_0"])
+        debug_obs = jnp.transpose(obs["agent_0"], (2,0,1))
         for i, layer in enumerate(layers):
             print(layer)
             print(debug_obs[i])
@@ -278,7 +278,7 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(False):
+    with jax.disable_jit(True):
         jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)
