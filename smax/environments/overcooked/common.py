@@ -101,19 +101,10 @@ def make_overcooked_map(
 	maze_map = maze_map.at[agent_y_vec,agent_x_vec,:].set(agent_vec)
 
 	# Add goals
-	if len(goal_pos.shape) == 1:
-		goal = jnp.array([OBJECT_TO_INDEX['goal'], COLOR_TO_INDEX['green'], 0], dtype=jnp.uint8)
-		goal_x,goal_y = goal_pos
-		maze_map = maze_map.at[goal_y,goal_x,:].set(goal)
-	else:
-		color_seq = jnp.array(list(GOAL_COLOR_TO_INDEX.values()))[goal_color_sequence]
-		goals = jnp.stack(
-			[jnp.array([OBJECT_TO_INDEX['goal'], color, 0]) for color in color_seq],
-			dtype=jnp.uint8
-		).at[:goal_pos.shape[0]].get()
-		goal_x = goal_pos.at[:,0].get()
-		goal_y = goal_pos.at[:,1].get()
-		maze_map = maze_map.at[goal_y,goal_x,:].set(goals)
+	goal = jnp.array([OBJECT_TO_INDEX['goal'], COLOR_TO_INDEX['green'], 0], dtype=jnp.uint8)
+	goal_x = goal_pos[:, 0]
+	goal_y = goal_pos[:, 1]
+	maze_map = maze_map.at[goal_y, goal_x, :].set(goal)
 
 	# Add onions
 	onion_x = onion_pile_pos[:,0]

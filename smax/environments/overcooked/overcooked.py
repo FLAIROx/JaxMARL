@@ -210,7 +210,7 @@ class Overcooked(MultiAgentEnv):
                                      p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32))
         # Replace with fixed layout if applicable
         goal_idx = (1-fixed_layout)*goal_idx + fixed_layout*layout.get("goal_idx", goal_idx)
-        goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).flatten()
+        goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).transpose()
 
         onion_pile_idx = layout.get("onion_pile_idx")
         onion_pile_pos = jnp.array([onion_pile_idx % w, onion_pile_idx // w], dtype=jnp.uint32).transpose()
@@ -449,7 +449,10 @@ class Overcooked(MultiAgentEnv):
         # Can't go past wall or goal
         def _wall_or_goal(fwd_position, wall_map, goal_pos):
             fwd_wall = wall_map.at[fwd_position[1], fwd_position[0]].get()
-            fwd_goal = jnp.logical_and(fwd_position[0] == goal_pos[0], fwd_position[1] == goal_pos[1])
+            goal_collision = lambda pos, goal : jnp.logical_and(pos[0] == goal[0], pos[1] == goal[1])
+            fwd_goal = jax.vmap(goal_collision, in_axes=(None, 0))(fwd_position, goal_pos)
+            # fwd_goal = jnp.logical_and(fwd_position[0] == goal_pos[0], fwd_position[1] == goal_pos[1])
+            fwd_goal = jnp.any(fwd_goal)
             return fwd_wall, fwd_goal
 
         fwd_pos_has_wall, fwd_pos_has_goal = jax.vmap(_wall_or_goal, in_axes=(0, None, None))(fwd_pos, state.wall_map, state.goal_pos)
@@ -571,7 +574,10 @@ class Overcooked(MultiAgentEnv):
         vec_update = jax.vmap(_get_agent_updates, in_axes=(0, 0, 0, 0))
         agent_x, agent_y, agent_x_prev, agent_y_prev, agent_vec = vec_update(agent_dir_idx, agent_pos, agent_pos_prev, jnp.arange(self.num_agents))
         empty = jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
-        padding = self.obs_shape[0] - 1
+
+        # Compute padding, added automatically by map maker function
+        height = self.obs_shape[1]
+        padding = (state.maze_map.shape[0] - height) // 2
 
         maze_map = maze_map.at[padding + agent_y_prev, padding + agent_x_prev, :].set(empty)
         maze_map = maze_map.at[padding + agent_y, padding + agent_x, :].set(agent_vec)
