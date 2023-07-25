@@ -58,7 +58,7 @@ OBJECT_INDEX_TO_VEC = jnp.array([
 	jnp.array([OBJECT_TO_INDEX['goal'], COLOR_TO_INDEX['green'], 0], dtype=jnp.uint8),
 	jnp.array([OBJECT_TO_INDEX['pot'], COLOR_TO_INDEX['black'], 0], dtype=jnp.uint8),
 	jnp.array([OBJECT_TO_INDEX['dish'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8),
-	jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red'], 0]),  					# Default color and direction
+	jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red'], 0], dtype=jnp.uint8),  					# Default color and direction
 ])
 
 

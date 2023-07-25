@@ -12,4 +12,5 @@ from .mpe import (
 )
 from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC
 from .switch_riddle import SwitchRiddle
+from .overcooked import Overcooked, overcooked_layouts
 

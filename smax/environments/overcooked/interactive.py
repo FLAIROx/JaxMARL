@@ -8,7 +8,7 @@ import numpy as np
 # from smax.gridworld.maze import Maze #, Actions
 # from smax.gridworld.ma_maze import MAMaze
 from smax.environments.overcooked.overcooked import Overcooked
-from smax.environments.overcooked.layouts import layouts
+from smax.environments.overcooked.layouts import overcooked_layouts as layouts
 
 
 def redraw(state, obs, extras):
@@ -34,7 +34,6 @@ def reset(key, env, extras):
 
 
 def step(env, action, extras):
-    # TODO: FIX OBSERVATION HANDLING
     key, subkey = jax.random.split(extras['rng'])
 
     actions = {"agent_0" : jnp.array(action), "agent_1" : jnp.array(action)}
@@ -243,18 +242,15 @@ if __name__ == '__main__':
             env = Overcooked(
                 height=layout["height"],
                 width=layout["width"],
-                n_walls=1,
                 layout=layout
             )
         else:
             env = Overcooked(
                 height=13,
                 width=13,
-                n_walls=25,
-                see_agent=True,
-                n_agents=2
+                n_walls=25
             )
-        from smax.viz.overcooked_viz import OvercookedVisualizer as Visualizer
+        from smax.viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
         from smax.environments.overcooked.overcooked import Actions
 
         params = env.default_params
@@ -278,7 +274,7 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(True):
+    with jax.disable_jit(False):
         jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)

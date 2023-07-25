@@ -10,7 +10,8 @@ from .environments import (
     SimpleReferenceMPE,
     MiniSMAC,
     HeuristicEnemyMiniSMAC,
-    SwitchRiddle
+    SwitchRiddle,
+    Overcooked,
 )
 
 def make(env_id: str, **env_kwargs):
@@ -48,6 +49,10 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "HeuristicEnemyMiniSMAC":
         env = HeuristicEnemyMiniSMAC(**env_kwargs)
 
+    # 4. Overcooked
+    elif env_id == "Overcooked":
+        env = Overcooked(**env_kwargs)
+
     return env, env.default_params
     
 registered_envs = [
@@ -64,6 +69,8 @@ registered_envs = [
     "switch_riddle",
 
     "MiniSMAC",
-    "HeuristicEnemyMiniSMAC"
+    "HeuristicEnemyMiniSMAC",
+
+    "Overcooked"
 ]
     

@@ -31,7 +31,7 @@ forced_coord = {
 
 
 
-layouts = {
+overcooked_layouts = {
     "cramped_room" : FrozenDict(cramped_room),
     "forced_coord" : FrozenDict(forced_coord),
 }

@@ -252,7 +252,7 @@ if __name__ == '__main__':
                 see_agent=True,
                 n_agents=2
             )
-        from smax.viz.overcooked_viz import OvercookedVisualizer as Visualizer
+        from smax.viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
         from smax.environments.overcooked.overcooked import Actions
 
     params = env.params

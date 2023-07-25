@@ -273,7 +273,6 @@ class OvercookedVisualizer:
 			OvercookedVisualizer._render_obj(obj, img)
 			# render inventory
 			if agent_inv is not None and obj[0] == OBJECT_TO_INDEX['agent']:
-				print(agent_inv)
 				OvercookedVisualizer._render_inv(agent_inv, img)
 
 
