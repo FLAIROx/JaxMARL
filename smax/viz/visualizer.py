@@ -76,7 +76,7 @@ class MiniSMACVisualizer(Visualizer):
         self.heuristic_enemy = isinstance(env, HeuristicEnemyMiniSMAC)
         self.have_expanded = False
         if self.heuristic_enemy:
-            self.heuristic_policy = create_heuristic_policy(env, env_params, 1)
+            self.heuristic_policy = create_heuristic_policy(env, env_params, 1, shoot=env.enemy_shoots)
 
     def expand_state_seq(self):
         """Because the minismac environment ticks faster than the states received
