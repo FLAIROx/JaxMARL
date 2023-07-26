@@ -47,19 +47,32 @@ def create_heuristic_policy(env, params: EnvParams, team: int, shoot: bool = Tru
             jnp.linalg.norm(enemy_positions, axis=-1) < attack_range
         ) & visible_enemy_mask
         can_shoot = jnp.any(shootable_enemy_mask)
+        key, key_attack = jax.random.split(key)
         attack_action = jax.random.choice(
-            key,
+            key_attack,
             jnp.arange(num_move_actions, env.num_agents_per_team + num_move_actions),
             p=(shootable_enemy_mask / jnp.sum(shootable_enemy_mask)),
         )
-        # compute the correct movement action
-        target = jax.lax.cond(
-            team == 0, lambda: jnp.array([28.0, 16.0]), lambda: jnp.array([4.0, 16.0])
+        # compute the correct movement action.
+        random_enemy_target = jax.random.choice(
+            key,
+            enemy_positions + own_position,
+            p=(visible_enemy_mask / jnp.sum(visible_enemy_mask)),
         )
+        can_see = jnp.any(visible_enemy_mask)
+        team_0_target = jax.lax.cond(
+            can_see, lambda: random_enemy_target, lambda: jnp.array([28.0, 16.0])
+        )
+        team_1_target = jax.lax.cond(
+            can_see, lambda: random_enemy_target, lambda: jnp.array([4.0, 16.0])
+        )
+        target = jax.lax.cond(team == 0, lambda: team_0_target, lambda: team_1_target)
         vector_to_target = target - own_position
         action_vectors = jnp.array([[0, 1], [1, 0], [0, -1], [-1, 0]])
         similarity = jnp.dot(action_vectors, vector_to_target)
         move_action = jnp.argmax(similarity)
-        return jax.lax.cond(can_shoot & shoot, lambda: attack_action, lambda: move_action)
+        return jax.lax.cond(
+            can_shoot & shoot, lambda: attack_action, lambda: move_action
+        )
 
     return get_heuristic_action
