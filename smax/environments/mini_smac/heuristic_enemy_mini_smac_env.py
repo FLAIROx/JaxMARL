@@ -39,7 +39,7 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
             unit_velocity=3.15,
             unit_type_attacks=jnp.array([0.013]),
             time_per_step=1.0 / 16,
-            won_battle_bonus=5,
+            won_battle_bonus=1,
             unit_type_attack_ranges=jnp.array([5.0]),
             unit_type_sight_ranges=jnp.array([9.0]),
             max_steps=100,
