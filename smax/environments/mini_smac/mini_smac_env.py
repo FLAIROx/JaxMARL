@@ -82,7 +82,7 @@ class MiniSMAC(MultiAgentEnv):
             unit_velocity=5.0,
             unit_type_attacks=jnp.array([0.02]),
             time_per_step=1.0 / 16,
-            won_battle_bonus=5,
+            won_battle_bonus=1,
             unit_type_attack_ranges=jnp.array([3.0]),
             unit_type_sight_ranges=jnp.array([4.0]),
             max_steps=100,
