@@ -4,7 +4,7 @@ import chex
 from smax.environments.mini_smac.mini_smac_env import EnvParams
 
 
-def create_heuristic_policy(env, params: EnvParams, team: int):
+def create_heuristic_policy(env, params: EnvParams, team: int, shoot: bool = True):
     num_unit_features = len(env.unit_features)
     num_move_actions = env.num_movement_actions
 
@@ -60,6 +60,6 @@ def create_heuristic_policy(env, params: EnvParams, team: int):
         action_vectors = jnp.array([[0, 1], [1, 0], [0, -1], [-1, 0]])
         similarity = jnp.dot(action_vectors, vector_to_target)
         move_action = jnp.argmax(similarity)
-        return jax.lax.cond(can_shoot, lambda: attack_action, lambda: move_action)
+        return jax.lax.cond(can_shoot & shoot, lambda: attack_action, lambda: move_action)
 
     return get_heuristic_action

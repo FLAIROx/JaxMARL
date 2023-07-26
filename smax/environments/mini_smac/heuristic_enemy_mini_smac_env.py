@@ -13,13 +13,14 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
     (but still multi-agent) environment. Functions like a wrapper, but
     not linked with any of the wrapper code because that is used differently."""
 
-    def __init__(self, num_agents_per_team=5, world_steps_per_env_step=8):
+    def __init__(self, num_agents_per_team=5, world_steps_per_env_step=8, enemy_shoots=True):
         self._env = MiniSMAC(
             num_agents_per_team=num_agents_per_team,
             world_steps_per_env_step=world_steps_per_env_step,
         )
         # only one team
         self.num_agents = num_agents_per_team
+        self.enemy_shoots = enemy_shoots
         self.num_agents_per_team = num_agents_per_team
         self.agents = [f"ally_{i}" for i in range(self.num_agents)]
         self.enemy_agents = [f"enemy_{i}" for i in range(self.num_agents)]
@@ -64,7 +65,7 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         actions: Dict[str, chex.Array],
         params: EnvParams,
     ):
-        heuristic_policy = create_heuristic_policy(self._env, params, 1)
+        heuristic_policy = create_heuristic_policy(self._env, params, 1, shoot=self.enemy_shoots)
         obs = self._env.get_obs(state, params)
         enemy_obs = jnp.array([obs[agent] for agent in self.enemy_agents])
         key, heuristic_action_key = jax.random.split(key)
