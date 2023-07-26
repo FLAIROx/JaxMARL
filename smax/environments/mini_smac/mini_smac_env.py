@@ -388,6 +388,7 @@ class MiniSMAC(MultiAgentEnv):
         ax,
         state: Tuple[State, Dict],
         step: int,
+        env_step: int,
         params: Optional[EnvParams] = None,
     ):
         from matplotlib.patches import Circle, Rectangle
@@ -429,6 +430,7 @@ class MiniSMAC(MultiAgentEnv):
         ax.clear()
         ax.set_xlim([0.0, params.map_width])
         ax.set_ylim([0.0, params.map_height])
+        ax.set_title(f"Step {env_step}")
         for i in range(self.num_agents_per_team):
             if state.unit_alive[i]:
                 color = "blue" if i not in attacked_agents else "red"
@@ -467,6 +469,6 @@ class MiniSMAC(MultiAgentEnv):
 
         return im
 
-    def update_render(self, im, state: State, step, params: Optional[EnvParams] = None):
+    def update_render(self, im, state: State, step: int, env_step: int, params: Optional[EnvParams] = None):
         ax = im.axes
-        return self.init_render(ax, state, step, params)
+        return self.init_render(ax, state, step, env_step, params)

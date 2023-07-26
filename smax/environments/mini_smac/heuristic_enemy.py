@@ -13,11 +13,9 @@ def create_heuristic_policy(env, params: EnvParams, team: int):
         Follows the following scheme:
             -- If you can attack:
                 -- Find all the enemies that are in range
-                -- Of those enemies, choose the one that is most attacked by other allies
-                -- If no other allies are attacking, randomly choose an enemy to attack
+                -- Attack one at random
             -- If you can't attack:
                 -- Go to just past the middle of the enemy's half
-                -- Otherwise just take random move actions
         """
         attack_range = params.unit_type_attack_ranges[0]
         first_enemy_idx = (env.num_agents_per_team - 1) * num_unit_features

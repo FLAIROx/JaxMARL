@@ -7,7 +7,10 @@ from typing import Optional
 
 from smax.environments.multi_agent_env import MultiAgentEnv, EnvParams
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
-from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import HeuristicEnemyMiniSMAC
+from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import (
+    HeuristicEnemyMiniSMAC,
+)
+
 
 class Visualizer(object):
     def __init__(
@@ -59,7 +62,9 @@ class Visualizer(object):
 
 class MiniSMACVisualizer(Visualizer):
     """Visualiser especially for the MiniSMAC environments. Needed because they have an internal model that ticks much faster
-    than the learner's 'step' calls. This  means that we need to expand the state_sequence """
+    than the learner's 'step' calls. This  means that we need to expand the state_sequence
+    """
+
     def __init__(
         self,
         env: MultiAgentEnv,
@@ -81,11 +86,18 @@ class MiniSMACVisualizer(Visualizer):
             if self.heuristic_enemy:
                 agents = self.env.all_agents
                 key, key_action = jax.random.split(key)
-                key_action = jax.random.split(key_action, num=self.env_params.num_agents_per_team)
+                key_action = jax.random.split(
+                    key_action, num=self.env_params.num_agents_per_team
+                )
                 obs = self.env.get_all_unit_obs(state, self.env_params)
                 obs = jnp.array([obs[agent] for agent in self.env.enemy_agents])
                 enemy_actions = jax.vmap(self.heuristic_policy)(key_action, obs)
-                enemy_actions = {agent: enemy_actions[self.env.agent_ids[agent]] for agent in self.env.enemy_agents}
+                enemy_actions = {
+                    agent: enemy_actions[
+                        self.env.agent_ids[agent] % self.env_params.num_agents_per_team
+                    ]
+                    for agent in self.env.enemy_agents
+                }
                 actions = {k: v.squeeze() for k, v in actions.items()}
                 actions = {**enemy_actions, **actions}
             else:
@@ -104,12 +116,15 @@ class MiniSMACVisualizer(Visualizer):
         return super().animate(save_fname, view)
 
     def init(self):
-        self.im = self.env.init_render(self.ax, self.state_seq[0], 0, self.env_params)
+        self.im = self.env.init_render(
+            self.ax, self.state_seq[0], 0, 0, self.env_params
+        )
 
     def update(self, frame):
         self.im = self.env.update_render(
             self.im,
             self.state_seq[frame],
             frame % self.env.world_steps_per_env_step,
+            frame // self.env.world_steps_per_env_step,
             self.env_params,
         )

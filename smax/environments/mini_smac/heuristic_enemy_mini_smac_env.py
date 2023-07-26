@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import jax
 from functools import partial
 
+
 class HeuristicEnemyMiniSMAC(MultiAgentEnv):
     """Class that presents the MiniSMAC environment as a single-player
     (but still multi-agent) environment. Functions like a wrapper, but
@@ -23,7 +24,9 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         self.agents = [f"ally_{i}" for i in range(self.num_agents)]
         self.enemy_agents = [f"enemy_{i}" for i in range(self.num_agents)]
         self.all_agents = self.agents + self.enemy_agents
-        self.observation_spaces = {i: self._env.observation_spaces[i] for i in self.agents}
+        self.observation_spaces = {
+            i: self._env.observation_spaces[i] for i in self.agents
+        }
         self.action_spaces = {i: self._env.action_spaces[i] for i in self.agents}
 
     def __getattr__(self, name: str):
@@ -65,10 +68,13 @@ class HeuristicEnemyMiniSMAC(MultiAgentEnv):
         obs = self._env.get_obs(state, params)
         enemy_obs = jnp.array([obs[agent] for agent in self.enemy_agents])
         key, heuristic_action_key = jax.random.split(key)
-        heuristic_action_key = jax.random.split(heuristic_action_key, num=self.num_agents_per_team)
+        heuristic_action_key = jax.random.split(
+            heuristic_action_key, num=self.num_agents_per_team
+        )
         enemy_actions = jax.vmap(heuristic_policy)(heuristic_action_key, enemy_obs)
         enemy_actions = {
-            agent: enemy_actions[self._env.agent_ids[agent]] for agent in self.enemy_agents
+            agent: enemy_actions[self._env.agent_ids[agent] % self.num_agents_per_team]
+            for agent in self.enemy_agents
         }
         actions = {k: v.squeeze() for k, v in actions.items()}
         actions = {**enemy_actions, **actions}

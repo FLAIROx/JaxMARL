@@ -14,39 +14,49 @@ Below is an example of a simple environment loop, using random actions.
 
 """
 
-import jax 
+import jax
+import jax.numpy as jnp
 from smax import make
+from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.viz.visualizer import Visualizer, MiniSMACVisualizer
 
 # Parameters + random keys
-max_steps = 100
+max_steps = 30
 key = jax.random.PRNGKey(3)
 key, key_r, key_a = jax.random.split(key, 3)
 
 # Instantiate environment
 with jax.disable_jit(False):
-    env, params = make('HeuristicEnemyMiniSMAC')
+    env, params = make("HeuristicEnemyMiniSMAC")
     obs, state = env.reset(key_r)
-    print('list of agents in environment', env.agents)
+    print("list of agents in environment", env.agents)
 
     # Sample random actions
     key_a = jax.random.split(key_a, env.num_agents)
-    actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
-    print('example action dict', actions)
+    actions = {
+        agent: env.action_space(agent).sample(key_a[i])
+        for i, agent in enumerate(env.agents)
+    }
+    print("example action dict", actions)
 
-
+    policy = create_heuristic_policy(env, params, 0)
     state_seq = []
-    for _ in range(max_steps):
+    returns = {a: 0 for a in env.agents}
+    for i in range(max_steps):
         # Iterate random keys and sample actions
         key, key_s, key_seq = jax.random.split(key, 3)
         key_a = jax.random.split(key_seq, env.num_agents)
-        actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
+        actions = {
+            agent: policy(key_a[i], obs[agent]) for i, agent in enumerate(env.agents)
+        }
 
         state_seq.append((key_seq, state, actions))
         # state_seq.append(state)
         # Step environment
         obs, state, rewards, dones, infos = env.step(key_s, state, actions)
-
+        returns = {a: returns[a] + rewards[a] for a in env.agents}
+        if dones["__all__"]:
+            print(f"Returns: {returns}")
 
 viz = MiniSMACVisualizer(env, state_seq, env.default_params)
 viz.animate(view=False, save_fname="output.gif")
