@@ -734,7 +734,7 @@ class Overcooked(MultiAgentEnv):
             dtype=jnp.uint32
         )
 
-    def observation_space(self) -> spaces.Dict:
+    def observation_space(self) -> spaces.Box:
         """Observation space of the environment."""
         # spaces_dict = {
         #     'image': spaces.Box(0, 255, self.obs_shape),
