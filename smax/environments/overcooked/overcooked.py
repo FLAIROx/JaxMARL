@@ -736,12 +736,12 @@ class Overcooked(MultiAgentEnv):
 
     def observation_space(self) -> spaces.Dict:
         """Observation space of the environment."""
-        spaces_dict = {
-            'image': spaces.Box(0, 255, self.obs_shape),
-            'agent_dir': spaces.Discrete(4)
-        }
+        # spaces_dict = {
+        #     'image': spaces.Box(0, 255, self.obs_shape),
+        #     'agent_dir': spaces.Discrete(4)
+        # }
 
-        return spaces.Dict(spaces_dict)
+        return spaces.Box(0, 255, self.obs_shape)
 
     def state_space(self, params) -> spaces.Dict:
         """State space of the environment."""
