@@ -123,7 +123,7 @@ class MiniSMAC(MultiAgentEnv):
             unit_types=jnp.zeros(
                 (self.num_agents,), dtype=jnp.uint8
             ),  # only one unit type for now
-            prev_actions=jnp.zeros((self.num_agents,), dtype=jnp.uint8),
+            prev_actions=jnp.zeros((self.num_agents,), dtype=jnp.int32),
             time=0,
             terminal=False,
         )
