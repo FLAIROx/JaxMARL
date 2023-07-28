@@ -30,7 +30,32 @@ class OvercookedVisualizer:
 		self.window.show(block=block)
 
 	def render(self, params, state, highlight=True, tile_size=TILE_PIXELS):
+		"""Method for rendering the state in a window. Esp. useful for interactive mode."""
 		return self._render_state(params, state, highlight, tile_size)
+
+	def animate(self, state_seq, params, filename="animation.gif"):
+		"""Animate a gif give a state sequence and save if to file."""
+		import imageio
+
+		agent_view_size = params.agent_view_size
+		padding = agent_view_size - 2  # show
+
+		def get_frame(state):
+			grid = np.asarray(state.maze_map[padding:-padding, padding:-padding, :])
+			# Render the state
+			frame = OvercookedVisualizer._render_grid(
+				grid,
+				tile_size=TILE_PIXELS,
+				highlight_mask=None,
+				agent_dir_idx=state.agent_dir_idx,
+				agent_inv=state.agent_inv
+			)
+			return frame
+
+		frame_seq =[get_frame(state) for state in state_seq]
+
+		imageio.mimsave(filename, frame_seq, 'GIF', duration=0.25)
+
 
 	def render_grid(self, grid, tile_size=TILE_PIXELS, k_rot90=0, agent_dir_idx=None):
 		self._lazy_init_window()
@@ -58,7 +83,6 @@ class OvercookedVisualizer:
 		grid = np.asarray(state.maze_map[padding:-padding, padding:-padding, :])
 		grid_offset = np.array([1,1])
 		h, w = grid.shape[:2]
-
 		# === Compute highlight mask
 		highlight_mask = np.zeros(shape=(h,w), dtype=np.bool)
 
