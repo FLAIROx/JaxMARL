@@ -54,7 +54,7 @@ class OvercookedVisualizer:
 
 		frame_seq =[get_frame(state) for state in state_seq]
 
-		imageio.mimsave(filename, frame_seq, 'GIF', duration=0.25)
+		imageio.mimsave(filename, frame_seq, 'GIF', duration=0.5)
 
 
 	def render_grid(self, grid, tile_size=TILE_PIXELS, k_rot90=0, agent_dir_idx=None):
