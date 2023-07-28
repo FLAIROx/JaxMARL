@@ -16,6 +16,7 @@ class State:
     unit_teams: chex.Array
     unit_health: chex.Array
     unit_types: chex.Array
+    prev_actions: chex.Array
     time: int
     terminal: bool
 
@@ -63,11 +64,7 @@ class MiniSMAC(MultiAgentEnv):
         self.teams = jnp.zeros((self.num_agents,), dtype=jnp.uint8)
         self.teams = self.teams.at[self.num_agents_per_team :].set(1)
         self.own_features = ["health", "position_x", "position_y"]
-        self.unit_features = [
-            "health",
-            "position_x",
-            "position_y",
-        ]
+        self.unit_features = ["health", "position_x", "position_y", "last_action"]
         self.obs_size = (
             len(self.unit_features) * (self.num_agents_per_team - 1)
             + len(self.unit_features) * self.num_agents_per_team
@@ -126,6 +123,7 @@ class MiniSMAC(MultiAgentEnv):
             unit_types=jnp.zeros(
                 (self.num_agents,), dtype=jnp.uint8
             ),  # only one unit type for now
+            prev_actions=jnp.zeros((self.num_agents,), dtype=jnp.uint8),
             time=0,
             terminal=False,
         )
@@ -157,7 +155,9 @@ class MiniSMAC(MultiAgentEnv):
             world_step_fn, init=state, xs=None, length=self.world_steps_per_env_step
         )
         health_after = state.unit_health
-        state = state.replace(terminal=self.is_terminal(state, params))
+        state = state.replace(
+            terminal=self.is_terminal(state, params), prev_actions=actions
+        )
         obs = self.get_obs(state, params)
         dones = {
             agent: ~state.unit_alive[self.agent_ids[agent]] for agent in self.agents
@@ -355,6 +355,7 @@ class MiniSMAC(MultiAgentEnv):
 
     def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
         """Applies observation function to state."""
+        actions = state.prev_actions
 
         def get_features(i, j):
             """Get features of unit j as seen from unit i"""
@@ -380,6 +381,8 @@ class MiniSMAC(MultiAgentEnv):
                 (state.unit_positions[j_idx] - state.unit_positions[i])
                 / params.unit_type_sight_ranges[state.unit_types[i]]
             )
+            # TODO encode as one hot?
+            features = features.at[4].set(actions[j_idx])
             visible = (
                 jnp.linalg.norm(state.unit_positions[j_idx] - state.unit_positions[i])
                 < params.unit_type_sight_ranges[state.unit_types[i]]
