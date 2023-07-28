@@ -22,14 +22,14 @@ def get_random_actions(key, env):
 @pytest.mark.parametrize(
     ("action", "vec_diff", "do_jit"),
     [
-        (0, jnp.array([0, 0.5]), False),
-        (0, jnp.array([0, 0.5]), True),
-        (1, jnp.array([0.5, 0]), False),
-        (1, jnp.array([0.5, 0]), True),
-        (2, jnp.array([0, -0.5]), False),
-        (2, jnp.array([0, -0.5]), True),
-        (3, jnp.array([-0.5, 0]), False),
-        (3, jnp.array([-0.5, 0]), True),
+        (0, jnp.array([0, 2.5]), False),
+        (0, jnp.array([0, 2.5]), True),
+        (1, jnp.array([2.5, 0]), False),
+        (1, jnp.array([2.5, 0]), True),
+        (2, jnp.array([0, -2.5]), False),
+        (2, jnp.array([0, -2.5]), True),
+        (3, jnp.array([-2.5, 0]), False),
+        (3, jnp.array([-2.5, 0]), True),
     ],
 )
 def test_move_actions(action, vec_diff, do_jit):
@@ -125,7 +125,7 @@ def test_attack_actions(
         env, params, _, state = create_env(key_reset)
 
         unit_1_action = unit_2_idx - env.num_agents_per_team + 4
-        unit_2_action = unit_1_idx + 4
+        unit_2_action = env.num_agents_per_team - unit_1_idx + 3
 
         unit_positions = state.unit_positions.at[unit_1_idx].set(unit_1_pos)
         unit_positions = unit_positions.at[unit_2_idx].set(unit_2_pos)
@@ -169,7 +169,7 @@ def test_episode_end(ally_health, enemy_health, done_unit, reward_unit, do_jit):
         unit_2_health = enemy_health
 
         unit_1_action = unit_2_idx - env.num_agents_per_team + 4
-        unit_2_action = unit_1_idx + 4
+        unit_2_action = env.num_agents_per_team - unit_1_idx + 3
 
         unit_positions = state.unit_positions.at[unit_1_idx].set(jnp.array([1.0, 1.0]))
         unit_positions = unit_positions.at[unit_2_idx].set(jnp.array([1.0, 2.0]))
@@ -196,7 +196,7 @@ def test_episode_end(ally_health, enemy_health, done_unit, reward_unit, do_jit):
         _, state, rewards, dones, _ = env.step(key_step, state, actions, params)
         assert dones[done_unit]
         assert dones["__all__"]
-        assert jnp.allclose(rewards[reward_unit], 5.02)
+        assert jnp.allclose(rewards[reward_unit], params.won_battle_bonus + 0.02)
 
 
 @pytest.mark.parametrize(("do_jit"), [True, False])
@@ -225,14 +225,16 @@ def test_obs_function(do_jit):
         env, params, obs, state = create_env(key_reset)
         first_enemy_idx = (env.num_agents_per_team - 1) * len(env.unit_features)
         assert jnp.allclose(
-            obs["ally_0"][0 : len(env.unit_features)], jnp.array([1.0, 0.0, 0.0])
+            obs["ally_0"][0 : len(env.unit_features)],
+            jnp.array([1.0, -0.5755913, 0.43648314]),
         )
         assert jnp.allclose(
             obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
             jnp.zeros((3,)),
         )
         assert jnp.allclose(
-            obs["enemy_0"][0 : len(env.unit_features)], jnp.array([1.0, 0.0, 0.0])
+            obs["enemy_0"][0 : len(env.unit_features)],
+            jnp.array([1.0, 0.00752163, 0.5390887]),
         )
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
@@ -280,7 +282,13 @@ def test_world_state(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
         env, params, _, state = create_env(key_reset)
-
+        start_positions = jnp.concatenate(
+            [
+                jnp.stack([jnp.array([8.0, 16.0])] * env.num_agents_per_team),
+                jnp.stack([jnp.array([24.0, 16.0])] * env.num_agents_per_team),
+            ]
+        )
+        state = state.replace(unit_positions=start_positions)
         unit_1_idx = 0
         unit_2_idx = env.num_agents_per_team
 
@@ -303,18 +311,18 @@ def test_world_state(do_jit):
         actions[f"enemy_{unit_2_idx - env.num_agents_per_team}"] = unit_2_action
 
         key, key_step = jax.random.split(key)
-        _, state, _, _, infos = env.step(key_step, state, actions, params)
+        obs, state, _, _, _ = env.step(key_step, state, actions, params)
 
         world_state = jnp.zeros((env.state_size,))
         world_state = world_state.at[0 : len(env.unit_features)].set(
-            jnp.array([0.5, 8.0, 16.5])
+            jnp.array([0.5, 8.0, 18.5])
         )
         idx = env.num_agents_per_team * len(env.unit_features)
         end_idx = idx + len(env.unit_features)
-        world_state = world_state.at[idx:end_idx].set(jnp.array([0.5, 24.0, 15.5]))
+        world_state = world_state.at[idx:end_idx].set(jnp.array([0.5, 24.0, 13.5]))
         idx = env.num_agents * len(env.unit_features) + env.num_agents_per_team
         end_idx = idx + env.num_agents_per_team
         world_state = world_state.at[idx:end_idx].set(
             jnp.ones((env.num_agents_per_team,))
         )
-        assert jnp.allclose(infos["world_state"], world_state)
+        assert jnp.allclose(obs["world_state"], world_state)

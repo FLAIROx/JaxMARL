@@ -82,7 +82,9 @@ class MiniSMACVisualizer(Visualizer):
         """Because the minismac environment ticks faster than the states received
         we need to expand the states to visualise them"""
         expanded_state_seq = []
-        for key, state, actions in self.state_seq:
+        for i, (key, state, actions) in enumerate(self.state_seq):
+            if i == 5:
+                print("stuff")
             if self.heuristic_enemy:
                 agents = self.env.all_agents
                 key, key_action = jax.random.split(key)
@@ -107,6 +109,8 @@ class MiniSMACVisualizer(Visualizer):
                 world_actions = jnp.array([actions[i] for i in agents])
                 state = self.env._world_step(state, world_actions, self.env_params)
                 state = self.env._update_dead_agents(state)
+                state = self.env._push_units_away(state, self.env_params)
+            state = state.replace(terminal=self.env.is_terminal(state, self.env_params))
         self.state_seq = expanded_state_seq
         self.have_expanded = True
 

@@ -28,12 +28,22 @@ class EnvParams:
     world_steps_per_env_step: int
     time_per_step: float
     unit_velocity: float
-    unit_type_attacks: float
-    unit_type_attack_ranges: float
-    unit_type_sight_ranges: float
+    unit_type_attacks: chex.Array
+    unit_type_attack_ranges: chex.Array
+    unit_type_sight_ranges: chex.Array
+    unit_type_radiuses: chex.Array
     time_per_step: float
     max_steps: int
     won_battle_bonus: float
+
+
+@dataclass
+class WorldDelta:
+    """Encapsulates the effect of an agent's action"""
+
+    pos: chex.Array
+    attacked_idx: int
+    health_diff: float
 
 
 class MiniSMAC(MultiAgentEnv):
@@ -85,6 +95,7 @@ class MiniSMAC(MultiAgentEnv):
             won_battle_bonus=1,
             unit_type_attack_ranges=jnp.array([3.0]),
             unit_type_sight_ranges=jnp.array([4.0]),
+            unit_type_radiuses=jnp.array([0.5]),
             max_steps=100,
         )
 
@@ -118,7 +129,11 @@ class MiniSMAC(MultiAgentEnv):
             time=0,
             terminal=False,
         )
-        return self.get_obs(state, params), state
+        state = self._push_units_away(state, params)
+        obs = self.get_obs(state, params)
+        world_state = self.get_world_state(state, params)
+        obs["world_state"] = jax.lax.stop_gradient(world_state)
+        return obs, state
 
     @partial(jax.jit, static_argnums=(0,))
     def step_env(
@@ -135,6 +150,7 @@ class MiniSMAC(MultiAgentEnv):
         def world_step_fn(carry, _):
             carry = partial(self._world_step, actions=actions, params=params)(carry)
             carry = self._update_dead_agents(carry)
+            carry = self._push_units_away(carry, params)
             return carry, None
 
         state, _ = jax.lax.scan(
@@ -214,6 +230,24 @@ class MiniSMAC(MultiAgentEnv):
         unit_alive = state.unit_health > 0
         return state.replace(unit_alive=unit_alive)
 
+    def _push_units_away(self, state: State, params: EnvParams, firmness: float = 1.0):
+        delta_matrix = state.unit_positions[:, None] - state.unit_positions[None, :]
+        dist_matrix = (
+            jnp.linalg.norm(delta_matrix, axis=-1)
+            + jnp.identity(self.num_agents)
+            + 1e-6
+        )
+        radius_matrix = (
+            params.unit_type_radiuses[state.unit_types][:, None]
+            + params.unit_type_radiuses[state.unit_types][None, :]
+        )
+        overlap_term = jax.nn.relu(radius_matrix / dist_matrix - 1.0)
+        unit_positions = (
+            state.unit_positions
+            + firmness * jnp.sum(delta_matrix * overlap_term[:, :, None], axis=1) / 2
+        )
+        return state.replace(unit_positions=unit_positions)
+
     @partial(jax.jit, static_argnums=(0,))
     def _world_step(
         self,
@@ -221,14 +255,13 @@ class MiniSMAC(MultiAgentEnv):
         actions: Dict[str, chex.Array],
         params: EnvParams,
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
-        def update_agent_pos(state, params, idx, action):
-            # MOVE
-            pos = state.unit_positions[idx]
+        def update_position(idx, action):
             # Compute the movements slightly strangely.
             # The velocities below are for diagonal directions
             # because these are easier to encode as actions than the four
             # diagonal directions. Then rotate the velocity 45
             # degrees anticlockwise to compute the movement.
+            pos = state.unit_positions[idx]
             vec = jax.lax.cond(
                 action > self.num_movement_actions - 1,
                 lambda: jnp.zeros((2,)),
@@ -252,11 +285,9 @@ class MiniSMAC(MultiAgentEnv):
                 jnp.minimum(new_pos, jnp.array([params.map_width, params.map_height])),
                 jnp.zeros((2,)),
             )
-            unit_positions = state.unit_positions.at[idx].set(new_pos)
-            state = state.replace(unit_positions=unit_positions)
-            return state
+            return WorldDelta(new_pos, idx, 0.0)
 
-        def update_agent_health(state, params, idx, action):
+        def update_agent_health(idx, action):
             # for team 1, their attack actions are labelled in
             # reverse order because that is the order they are
             # observed in
@@ -268,43 +299,41 @@ class MiniSMAC(MultiAgentEnv):
                 - (action - self.num_movement_actions),
             )
             attack_valid = (
-                jnp.linalg.norm(
-                    state.unit_positions[idx] - state.unit_positions[attacked_idx]
+                (
+                    jnp.linalg.norm(
+                        state.unit_positions[idx] - state.unit_positions[attacked_idx]
+                    )
+                    < params.unit_type_attack_ranges[state.unit_types[idx]]
                 )
-                < params.unit_type_attack_ranges[state.unit_types[idx]]
+                & state.unit_alive[idx]
+                & state.unit_alive[attacked_idx]
             )
-            unit_health = state.unit_health.at[attacked_idx].set(
-                jax.lax.cond(
-                    attack_valid,
-                    lambda: jnp.maximum(
-                        state.unit_health[attacked_idx]
-                        - params.unit_type_attacks[state.unit_types[idx]],
-                        0,
-                    ),
-                    lambda: state.unit_health[attacked_idx],
-                )
+            health_diff = jax.lax.select(
+                attack_valid,
+                -params.unit_type_attacks[state.unit_types[idx]],
+                0.0,
             )
-            state = state.replace(unit_health=unit_health)
-            return state
+            return WorldDelta(state.unit_positions[idx], attacked_idx, health_diff)
 
-        def perform_agent_action(carry, idx):
-            state, params, actions = carry
-            # do nothing if the agent is dead
-
-            updated_state = jax.lax.cond(
+        def perform_agent_action(idx, action):
+            return jax.lax.cond(
                 actions[idx] > self.num_movement_actions - 1,
-                lambda: update_agent_health(state, params, idx, actions[idx]),
-                lambda: update_agent_pos(state, params, idx, actions[idx]),
+                lambda: update_agent_health(idx, action),
+                lambda: update_position(idx, action),
             )
-            state = jax.lax.cond(
-                state.unit_alive[idx], lambda: updated_state, lambda: state
-            )
-            return (state, params, actions), None
 
-        (state, params, actions), _ = jax.lax.scan(
-            perform_agent_action,
-            init=(state, params, actions),
-            xs=jnp.arange(self.num_agents),
+        deltas = jax.vmap(perform_agent_action)(jnp.arange(self.num_agents), actions)
+
+        def update_health(unit_health: chex.Array, delta: WorldDelta):
+            unit_health = unit_health.at[delta.attacked_idx].set(
+                jnp.maximum(unit_health[delta.attacked_idx] + delta.health_diff, 0.0)
+            )
+            return unit_health, None
+
+        unit_health, _ = jax.lax.scan(update_health, state.unit_health, deltas)
+        state = state.replace(
+            unit_health=unit_health,
+            unit_positions=deltas.pos,
         )
         return state
 
@@ -434,13 +463,19 @@ class MiniSMAC(MultiAgentEnv):
         for i in range(self.num_agents_per_team):
             if state.unit_alive[i]:
                 color = "blue" if i not in attacked_agents else "red"
-                c = Circle(state.unit_positions[i], 0.5, color=color)
+                c = Circle(
+                    state.unit_positions[i],
+                    params.unit_type_radiuses[state.unit_types[i]],
+                    color=color,
+                )
                 ax.add_patch(c)
             if state.unit_alive[i + self.num_agents_per_team]:
                 color = "green" if i not in attacked_agents else "red"
                 c = Circle(
                     state.unit_positions[i + params.num_agents_per_team],
-                    0.5,
+                    params.unit_type_radiuses[
+                        state.unit_types[i + params.num_agents_per_team]
+                    ],
                     color=color,
                 )
                 ax.add_patch(c)
@@ -469,6 +504,13 @@ class MiniSMAC(MultiAgentEnv):
 
         return im
 
-    def update_render(self, im, state: State, step: int, env_step: int, params: Optional[EnvParams] = None):
+    def update_render(
+        self,
+        im,
+        state: State,
+        step: int,
+        env_step: int,
+        params: Optional[EnvParams] = None,
+    ):
         ax = im.axes
         return self.init_render(ax, state, step, env_step, params)
