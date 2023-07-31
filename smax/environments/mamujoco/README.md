@@ -19,3 +19,13 @@ Specifically, we include the following environments:
 Each agent's observations are composed of the local state of the rotors it controls, as well as the state of joints at distance 1 away in the kinematic tree, and the state of the root body. State here refers to the position and velocity of the joint or rotor. 
 
 Each agent's action space is the torques of the rotors it controls.
+
+
+## Visualisation
+To visualise a trajectory in a Jupyter notebook, given a list of states, you can use the following code snippet:
+```python
+from IPython.display import HTML
+from brax.io import html
+
+HTML(html.render(env.sys, [s.qp for s in state_history]))
+```

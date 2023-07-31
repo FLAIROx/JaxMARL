@@ -203,6 +203,10 @@ class MAMujocoEnv(MultiAgentEnv):
         """Default environment parameters."""
         return EnvParams()
 
+    @property
+    def sys(self):
+        return self.env.sys
+
 
 class Ant(MAMujocoEnv):
     def __init__(self, **kwargs):
