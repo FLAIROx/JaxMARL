@@ -8,6 +8,8 @@ import jax.numpy as jnp
 
 from .mappings import _agent_action_mapping, _agent_observation_mapping
 
+# TODO: move homogenisation to a separate wrapper
+
 
 @struct.dataclass
 class EnvParams:
@@ -43,7 +45,10 @@ class MAMujocoEnv(MultiAgentEnv):
                 the other agents with zeros in the full observation and action vectors.
                 Defaults to None.
         """
-        env = envs.create(env_name, episode_length, action_repeat, auto_reset, **kwargs)
+        base_env_name = env_name.split("_")[0]
+        env = envs.create(
+            base_env_name, episode_length, action_repeat, auto_reset, **kwargs
+        )
         self.env = env
         self.episode_length = episode_length
         self.action_repeat = action_repeat
@@ -201,24 +206,24 @@ class MAMujocoEnv(MultiAgentEnv):
 
 class Ant(MAMujocoEnv):
     def __init__(self, **kwargs):
-        super().__init__("ant", **kwargs)
+        super().__init__("ant_4x2", **kwargs)
 
 
 class HalfCheetah(MAMujocoEnv):
     def __init__(self, **kwargs):
-        super().__init__("halfcheetah", **kwargs)
+        super().__init__("halfcheetah_6x1", **kwargs)
 
 
 class Hopper(MAMujocoEnv):
     def __init__(self, **kwargs):
-        super().__init__("hopper", **kwargs)
-
-
-class Walker2d(MAMujocoEnv):
-    def __init__(self, **kwargs):
-        super().__init__("walker2d", **kwargs)
+        super().__init__("hopper_3x1", **kwargs)
 
 
 class Humanoid(MAMujocoEnv):
     def __init__(self, **kwargs):
-        super().__init__("humanoid", **kwargs)
+        super().__init__("humanoid_9|8", **kwargs)
+
+
+class Walker2d(MAMujocoEnv):
+    def __init__(self, **kwargs):
+        super().__init__("walker2d_2x3", **kwargs)

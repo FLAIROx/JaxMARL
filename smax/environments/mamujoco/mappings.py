@@ -1,23 +1,18 @@
 from typing import Dict, List, Tuple, Union
 import jax.numpy as jnp
 
+# TODO: programatically generate these mappings from the kinematic trees
+#       and add an observation distance parameter to the environment
+
 
 _agent_action_mapping = {
-    "walker2d": {
-        "agent_0": jnp.array([0, 1, 2]),
-        "agent_1": jnp.array([3, 4, 5]),
-    },
-    "ant": {
+    "ant_4x2": {
         "agent_0": jnp.array([0, 1]),
         "agent_1": jnp.array([2, 3]),
         "agent_2": jnp.array([4, 5]),
         "agent_3": jnp.array([6, 7]),
     },
-    "humanoid": {
-        "agent_0": jnp.array([0, 1, 2, 11, 12, 13, 14, 15, 16]),
-        "agent_1": jnp.array([3, 4, 5, 6, 7, 8, 9, 10]),
-    },
-    "halfcheetah": {
+    "halfcheetah_6x1": {
         "agent_0": jnp.array([0]),
         "agent_1": jnp.array([1]),
         "agent_2": jnp.array([2]),
@@ -25,10 +20,18 @@ _agent_action_mapping = {
         "agent_4": jnp.array([4]),
         "agent_5": jnp.array([5]),
     },
-    "hopper": {
+    "hopper_3x1": {
         "agent_0": jnp.array([0]),
         "agent_1": jnp.array([1]),
         "agent_2": jnp.array([2]),
+    },
+    "humanoid_9|8": {
+        "agent_0": jnp.array([0, 1, 2, 11, 12, 13, 14, 15, 16]),
+        "agent_1": jnp.array([3, 4, 5, 6, 7, 8, 9, 10]),
+    },
+    "walker2d_2x3": {
+        "agent_0": jnp.array([0, 1, 2]),
+        "agent_1": jnp.array([3, 4, 5]),
     },
 }
 
@@ -42,17 +45,26 @@ def listerize(ranges: List[Union[int, Tuple[int, int]]]) -> List[int]:
 
 
 ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
-    "walker2d": {
-        "agent_0": [0, (2, 5), (8, 9), (11, 13)],
-        "agent_1": [0, 2, (5, 9), (14, 16)],
-    },
-    "ant": {
+    "ant_4x2": {
         "agent_0": [(0, 5), 6, 7, 9, 11, (13, 18), 19, 20],
         "agent_1": [(0, 5), 7, 8, 9, 11, (13, 18), 21, 22],
         "agent_2": [(0, 5), 7, 9, 10, 11, (13, 18), 23, 24],
         "agent_3": [(0, 5), 7, 9, 11, 12, (13, 18), 25, 26],
     },
-    "humanoid": {
+    "halfcheetah_6x1": {
+        "agent_0": [(1, 2), 3, 4, 6, (9, 11), 12],
+        "agent_1": [(1, 2), 3, 4, 5, (9, 11), 13],
+        "agent_2": [(1, 2), 4, 5, (9, 11), 14],
+        "agent_3": [(1, 2), 3, 6, 7, (9, 11), 15],
+        "agent_4": [(1, 2), 6, 7, 8, (9, 11), 16],
+        "agent_5": [(1, 2), 7, 8, (9, 11), 17],
+    },
+    "hopper_3x1": {
+        "agent_0": [(0, 1), 2, 3, (5, 7), 8],
+        "agent_1": [(0, 1), 2, 3, 4, (5, 7), 9],
+        "agent_2": [(0, 1), 3, 4, (5, 7), 10],
+    },
+    "humanoid_9|8": {
         "agent_0": [
             (0, 10),
             (12, 14),
@@ -80,18 +92,9 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
             (316, 351),
         ],
     },
-    "halfcheetah": {
-        "agent_0": [(1, 2), 3, 4, 6, (9, 11), 12],
-        "agent_1": [(1, 2), 3, 4, 5, (9, 11), 13],
-        "agent_2": [(1, 2), 4, 5, (9, 11), 14],
-        "agent_3": [(1, 2), 3, 6, 7, (9, 11), 15],
-        "agent_4": [(1, 2), 6, 7, 8, (9, 11), 16],
-        "agent_5": [(1, 2), 7, 8, (9, 11), 17],
-    },
-    "hopper": {
-        "agent_0": [(0, 1), 2, 3, (5, 7), 8],
-        "agent_1": [(0, 1), 2, 3, 4, (5, 7), 9],
-        "agent_2": [(0, 1), 3, 4, (5, 7), 10],
+    "walker2d_2x3": {
+        "agent_0": [0, (2, 5), (8, 9), (11, 13)],
+        "agent_1": [0, 2, (5, 9), (14, 16)],
     },
 }
 
