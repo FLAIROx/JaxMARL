@@ -4,7 +4,9 @@ from smax.environments.multi_agent_env import MultiAgentEnv
 from gymnax.environments import spaces
 from flax import struct
 from brax import envs
+import jax
 import jax.numpy as jnp
+from functools import partial
 
 from .mappings import _agent_action_mapping, _agent_observation_mapping
 
@@ -94,12 +96,14 @@ class MAMujocoEnv(MultiAgentEnv):
             for agent in self.agents
         }
 
+    @partial(jax.jit, static_argnums=(0,))
     def reset_env(
         self, key: chex.PRNGKey, params: EnvParams
     ) -> Tuple[Dict[str, chex.Array], envs.State]:
         state = self.env.reset(key)
         return self.get_obs(state, params), state
 
+    @partial(jax.jit, static_argnums=(0,))
     def step_env(
         self,
         key: chex.PRNGKey,
