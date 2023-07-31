@@ -41,7 +41,7 @@ def step(env, action, extras):
     obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], actions, extras['params'])
     extras['obs'] = obs
     extras['state'] = state
-    print(f"reward={reward}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done}")
+    print(f"t={state.time}: reward={reward['agent_0']}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done['__all__']}")
     
     if extras["debug"]:
         layers = [f"player_{i}_loc" for i in range(2)]
@@ -165,7 +165,13 @@ if __name__ == '__main__':
         "--layout",
         type=str,
         help="Overcooked layout",
-        default=""
+        default="cramped_room"
+    )
+    parser.add_argument(
+        '--random_reset',
+        default=False,
+        help="Reset to random state",
+        action='store_true'
     )
     parser.add_argument(
         "--seed",
@@ -254,15 +260,9 @@ if __name__ == '__main__':
         from smax.environments.overcooked.overcooked import Actions
 
         params = env.default_params
-        # params = params.replace(
-        #     # height=layout["height"],
-        #     # width=layout["width"],
-        #     # n_walls=1,
-        #     # see_agent=True,
-        #     # n_agents=2,
-        #     # fixed_layout=True,
-        #     # layout=layout
-        # )
+        params = params.replace(
+            random_reset=args.random_reset
+        )
 
 
 
@@ -274,7 +274,7 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(False):
+    with jax.disable_jit(True):
         jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)

@@ -12,8 +12,6 @@ import chex
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 
-from jax.experimental import checkify
-
 from smax.environments.overcooked.common import (
     OBJECT_TO_INDEX,
     COLOR_TO_INDEX,
@@ -57,7 +55,7 @@ class EnvParams:
     normalize_obs: bool = False
     sample_n_walls: bool = False  # Sample n_walls uniformly in [0, n_walls]
     max_steps: int = 400
-    fixed_layout: bool = True
+    random_reset: bool = False
 
 
 # Pot status indicated by an integer, which ranges from 23 to 0
@@ -79,8 +77,6 @@ class Overcooked(MultiAgentEnv):
             n_walls=1,
             agent_view_size=5,
             layout = FrozenDict(layouts["cramped_room"]),
-            replace_wall_pos=False,
-            normalize_obs=False,
     ):
         # Sets self.num_agents to 2
         super().__init__(num_agents=2)
@@ -116,7 +112,7 @@ class Overcooked(MultiAgentEnv):
         #     max_steps=max_steps,
         #     normalize_obs=normalize_obs,
         #     n_agents=n_agents,
-        #     fixed_layout=fixed_layout,
+        #     random_reset=random_reset,
         #     layout=layout
         # )
 
@@ -165,27 +161,27 @@ class Overcooked(MultiAgentEnv):
         - wall positions
         """
 
-        fixed_layout = params.fixed_layout
+        # Whether to fully randomize the start state
+        random_reset = params.random_reset
         layout = self.layout
 
         h = self.height
         w = self.width
-        # assert (1 - fixed_layout) or (h == layout.get("height", -1))
-        # assert (1 - fixed_layout) or (w == layout.get("width", -1))
         num_agents = self.num_agents
         all_pos = np.arange(np.prod([h, w]), dtype=jnp.uint32)
 
 
         # TODO: Cleanup random map generation
         # Reset wall map, with shape H x W, and value of 1 at (i,j) iff there is a wall at (i,j)
-        key, subkey = jax.random.split(key)
-        wall_idx = jax.random.choice(
-            subkey, all_pos,
-            shape=(self.n_walls,),
-            replace=False)
+        # key, subkey = jax.random.split(key)
+        # wall_idx = jax.random.choice(
+        #     subkey, all_pos,
+        #     shape=(self.n_walls,),
+        #     replace=False)
 
         # Replace wall_idx with fixed layout if applicable
-        wall_idx = (1-fixed_layout) * wall_idx + fixed_layout * layout.get("wall_idx", wall_idx)
+        # wall_idx = random_reset * wall_idx + (1-random_reset) * layout.get("wall_idx", wall_idx)
+        wall_idx = layout.get("wall_idx")
 
         occupied_mask = jnp.zeros_like(all_pos)
         occupied_mask = occupied_mask.at[wall_idx].set(1)
@@ -195,31 +191,79 @@ class Overcooked(MultiAgentEnv):
         key, subkey = jax.random.split(key)
         agent_idx = jax.random.choice(subkey, all_pos, shape=(num_agents,),
                                       p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
-        # Replace with fixed layout if applicable
-        agent_idx = (1-fixed_layout)*agent_idx + fixed_layout*layout.get("agent_idx", agent_idx)
-        occupied_mask = occupied_mask.at[agent_idx].set(1)
+
+        # Replace with fixed layout if applicable. Also randomize if agent position not provided
+        agent_idx = random_reset*agent_idx + (1-random_reset)*layout.get("agent_idx", agent_idx)
         agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32).transpose() # dim = n_agents x 2
+        occupied_mask = occupied_mask.at[agent_idx].set(1)
 
         key, subkey = jax.random.split(key)
         agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.int32), shape=(num_agents,))
         agent_dir = DIR_TO_VEC.at[agent_dir_idx].get() # dim = n_agents x 2
 
-        # Reset goal position
-        key, subkey = jax.random.split(key)
-        goal_idx = jax.random.choice(subkey, all_pos, shape=(1,),
-                                     p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32))
-        # Replace with fixed layout if applicable
-        goal_idx = (1-fixed_layout)*goal_idx + fixed_layout*layout.get("goal_idx", goal_idx)
+        # Keep track of empty counter space (table)
+        empty_table_mask = jnp.zeros_like(all_pos)
+        empty_table_mask = empty_table_mask.at[wall_idx].set(1)
+
+        goal_idx = layout.get("goal_idx")
         goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).transpose()
+        empty_table_mask = empty_table_mask.at[goal_idx].set(0)
 
         onion_pile_idx = layout.get("onion_pile_idx")
         onion_pile_pos = jnp.array([onion_pile_idx % w, onion_pile_idx // w], dtype=jnp.uint32).transpose()
+        empty_table_mask = empty_table_mask.at[onion_pile_idx].set(0)
 
         plate_pile_idx = layout.get("plate_pile_idx")
         plate_pile_pos = jnp.array([plate_pile_idx % w, plate_pile_idx // w], dtype=jnp.uint32).transpose()
+        empty_table_mask = empty_table_mask.at[plate_pile_idx].set(0)
 
         pot_idx = layout.get("pot_idx")
         pot_pos = jnp.array([pot_idx % w, pot_idx // w], dtype=jnp.uint32).transpose()
+        empty_table_mask = empty_table_mask.at[pot_idx].set(0)
+
+        key, subkey = jax.random.split(key)
+        # Pot status is determined by a number between 0 (inclusive) and 24 (exclusive)
+        # 23 corresponds to an empty pot (default)
+        pot_status = jax.random.randint(subkey, (pot_idx.shape[0],), 0, 24)
+        pot_status = pot_status * random_reset + (1-random_reset) * jnp.ones((pot_idx.shape[0])) * 23
+
+        # Set random items on the map if `random_reset == True`
+        def set_pos_fn(item_idx, empty_table_mask):
+            empty_table_mask = empty_table_mask.at[item_idx].set(0)
+            item_pos = jnp.array([item_idx % w, item_idx // w], dtype=jnp.uint32).transpose()
+            return item_pos, empty_table_mask
+
+        def empty_pos_fn(item_idx, empty_table_mask):
+            # This operation works even if item_idx is empty
+            item_idx = jnp.array([])
+            item_pos = jnp.array([item_idx % w, item_idx // w], dtype=jnp.uint32).transpose()
+            return item_pos, empty_table_mask
+
+        # Set items at random on counters:
+        # Sample items (0: empty, 1: onion, 2: plate, 3: dish)
+        key, num_key, which_key = jax.random.split(key, 3)
+        num_spots = empty_table_mask.sum().item()
+        items = jax.random.randint(num_key, (num_spots,), 0, 4)
+
+        num_onions = (items == 1).sum()
+        onion_idx = jax.random.choice(which_key, all_pos, shape=(num_onions,),
+                                      p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        onion_pos, empty_table_mask = jax.lax.cond(num_onions > 0 and random_reset, set_pos_fn, empty_pos_fn,
+                                                   onion_idx, empty_table_mask)
+
+        key, which_key = jax.random.split(key, 2)
+        num_plates = (items == 2).sum()
+        plate_idx = jax.random.choice(which_key, all_pos, shape=(num_plates,),
+                                      p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        plate_pos, empty_table_mask = jax.lax.cond(num_plates > 0 and random_reset, set_pos_fn, empty_pos_fn,
+                                                   plate_idx, empty_table_mask)
+
+        key, which_key = jax.random.split(key, 2)
+        num_dishes = (items == 3).sum()
+        dish_idx = jax.random.choice(which_key, all_pos, shape=(num_dishes,),
+                                      p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        dish_pos, empty_table_mask = jax.lax.cond(num_dishes > 0 and random_reset, set_pos_fn, empty_pos_fn,
+                                                   dish_idx, empty_table_mask)
 
         maze_map = make_overcooked_map(
             params,
@@ -230,14 +274,26 @@ class Overcooked(MultiAgentEnv):
             plate_pile_pos,
             onion_pile_pos,
             pot_pos,
+            pot_status,
+            onion_pos,
+            plate_pos,
+            dish_pos,
             pad_obs=True,
             num_agents=self.num_agents,
             agent_view_size=self.agent_view_size
         )
 
-        # agent inventory
-        empty = OBJECT_TO_INDEX['empty']
-        agent_inv = jnp.array([empty, empty])
+        # agent inventory (empty by default, can be randomized)
+        key, subkey = jax.random.split(key)
+        possible_items = jnp.array([OBJECT_TO_INDEX['empty'], OBJECT_TO_INDEX['onion'],
+                          OBJECT_TO_INDEX['plate'], OBJECT_TO_INDEX['dish']])
+        random_agent_inv = jax.random.choice(subkey, possible_items, shape=(num_agents,), replace=True)
+        agent_inv = random_reset * random_agent_inv + \
+                    (1-random_reset) * jnp.array([OBJECT_TO_INDEX['empty'], OBJECT_TO_INDEX['empty']])
+
+        # Random reset must also set timestep since we have a "urgency" feature for last 40 timesteps
+        key, subkey = jax.random.split(key)
+        timestep = jax.random.randint(subkey, (1,), 0, params.max_steps) * random_reset
 
         state = State(
             agent_pos=agent_pos,
@@ -248,7 +304,7 @@ class Overcooked(MultiAgentEnv):
             pot_pos=pot_pos,
             wall_map=wall_map.astype(jnp.bool_),
             maze_map=maze_map,
-            time=jnp.array(0, dtype=jnp.int32),
+            time=jnp.array(timestep, dtype=jnp.int32),
             terminal=jnp.array(False),
         )
 
@@ -429,12 +485,8 @@ class Overcooked(MultiAgentEnv):
             self, key: chex.PRNGKey, state: State, action: chex.Array, params: EnvParams,
     ) -> Tuple[State, float]:
 
-        # Doing this to safely cast actions into uint8 without Jax throwing a warning every step
-        # def cast_actions(action):
-        #     checkify.check(jnp.all(action >= 0), "negative actions not valid")
-        #     checkify.check(jnp.all(action < self.num_actions), "actions out of range")
-        #     return action.astype(jnp.uint8)
-        # err, action = checkify.checkify(cast_actions)(action)
+        # TODO: VERIFY IF THIS HANDLES ACTIONS OF UNEXPECTED SHAPE (i.e. extra dimensions of size 1)
+        # action = action.flatten()
 
         # Update agent position (forward action)
         is_move_action = jnp.logical_and(action != Actions.stay, action != Actions.interact)

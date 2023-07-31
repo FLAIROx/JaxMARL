@@ -44,6 +44,7 @@ COLOR_TO_INDEX = {
     'grey'  : 5,
     'white' : 6,
 	'black' : 7,
+	'orange': 8,
 }
 
 
@@ -81,6 +82,10 @@ def make_overcooked_map(
 	plate_pile_pos,
 	onion_pile_pos,
 	pot_pos,
+	pot_status,
+	onion_pos,
+	plate_pos,
+	dish_pos,
 	pad_obs=False,
 	num_agents=2,
 	agent_view_size=5):
@@ -109,29 +114,39 @@ def make_overcooked_map(
 	# Add onions
 	onion_x = onion_pile_pos[:,0]
 	onion_y = onion_pile_pos[:,1]
-	onions = jnp.stack(
-			[jnp.array([OBJECT_TO_INDEX['onion_pile'], COLOR_TO_INDEX["yellow"], 0]) for _ in range(10)],
-			dtype=jnp.uint8
-		).at[:onion_pile_pos.shape[0]].get()
-	maze_map = maze_map.at[onion_y, onion_x, :].set(onions)
+	onion_pile = jnp.array([OBJECT_TO_INDEX['onion_pile'], COLOR_TO_INDEX["yellow"], 0], dtype=jnp.uint8)
+	maze_map = maze_map.at[onion_y, onion_x, :].set(onion_pile)
 
 	# Add plates
 	plate_x = plate_pile_pos[:, 0]
 	plate_y = plate_pile_pos[:, 1]
-	plates = jnp.stack(
-		[jnp.array([OBJECT_TO_INDEX['plate_pile'], COLOR_TO_INDEX["white"], 0]) for _ in range(10)],
-		dtype=jnp.uint8
-	).at[:plate_pile_pos.shape[0]].get()
-	maze_map = maze_map.at[plate_y, plate_x, :].set(plates)
+	plate_pile = jnp.array([OBJECT_TO_INDEX['plate_pile'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8)
+	maze_map = maze_map.at[plate_y, plate_x, :].set(plate_pile)
 
 	# Add pots
 	pot_x = pot_pos[:, 0]
 	pot_y = pot_pos[:, 1]
 	pots = jnp.stack(
-		[jnp.array([OBJECT_TO_INDEX['pot'], COLOR_TO_INDEX["black"], 23]) for _ in range(10)],
+		[jnp.array([OBJECT_TO_INDEX['pot'], COLOR_TO_INDEX["black"], status]) for status in pot_status],
 		dtype=jnp.uint8
-	).at[:pot_pos.shape[0]].get()
+	)
 	maze_map = maze_map.at[pot_y, pot_x, :].set(pots)
+
+	if len(onion_pos) > 0:
+		onion_x = onion_pos[:, 0]
+		onion_y = onion_pos[:, 1]
+		onion = jnp.array([OBJECT_TO_INDEX['onion'], COLOR_TO_INDEX["yellow"], 0], dtype=jnp.uint8)
+		maze_map = maze_map.at[onion_y, onion_x, :].set(onion)
+	if len(plate_pos) > 0:
+		plate_x = plate_pos[:, 0]
+		plate_y = plate_pos[:, 1]
+		plate = jnp.array([OBJECT_TO_INDEX['plate'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8)
+		maze_map = maze_map.at[plate_y, plate_x, :].set(plate)
+	if len(dish_pos) > 0:
+		dish_x = dish_pos[:, 0]
+		dish_y = dish_pos[:, 1]
+		dish = jnp.array([OBJECT_TO_INDEX['dish'], COLOR_TO_INDEX["white"], 0], dtype=jnp.uint8)
+		maze_map = maze_map.at[dish_y, dish_x, :].set(dish)
 
 	# Add observation padding
 	if pad_obs:
