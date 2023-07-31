@@ -16,7 +16,7 @@ Specifically, we include the following environments:
 | `walker2d_2x3` | 2 agents, 3 rotors each. Factored into right and left leg. |
 
 ## Observation and Action Spaces
-Each agent's observations are composed of the local state of the rotors it controls, as well as the state of joints at distance 1 away in the kinematic tree, and the state of the root body. State here refers to the position and velocity of the joint or rotor. 
+Each agent's observations are composed of the local state of the rotors it controls, as well as the state of joints at distance 1 away in the kinematic tree, and the state of the root body. State here refers to the position and velocity of the joint or body. 
 
 Each agent's action space is the torques of the rotors it controls.
 
