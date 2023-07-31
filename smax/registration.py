@@ -10,14 +10,20 @@ from .environments import (
     SimpleReferenceMPE,
     MiniSMAC,
     HeuristicEnemyMiniSMAC,
-    SwitchRiddle
+    SwitchRiddle,
+    Ant,
+    Humanoid,
+    Hopper,
+    Walker2d,
+    HalfCheetah,
 )
+
 
 def make(env_id: str, **env_kwargs):
     """A JAX-version of OpenAI's env.make(env_name), built off Gymnax"""
     if env_id not in registered_envs:
         raise ValueError(f"{env_id} is not in registered SMAX environments.")
-    
+
     # 1. MPE PettingZoo Environments
     if env_id == "MPE_simple_v3":
         env = SimpleMPE(**env_kwargs)
@@ -37,7 +43,7 @@ def make(env_id: str, **env_kwargs):
         env = SimpleAdversaryMPE(**env_kwargs)
     elif env_id == "MPE_simple_reference_v3":
         env = SimpleReferenceMPE(**env_kwargs)
-    
+
     # 2. Switch Riddle
     elif env_id == "switch_riddle":
         env = SwitchRiddle(**env_kwargs)
@@ -48,8 +54,21 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "HeuristicEnemyMiniSMAC":
         env = HeuristicEnemyMiniSMAC(**env_kwargs)
 
+    # 4. Mujoco
+    elif env_id == "halfcheetah":
+        env = HalfCheetah(**env_kwargs)
+    elif env_id == "ant":
+        env = Ant(**env_kwargs)
+    elif env_id == "humanoid":
+        env = Humanoid(**env_kwargs)
+    elif env_id == "hopper":
+        env = Hopper(**env_kwargs)
+    elif env_id == "walker2d":
+        env = Walker2d(**env_kwargs)
+
     return env, env.default_params
-    
+
+
 registered_envs = [
     "MPE_simple_v3",
     "MPE_simple_tag_v3",
@@ -60,10 +79,12 @@ registered_envs = [
     "MPE_simple_push_v3",
     "MPE_simple_adversary_v3",
     "MPE_simple_reference_v3",
-    
     "switch_riddle",
-
     "MiniSMAC",
-    "HeuristicEnemyMiniSMAC"
+    "HeuristicEnemyMiniSMAC",
+    "halfcheetah",
+    "ant",
+    "humanoid",
+    "hopper",
+    "walker2d",
 ]
-    
