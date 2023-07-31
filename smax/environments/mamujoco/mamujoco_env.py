@@ -27,24 +27,21 @@ class MAMujocoEnv(MultiAgentEnv):
         """Multi-Agent MuJoCo environment.
 
         Args:
-            env_name:               Name of the environment to be used.
-            episode_length:         Length of an episode. Defaults to 1000.
-            action_repeat:          How many repeated actions to take per environment
-                                    step. Defaults to 1.
-            auto_reset:             Whether to automatically reset the environment when
-                                    an episode ends. Defaults to True.
-            homogenisation_method:  Method to homogenise observations and actions
-                                    across agents. If None, no homogenisation is
-                                    performed, and observations and actions are returned
-                                    as is. If "max", observations and actions are
-                                    homogenised by taking the maximum dimension across
-                                    all agents and zero-padding the rest. In this case,
-                                    the index of the agent is prepended to the
-                                    observation as a one-hot vector. If "concat",
-                                    observations and actions are homogenised by masking
-                                    the dimensions of the other agents with zeros in the
-                                    full observation and action vectors. Defaults to
-                                    None.
+            env_name: Name of the environment to be used.
+            episode_length: Length of an episode. Defaults to 1000.
+            action_repeat: How many repeated actions to take per environment
+                step. Defaults to 1.
+            auto_reset: Whether to automatically reset the environment when
+                an episode ends. Defaults to True.
+            homogenisation_method: Method to homogenise observations and actions
+                across agents. If None, no homogenisation is performed, and
+                observations and actions are returned as is. If "max", observations
+                and actions are homogenised by taking the maximum dimension across
+                all agents and zero-padding the rest. In this case, the index of the
+                agent is prepended to the observation as a one-hot vector. If "concat",
+                observations and actions are homogenised by masking the dimensions of
+                the other agents with zeros in the full observation and action vectors.
+                Defaults to None.
         """
         env = envs.create(env_name, episode_length, action_repeat, auto_reset, **kwargs)
         self.env = env
@@ -128,7 +125,7 @@ class MAMujocoEnv(MultiAgentEnv):
             params: Environment parameters.
 
         Returns:
-            observations: Dict of observations for each agent.
+            A dictionary of observations for each agent.
         """
         return self.map_global_obs_to_agents(state.obs)
 
