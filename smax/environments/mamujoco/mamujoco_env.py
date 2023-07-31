@@ -98,10 +98,12 @@ class MAMujocoEnv(MultiAgentEnv):
     def step_env(
         self,
         key: chex.PRNGKey,
-        state: State,
+        state: envs.State,
         actions: Dict[str, chex.Array],
         params: EnvParams,
-    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+    ) -> Tuple[
+        Dict[str, chex.Array], envs.State, Dict[str, float], Dict[str, bool], Dict
+    ]:
         global_action = self.map_agents_to_global_action(actions)
         next_state = self.env.step(state, global_action)  # type: ignore
         observations = self.get_obs(next_state, params)
