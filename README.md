@@ -35,7 +35,7 @@ conda create -n majax python=3.8
 pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 conda install -c conda-forge flax chex tqdm wandb dotmap
-pip install gymnax evosax pettingzoo
+pip install gymnax evosax pettingzoo brax==0.0.16
 pip install -e .
 
 # to run MPE tests, you will also need pygame
