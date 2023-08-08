@@ -255,8 +255,9 @@ class HanabiGame(MultiAgentEnv):
         )
 
     def step_agent(self, key: chex.PRNGKey, state: State, action: int,
-                    params: EnvParams) -> Tuple[State, int]:
+                   params: EnvParams) -> Tuple[State, int]:
 
+        # action = action[0]
         aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
         reward = 0
 
@@ -264,7 +265,7 @@ class HanabiGame(MultiAgentEnv):
         is_hint = ((2 * self.hand_size) <= action)
 
         def _discard_play_fn(state, action):
-            action -= 1
+            # action -= 1
             hand_before = state.player_hands.at[aidx].get()
             card_idx = ((is_discard * action) + (jnp.logical_not(is_discard) * (action - self.hand_size))
                         ).astype(int)
@@ -315,7 +316,7 @@ class HanabiGame(MultiAgentEnv):
             )
 
         def _hint_fn(state, action):
-            action -= 1
+            # action -= 1
             action_idx = action - (2 * self.hand_size)
             hints_per_player = self.num_colors + self.num_ranks
             # get player hint is being given to
@@ -329,6 +330,11 @@ class HanabiGame(MultiAgentEnv):
             is_rank_hint = jnp.logical_not(is_color_hint)
             hint_color = (hint.at[:self.num_colors].get() * is_color_hint).astype(int)
             hint_rank = (hint.at[self.num_colors:].get() * is_rank_hint).astype(int)
+            # define negative hint as removal of one possibility
+            neg_hint = jnp.zeros(hints_per_player)
+            neg_hint = neg_hint.at[hint_idx].set(1)
+            neg_hint_color = (neg_hint.at[:self.num_colors].get() * is_color_hint).astype(int)
+            neg_hint_rank = (neg_hint.at[self.num_colors:].get() * is_rank_hint).astype(int)
             # get current card knowledge of relevant player
             cur_knowledge = state.card_knowledge.at[hint_player].get()
             cur_color_knowledge = cur_knowledge.at[:, :self.num_colors].get()
@@ -338,20 +344,29 @@ class HanabiGame(MultiAgentEnv):
             card_colors = jnp.sum(cards, axis=2)
             card_ranks = jnp.sum(cards, axis=1)
             # check which cards have hinted color/rank
-            color_hint_matches = 1 - jnp.matmul(card_colors, hint_color)
-            rank_hint_matches = 1 - jnp.matmul(card_ranks, hint_rank)
+            color_hint_matches = jnp.matmul(card_colors, hint_color)
+            rank_hint_matches = jnp.matmul(card_ranks, hint_rank)
+            # flip 1s and 0s because we are removing possibilities
+            color_hint_matches_flipped = 1 - color_hint_matches
+            rank_hint_matches_flipped = 1 - rank_hint_matches
             # update relevant player's card knowledge
             num_colors_poss = jnp.sum(cur_color_knowledge, axis=1)
             color_unknown = jnp.where(num_colors_poss == 1, 0, 1)
-            updated_color_knowledge = cur_color_knowledge - jnp.outer(color_unknown * color_hint_matches,
+            updated_color_knowledge = cur_color_knowledge - jnp.outer(color_unknown * color_hint_matches_flipped,
                                                                       hint_color)
             num_ranks_poss = jnp.sum(cur_rank_knowledge, axis=1)
             rank_unknown = jnp.where(num_ranks_poss == 1, 0, 1)
-            updated_rank_knowledge = cur_rank_knowledge - jnp.outer(rank_unknown * rank_hint_matches,
+            updated_rank_knowledge = cur_rank_knowledge - jnp.outer(rank_unknown * rank_hint_matches_flipped,
                                                                     hint_rank)
-
-            # TODO: add implicit knowledge updates
-
+            # update card knowledge with negative information
+            num_colors_poss = jnp.sum(cur_color_knowledge, axis=1)
+            color_unknown = jnp.where(num_colors_poss == 1, 0, 1)
+            updated_color_knowledge = updated_color_knowledge - jnp.outer(color_unknown * color_hint_matches,
+                                                                          neg_hint_color)
+            num_ranks_poss = jnp.sum(cur_rank_knowledge, axis=1)
+            rank_unknown = jnp.where(num_ranks_poss == 1, 0, 1)
+            updated_rank_knowledge = updated_rank_knowledge - jnp.outer(rank_unknown * rank_hint_matches,
+                                                                        neg_hint_rank)
             updated_knowledge = jnp.concatenate([updated_color_knowledge, updated_rank_knowledge], axis=1)
             card_knowledge = state.card_knowledge.at[hint_player].set(updated_knowledge)
             # remove an info token
@@ -377,6 +392,7 @@ class HanabiGame(MultiAgentEnv):
         last_moves = last_moves.at[aidx, action].set(1)
         reward += (jnp.logical_not(out_of_lives) * (fireworks_after - fireworks_before))
         aidx = (aidx + 1) % self.num_agents
+
         cur_player_idx = jnp.zeros(self.num_agents).at[aidx].set(1)
 
         return state.replace(terminal=terminal,
