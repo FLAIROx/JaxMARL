@@ -66,7 +66,7 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "walker2d_2x3":
         env = Walker2d(**env_kwargs)
 
-    return env, env.default_params
+    return env
 
 
 registered_envs = [
