@@ -1,24 +1,25 @@
 # inspired from: https://colab.research.google.com/gist/MJ10/2c0d1972f3dd1edcc3cd17c636aac8d2/dial.ipynb
 import numpy as np
 
+
 class SwitchRiddleNoJax:
-    def __init__(self, n_agents:int=3, parallel_envs:int=1):
+    def __init__(self, n_agents: int = 3, parallel_envs: int = 1):
         """
         Initializes the Switch Game with given parameters.
         """
         self.game_actions = {
-            'NOTHING': 0,
-            'SWITCH_LIGHT': 1,
-            'TELL': 2,
+            "NOTHING": 0,
+            "SWITCH_LIGHT": 1,
+            "TELL": 2,
         }
 
         self.game_states = {
-            'OUTSIDE': 0,
-            'INSIDE': 1,
+            "OUTSIDE": 0,
+            "INSIDE": 1,
         }
 
         self.n_agents = n_agents
-        self.agents_ids = [f'agent_{i}' for i in range(n_agents)]
+        self.agents_ids = [f"agent_{i}" for i in range(n_agents)]
         self.bs = parallel_envs
         self.nsteps = 4 * n_agents - 6
 
@@ -38,7 +39,10 @@ class SwitchRiddleNoJax:
         self.step_count = 0
 
         # Rewards
-        self.reward = [dict(zip(['__all__']+self.agents_ids, [0]*self.n_agents)) for _ in range(self.bs)]
+        self.reward = [
+            dict(zip(["__all__"] + self.agents_ids, [0] * self.n_agents))
+            for _ in range(self.bs)
+        ]
 
         # Who has been in the room?
         self.has_been = np.zeros((self.bs, self.nsteps, self.n_agents))
@@ -72,18 +76,18 @@ class SwitchRiddleNoJax:
         for b, batch_actions in enumerate(actions):
             if self.step_count < self.nsteps and not self.terminal[b]:
                 agent_id = self.active_agent[b][self.step_count]
-                agent_action = batch_actions[f'agent_{agent_id}']
+                agent_action = batch_actions[f"agent_{agent_id}"]
 
-                if agent_action == self.game_actions['SWITCH_LIGHT']:
+                if agent_action == self.game_actions["SWITCH_LIGHT"]:
                     self.bulb_state[b] = not self.bulb_state[b]
-                elif agent_action == self.game_actions['TELL']:
+                elif agent_action == self.game_actions["TELL"]:
                     if np.all(self.has_been[b].sum(axis=0) > 0):
-                        reward = self.reward_all_live 
+                        reward = self.reward_all_live
                     else:
                         reward = self.reward_all_die
-                    self.reward[b] = {k:reward for k in self.reward[b]}
+                    self.reward[b] = {k: reward for k in self.reward[b]}
                     self.terminal[b] = 1
-        
+
         self.step_count += 1
         if self.step_count >= self.nsteps:
             self.terminal = np.ones(self.bs, dtype=np.int_)
@@ -98,7 +102,11 @@ class SwitchRiddleNoJax:
         for b in range(self.bs):
             batch_obs = {}
             for i, agent_id in enumerate(self.agents_ids):
-                in_room = int(self.active_agent[b][self.step_count] == i) if self.step_count < self.nsteps else 0
+                in_room = (
+                    int(self.active_agent[b][self.step_count] == i)
+                    if self.step_count < self.nsteps
+                    else 0
+                )
                 batch_obs[agent_id] = np.array([in_room, int(self.bulb_state[b])])
             obs.append(batch_obs)
         return obs
@@ -109,13 +117,12 @@ class SwitchRiddleNoJax:
         """
         states = []
         for b in range(self.bs):
-            state = np.zeros(self.n_agents+1)
+            state = np.zeros(self.n_agents + 1)
             if self.step_count < self.nsteps:
                 state[self.active_agent[b][self.step_count]] = 1
             state[-1] = int(self.bulb_state[b])
             states.append(state)
         return states
-
 
     def render(self):
         """
@@ -124,13 +131,15 @@ class SwitchRiddleNoJax:
         for b in range(self.bs):
             print(f"Batch {b}:")
             print(f"Step count: {self.step_count}")
-            print(f"Agent in room: {self.active_agent[b][self.step_count] if self.step_count < self.nsteps else None}")
+            print(
+                f"Agent in room: {self.active_agent[b][self.step_count] if self.step_count < self.nsteps else None}"
+            )
             print(f"Bulb state: {int(self.bulb_state[b])}")
             print(f"Terminal state: {self.terminal[b]}")
             print(f"Reward: {self.reward[b]}")
             print()
 
-    def sample_actions(self, action_name:str=None):
+    def sample_actions(self, action_name: str = None):
         """
         Generates random actions for each agent in a batch.
         """
@@ -146,8 +155,7 @@ class SwitchRiddleNoJax:
             actions.append(batch_actions)
         return actions
 
-    
     @property
     def name(self) -> str:
-        """ Environment name."""
+        """Environment name."""
         return type(self).__name__
