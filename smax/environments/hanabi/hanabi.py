@@ -334,22 +334,14 @@ class HanabiGame(MultiAgentEnv):
             color_hint_matches_flipped = 1 - color_hint_matches
             rank_hint_matches_flipped = 1 - rank_hint_matches
             # update relevant player's card knowledge
-            num_colors_poss = jnp.sum(cur_color_knowledge, axis=1)
-            color_unknown = jnp.where(num_colors_poss == 1, 0, 1)
-            updated_color_knowledge = cur_color_knowledge - jnp.outer(color_unknown * color_hint_matches_flipped,
+            updated_color_knowledge = cur_color_knowledge - cur_color_knowledge * jnp.outer(color_hint_matches_flipped,
                                                                       hint_color)
-            num_ranks_poss = jnp.sum(cur_rank_knowledge, axis=1)
-            rank_unknown = jnp.where(num_ranks_poss == 1, 0, 1)
-            updated_rank_knowledge = cur_rank_knowledge - jnp.outer(rank_unknown * rank_hint_matches_flipped,
+            updated_rank_knowledge = cur_rank_knowledge - cur_rank_knowledge * jnp.outer(rank_hint_matches_flipped,
                                                                     hint_rank)
             # update card knowledge with negative information
-            num_colors_poss = jnp.sum(cur_color_knowledge, axis=1)
-            color_unknown = jnp.where(num_colors_poss == 1, 0, 1)
-            updated_color_knowledge = updated_color_knowledge - jnp.outer(color_unknown * color_hint_matches,
+            updated_color_knowledge = updated_color_knowledge - updated_color_knowledge * jnp.outer(color_hint_matches,
                                                                       neg_hint_color)
-            num_ranks_poss = jnp.sum(cur_rank_knowledge, axis=1)
-            rank_unknown = jnp.where(num_ranks_poss == 1, 0, 1)
-            updated_rank_knowledge = updated_rank_knowledge - jnp.outer(rank_unknown * rank_hint_matches,
+            updated_rank_knowledge = updated_rank_knowledge - updated_rank_knowledge * jnp.outer(rank_hint_matches,
                                                                     neg_hint_rank)
             updated_knowledge = jnp.concatenate([updated_color_knowledge, updated_rank_knowledge], axis=1)
             card_knowledge = state.card_knowledge.at[hint_player].set(updated_knowledge)
