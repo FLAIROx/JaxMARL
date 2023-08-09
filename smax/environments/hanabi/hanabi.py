@@ -7,8 +7,7 @@ from flax import struct
 from typing import Tuple, Dict
 from functools import partial
 from gymnax.environments.spaces import Discrete
-# from smax.environments.multi_agent_env import MultiAgentEnv
-from multi_agent_env import MultiAgentEnv
+from smax.environments.multi_agent_env import MultiAgentEnv
 
 
 @struct.dataclass
@@ -29,20 +28,12 @@ class State:
     cur_player_idx: chex.Array
 
 
-@struct.dataclass
-class EnvParams:
-    turn_limit: int
-
-
 class HanabiGame(MultiAgentEnv):
 
     def __init__(self, num_agents=2, num_colors=5, num_ranks=5, hand_size=5, max_info_tokens=8, max_life_tokens=3,
                  num_cards_of_rank=np.array([3, 2, 2, 2, 1]), agents=None, action_spaces=None, observation_spaces=None,
-                 obs_size=None, num_moves=None, params=None):
+                 obs_size=None, num_moves=None):
         super().__init__(num_agents)
-
-        if params is None:
-            params = self.default_params
 
         self.num_agents = num_agents
         self.agent_range = jnp.arange(num_agents)
@@ -82,16 +73,8 @@ class HanabiGame(MultiAgentEnv):
         if observation_spaces is None:
             self.observation_spaces = {i: Discrete(self.obs_size) for i in self.agents}
 
-    @property
-    def default_params(self) -> EnvParams:
-        params = EnvParams(
-            turn_limit=1e6
-        )
-
-        return params
-
-    def get_legal_moves(self, hands: chex.Array, fireworks: chex.Array, info_tokens: chex.Array, cur_player: int,
-                        params: EnvParams) -> chex.Array:
+    def get_legal_moves(self, hands: chex.Array, fireworks: chex.Array, info_tokens: chex.Array,
+                        cur_player: int) -> chex.Array:
 
         def _get_player_legal_moves(carry, unused):
             """
@@ -144,7 +127,8 @@ class HanabiGame(MultiAgentEnv):
 
         return legal_moves
 
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[Dict, State]:
+    @partial(jax.jit, static_argnums=[0])
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
 
         def _gen_cards(aidx, unused):
             color, rank = shuffled_pairs[aidx]
@@ -190,7 +174,7 @@ class HanabiGame(MultiAgentEnv):
         cur_player_idx = jnp.zeros(self.num_agents).at[0].set(1)
         terminal = False
 
-        legal_moves = self.get_legal_moves(hands, fireworks, info_tokens, 0, params)
+        legal_moves = self.get_legal_moves(hands, fireworks, info_tokens, 0)
 
         last_moves = jnp.zeros((self.num_agents, self.num_moves))
 
@@ -211,13 +195,14 @@ class HanabiGame(MultiAgentEnv):
             cur_player_idx=cur_player_idx
         )
 
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
-    @partial(jax.jit, static_argnums=(0,))
-    def get_obs(self, state: State, params: EnvParams) -> chex.Array:
+    @partial(jax.jit, static_argnums=[0])
+    def get_obs(self, state: State) -> chex.Array:
         """
         Card knowledge observation: includes per card information of past hints
         as well as simple inferred knowledge.
+        Currently only returns obs of current player.
         """
         aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
         hands = state.player_hands
@@ -233,31 +218,30 @@ class HanabiGame(MultiAgentEnv):
                                state.info_tokens, state.life_tokens, state.cur_player_idx])
         return obs
 
-    @partial(jax.jit, static_argnums=(0,))
-    def step_env(self, key: chex.PRNGKey, state: State, action: int,
-                 params: EnvParams) -> Tuple[chex.Array, State, Dict, Dict, Dict]:
-        state, reward = self.step_agent(key, state, action, params)
+    @partial(jax.jit, static_argnums=[0])
+    def step_env(self, key: chex.PRNGKey, state: State,
+                 action: int) -> Tuple[chex.Array, State, Dict, Dict, Dict]:
+        state, reward = self.step_agent(key, state, action)
 
         done = self.terminal(state)
         dones = {agent: done for agent in self.agents}
-        dones["_all__"] = done
+        dones["__all__"] = done
 
         rewards = {agent: reward for agent in self.agents}
+        rewards["__all__"] = reward
 
         info = {}
 
         return (
-            lax.stop_gradient(self.get_obs(state, params)),
+            lax.stop_gradient(self.get_obs(state)),
             lax.stop_gradient(state),
             rewards,
             dones,
             info
         )
 
-    def step_agent(self, key: chex.PRNGKey, state: State, action: int,
-                   params: EnvParams) -> Tuple[State, int]:
-
-        # action = action[0]
+    def step_agent(self, key: chex.PRNGKey, state: State,
+                   action: int) -> Tuple[State, int]:
         aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
         reward = 0
 
@@ -362,11 +346,11 @@ class HanabiGame(MultiAgentEnv):
             num_colors_poss = jnp.sum(cur_color_knowledge, axis=1)
             color_unknown = jnp.where(num_colors_poss == 1, 0, 1)
             updated_color_knowledge = updated_color_knowledge - jnp.outer(color_unknown * color_hint_matches,
-                                                                          neg_hint_color)
+                                                                      neg_hint_color)
             num_ranks_poss = jnp.sum(cur_rank_knowledge, axis=1)
             rank_unknown = jnp.where(num_ranks_poss == 1, 0, 1)
             updated_rank_knowledge = updated_rank_knowledge - jnp.outer(rank_unknown * rank_hint_matches,
-                                                                        neg_hint_rank)
+                                                                    neg_hint_rank)
             updated_knowledge = jnp.concatenate([updated_color_knowledge, updated_rank_knowledge], axis=1)
             card_knowledge = state.card_knowledge.at[hint_player].set(updated_knowledge)
             # remove an info token
@@ -386,8 +370,7 @@ class HanabiGame(MultiAgentEnv):
         deck_empty = (state.num_cards_dealt >= state.deck_size)
         terminal = jnp.logical_or(jnp.logical_or(out_of_lives, game_won), deck_empty)
         cur_player = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
-        legal_moves = self.get_legal_moves(state.player_hands, state.fireworks, state.info_tokens,
-                                           cur_player, params)
+        legal_moves = self.get_legal_moves(state.player_hands, state.fireworks, state.info_tokens, cur_player)
         last_moves = state.last_moves.at[aidx, :].set(0)
         last_moves = last_moves.at[aidx, action].set(1)
         reward += (jnp.logical_not(out_of_lives) * (fireworks_after - fireworks_before))
