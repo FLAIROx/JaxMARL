@@ -4,70 +4,54 @@ Based on the Gymnax and PettingZoo APIs
 
 """
 
-import jax 
+import jax
 import jax.numpy as jnp
 from typing import Dict
-import chex 
+import chex
 from functools import partial
 from flax import struct
 from typing import Tuple, Optional
+
 
 @struct.dataclass
 class State:
     done: chex.Array
     step: int
-     
-@struct.dataclass
-class EnvParams:
-    max_steps: int
 
 
-class MultiAgentEnv(object):  
+class MultiAgentEnv(object):
     """Jittable abstract base class for all SMAX Environments."""
-    
-    def __init__(self,
-                 num_agents: int,  
+
+    def __init__(
+        self,
+        num_agents: int,
     ) -> None:
         """
-            num_agents (int): maximum number of agents within the environment
+        num_agents (int): maximum number of agents within the environment, used to set array dimensions
         """
         self.num_agents = num_agents
         self.observation_spaces = dict()
-        self.action_spaces = dict() 
+        self.action_spaces = dict()
 
-    @property
-    def default_params(self) -> EnvParams:
-        """ Default environment parameters. """
-        return EnvParams()
-        
     @partial(jax.jit, static_argnums=(0,))
-    def reset(
-        self, key: chex.PRNGKey, params: Optional[EnvParams] = None
-    ) -> Tuple[Dict[str, chex.Array], State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Performs resetting of the environment."""
-        if params is None:
-            params = self.default_params
+        raise NotImplementedError
 
-        return self.reset_env(key, params)
-    
     @partial(jax.jit, static_argnums=(0,))
     def step(
-        self, 
-        key: chex.PRNGKey, 
-        state: State, 
-        actions: Dict[str, chex.Array], 
-        params: Optional[EnvParams] = None,
+        self,
+        key: chex.PRNGKey,
+        state: State,
+        actions: Dict[str, chex.Array],
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Performs step transitions in the environment."""
-        if params is None:
-            params = self.default_params
+
         key, key_reset = jax.random.split(key)
-        obs_st, states_st, rewards, dones, infos = self.step_env(
-            key, state, actions, params
-        )
-        
-        obs_re, states_re = self.reset_env(key_reset, params)  
-        
+        obs_st, states_st, rewards, dones, infos = self.step_env(key, state, actions)
+
+        obs_re, states_re = self.reset(key_reset)
+
         # Auto-reset environment based on termination
         states = jax.tree_map(
             lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st
@@ -76,40 +60,34 @@ class MultiAgentEnv(object):
             lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
         )
         return obs, states, rewards, dones, infos
-    
-    def reset_env(
-        self, key: chex.PRNGKey, params: EnvParams
-    ) -> Tuple[Dict[str, chex.Array], State]:
-        """Environment-specific reset."""
-        raise NotImplementedError
-    
+
     def step_env(
-        self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array], Params: EnvParams
+        self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array]
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Environment-specific step transition."""
         raise NotImplementedError
-    
-    def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
+
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
         """Applies observation function to state."""
         raise NotImplementedError
-    
+
     def observation_space(self, agent: str):
-        """ Observation space for a given agent."""
+        """Observation space for a given agent."""
         return self.observation_spaces[agent]
-    
+
     def action_space(self, agent: str):
-        """ Action space for a given agent."""
+        """Action space for a given agent."""
         return self.action_spaces[agent]
-    
+
     @property
     def name(self) -> str:
-        """ Environment name."""
+        """Environment name."""
         return type(self).__name__
-    
+
     @property
     def agent_classes(self) -> dict:
-        """ Returns a dictionary with agent classes, used in environments with hetrogenous agents. 
-        
+        """Returns a dictionary with agent classes, used in environments with hetrogenous agents.
+
         Format:
             agent_base_name: [agent_base_name_1, agent_base_name_2, ...]
         """
