@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from typing import Optional
 
-from smax.environments.multi_agent_env import MultiAgentEnv, EnvParams
+from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import (
     HeuristicEnemyMiniSMAC,
@@ -17,11 +17,9 @@ class Visualizer(object):
         self,
         env: MultiAgentEnv,
         state_seq,
-        env_params: Optional[EnvParams] = None,
         reward_seq=None,
     ):
         self.env = env
-        self.env_params = self.env.default_params if env_params is None else env_params
 
         self.interval = 64
         self.state_seq = state_seq
@@ -52,11 +50,11 @@ class Visualizer(object):
             # plt.close()
 
     def init(self):
-        self.im = self.env.init_render(self.ax, self.state_seq[0], self.env_params)
+        self.im = self.env.init_render(self.ax, self.state_seq[0])
 
     def update(self, frame):
         self.im = self.env.update_render(
-            self.im, self.state_seq[frame], self.env_params
+            self.im, self.state_seq[frame]
         )
 
 
@@ -69,34 +67,31 @@ class MiniSMACVisualizer(Visualizer):
         self,
         env: MultiAgentEnv,
         state_seq,
-        env_params: Optional[EnvParams] = None,
         reward_seq=None,
     ):
-        super().__init__(env, state_seq, env_params, reward_seq)
+        super().__init__(env, state_seq, reward_seq)
         self.heuristic_enemy = isinstance(env, HeuristicEnemyMiniSMAC)
         self.have_expanded = False
         if self.heuristic_enemy:
-            self.heuristic_policy = create_heuristic_policy(env, env_params, 1, shoot=env.enemy_shoots)
+            self.heuristic_policy = create_heuristic_policy(env, 1, shoot=env.enemy_shoots)
 
     def expand_state_seq(self):
         """Because the minismac environment ticks faster than the states received
         we need to expand the states to visualise them"""
         expanded_state_seq = []
         for i, (key, state, actions) in enumerate(self.state_seq):
-            if i == 5:
-                print("stuff")
             if self.heuristic_enemy:
                 agents = self.env.all_agents
                 key, key_action = jax.random.split(key)
                 key_action = jax.random.split(
-                    key_action, num=self.env_params.num_agents_per_team
+                    key_action, num=self.env.num_agents_per_team
                 )
-                obs = self.env.get_all_unit_obs(state, self.env_params)
+                obs = self.env.get_all_unit_obs(state)
                 obs = jnp.array([obs[agent] for agent in self.env.enemy_agents])
                 enemy_actions = jax.vmap(self.heuristic_policy)(key_action, obs)
                 enemy_actions = {
                     agent: enemy_actions[
-                        self.env.agent_ids[agent] % self.env_params.num_agents_per_team
+                        self.env.agent_ids[agent] % self.env.num_agents_per_team
                     ]
                     for agent in self.env.enemy_agents
                 }
@@ -107,10 +102,10 @@ class MiniSMACVisualizer(Visualizer):
             for _ in range(self.env.world_steps_per_env_step):
                 expanded_state_seq.append((key, state, actions))
                 world_actions = jnp.array([actions[i] for i in agents])
-                state = self.env._world_step(state, world_actions, self.env_params)
+                state = self.env._world_step(state, world_actions)
                 state = self.env._update_dead_agents(state)
-                state = self.env._push_units_away(state, self.env_params)
-            state = state.replace(terminal=self.env.is_terminal(state, self.env_params))
+                state = self.env._push_units_away(state)
+            state = state.replace(terminal=self.env.is_terminal(state))
         self.state_seq = expanded_state_seq
         self.have_expanded = True
 
@@ -121,7 +116,7 @@ class MiniSMACVisualizer(Visualizer):
 
     def init(self):
         self.im = self.env.init_render(
-            self.ax, self.state_seq[0], 0, 0, self.env_params
+            self.ax, self.state_seq[0], 0, 0
         )
 
     def update(self, frame):
@@ -130,5 +125,4 @@ class MiniSMACVisualizer(Visualizer):
             self.state_seq[frame],
             frame % self.env.world_steps_per_env_step,
             frame // self.env.world_steps_per_env_step,
-            self.env_params,
         )

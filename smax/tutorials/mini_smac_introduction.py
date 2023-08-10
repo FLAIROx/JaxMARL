@@ -19,15 +19,17 @@ import jax.numpy as jnp
 from smax import make
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.viz.visualizer import Visualizer, MiniSMACVisualizer
-
+import os
+os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
-max_steps = 30
-key = jax.random.PRNGKey(3)
+max_steps = 5
+key = jax.random.PRNGKey(1)
 key, key_r, key_a = jax.random.split(key, 3)
 
 # Instantiate environment
 with jax.disable_jit(False):
-    env, params = make("HeuristicEnemyMiniSMAC")
+    env = make("HeuristicEnemyMiniSMAC", enemy_shoots=True)
+    # env = make("MiniSMAC")
     obs, state = env.reset(key_r)
     print("list of agents in environment", env.agents)
 
@@ -39,7 +41,7 @@ with jax.disable_jit(False):
     }
     print("example action dict", actions)
 
-    policy = create_heuristic_policy(env, params, 0)
+    policy = create_heuristic_policy(env, 0)
     state_seq = []
     returns = {a: 0 for a in env.agents}
     for i in range(max_steps):
@@ -49,14 +51,15 @@ with jax.disable_jit(False):
         actions = {
             agent: policy(key_a[i], obs[agent]) for i, agent in enumerate(env.agents)
         }
-
+        # actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
         state_seq.append((key_seq, state, actions))
-        # state_seq.append(state)
         # Step environment
         obs, state, rewards, dones, infos = env.step(key_s, state, actions)
         returns = {a: returns[a] + rewards[a] for a in env.agents}
         if dones["__all__"]:
             print(f"Returns: {returns}")
 
-viz = MiniSMACVisualizer(env, state_seq, env.default_params)
+print(f"Returns: {returns}")
+viz = MiniSMACVisualizer(env, state_seq)
+
 viz.animate(view=False, save_fname="output.gif")

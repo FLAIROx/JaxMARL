@@ -6,9 +6,22 @@ import pytest
 
 
 def create_env(key):
-    env, params = make("MiniSMAC")
+    env = make(
+        "MiniSMAC",
+        num_agents_per_team=5,
+        map_width=32,
+        map_height=32,
+        world_steps_per_env_step=8,
+        unit_velocity=5.0,
+        unit_type_attacks=jnp.array([0.02]),
+        time_per_step=1.0 / 16,
+        won_battle_bonus=5.0,
+        unit_type_attack_ranges=jnp.array([3.0]),
+        unit_type_sight_ranges=jnp.array([4.0]),
+        max_steps=100,
+    )
     obs, state = env.reset(key)
-    return env, params, obs, state
+    return env, obs, state
 
 
 def get_random_actions(key, env):
@@ -36,7 +49,7 @@ def test_move_actions(action, vec_diff, do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, params, _, state = create_env(key_reset)
+        env, _, state = create_env(key_reset)
 
         init_pos = jnp.array([16, 16])
         unit_positions = state.unit_positions.at[0].set(init_pos)
@@ -45,7 +58,7 @@ def test_move_actions(action, vec_diff, do_jit):
         actions = get_random_actions(key_action, env)
         actions["ally_0"] = action
         key, key_step = jax.random.split(key)
-        _, state, _, _, _ = env.step(key_step, state, actions, params)
+        _, state, _, _, _ = env.step(key_step, state, actions)
         assert jnp.allclose(state.unit_positions[0], init_pos + vec_diff)
 
 
@@ -122,7 +135,7 @@ def test_attack_actions(
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, params, _, state = create_env(key_reset)
+        env, _, state = create_env(key_reset)
 
         unit_1_action = unit_2_idx - env.num_agents_per_team + 4
         unit_2_action = env.num_agents_per_team - unit_1_idx + 3
@@ -137,7 +150,7 @@ def test_attack_actions(
         actions[f"enemy_{unit_2_idx - env.num_agents_per_team}"] = unit_2_action
 
         key, key_step = jax.random.split(key)
-        _, state, rewards, _, _ = env.step(key_step, state, actions, params)
+        _, state, rewards, _, _ = env.step(key_step, state, actions)
 
         assert jnp.allclose(state.unit_health[unit_1_idx], unit_1_health)
         assert jnp.allclose(state.unit_health[unit_2_idx], unit_2_health)
@@ -160,7 +173,7 @@ def test_episode_end(ally_health, enemy_health, done_unit, reward_unit, do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, params, _, state = create_env(key_reset)
+        env, _, state = create_env(key_reset)
 
         unit_1_idx = 0
         unit_2_idx = env.num_agents_per_team
@@ -193,10 +206,10 @@ def test_episode_end(ally_health, enemy_health, done_unit, reward_unit, do_jit):
         actions[f"enemy_{unit_2_idx - env.num_agents_per_team}"] = unit_2_action
 
         key, key_step = jax.random.split(key)
-        _, state, rewards, dones, _ = env.step(key_step, state, actions, params)
+        _, state, rewards, dones, _ = env.step(key_step, state, actions)
         assert dones[done_unit]
         assert dones["__all__"]
-        assert jnp.allclose(rewards[reward_unit], params.won_battle_bonus + 0.02)
+        assert jnp.allclose(rewards[reward_unit], env.won_battle_bonus + 0.02)
 
 
 @pytest.mark.parametrize(("do_jit"), [True, False])
@@ -204,15 +217,15 @@ def test_episode_time_limit(do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, params, _, state = create_env(key_reset)
-        state = state.replace(time=params.max_steps)
+        env, _, state = create_env(key_reset)
+        state = state.replace(time=env.max_steps)
 
         key, key_actions = jax.random.split(key)
         actions = get_random_actions(key_actions, env)
 
         key, key_step = jax.random.split(key)
 
-        _, state, _, dones, _ = env.step(key_step, state, actions, params)
+        _, state, _, dones, _ = env.step(key_step, state, actions)
 
         assert dones["__all__"]
 
@@ -222,23 +235,23 @@ def test_obs_function(do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, params, obs, state = create_env(key_reset)
+        env, obs, state = create_env(key_reset)
         first_enemy_idx = (env.num_agents_per_team - 1) * len(env.unit_features)
         assert jnp.allclose(
             obs["ally_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, -0.5755913, 0.43648314]),
+            jnp.array([1.0, -0.58198166, 0.43116927, 0]),
         )
         assert jnp.allclose(
             obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
-            jnp.zeros((3,)),
+            jnp.zeros((4,)),
         )
         assert jnp.allclose(
             obs["enemy_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, 0.00752163, 0.5390887]),
+            jnp.array([1.0, 0.00728369, 0.5509653, 0]),
         )
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
-            jnp.zeros((3,)),
+            jnp.zeros((4,)),
         )
         # test a dead agent sees nothing
         unit_alive = state.unit_alive.at[0].set(0)
@@ -263,16 +276,16 @@ def test_obs_function(do_jit):
 
         key, key_step = jax.random.split(key)
 
-        obs, state, _, _, _ = env.step(key_step, state, actions, params)
+        obs, state, _, _, _ = env.step(key_step, state, actions)
         assert jnp.allclose(obs["ally_0"], jnp.zeros((env.obs_size,)))
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
-            jnp.zeros((3,)),
+            jnp.zeros((4,)),
         )
         last_ally_idx = first_enemy_idx - len(env.unit_features)
         assert jnp.allclose(
             obs["enemy_0"][last_ally_idx : last_ally_idx + len(env.unit_features)],
-            jnp.array([1.0, 0.125, 0.25]),
+            jnp.array([1.0, 0.125, 0.25, 0]),
         )
 
 
@@ -281,7 +294,7 @@ def test_world_state(do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, params, _, state = create_env(key_reset)
+        env, _, state = create_env(key_reset)
         start_positions = jnp.concatenate(
             [
                 jnp.stack([jnp.array([8.0, 16.0])] * env.num_agents_per_team),
@@ -311,16 +324,16 @@ def test_world_state(do_jit):
         actions[f"enemy_{unit_2_idx - env.num_agents_per_team}"] = unit_2_action
 
         key, key_step = jax.random.split(key)
-        obs, state, _, _, _ = env.step(key_step, state, actions, params)
+        obs, state, _, _, _ = env.step(key_step, state, actions)
 
         world_state = jnp.zeros((env.state_size,))
-        world_state = world_state.at[0 : len(env.unit_features)].set(
-            jnp.array([0.5, 8.0, 18.5])
+        world_state = world_state.at[0 : len(env.own_features)].set(
+            jnp.array([0.5, 7.802697, 19.572298])
         )
-        idx = env.num_agents_per_team * len(env.unit_features)
-        end_idx = idx + len(env.unit_features)
-        world_state = world_state.at[idx:end_idx].set(jnp.array([0.5, 24.0, 13.5]))
-        idx = env.num_agents * len(env.unit_features) + env.num_agents_per_team
+        idx = env.num_agents_per_team * len(env.own_features)
+        end_idx = idx + len(env.own_features)
+        world_state = world_state.at[idx:end_idx].set(jnp.array([0.5, 24.0, 12.468755]))
+        idx = env.num_agents * len(env.own_features) + env.num_agents_per_team
         end_idx = idx + env.num_agents_per_team
         world_state = world_state.at[idx:end_idx].set(
             jnp.ones((env.num_agents_per_team,))

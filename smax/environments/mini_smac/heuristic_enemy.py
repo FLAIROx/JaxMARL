@@ -1,10 +1,9 @@
 import jax.numpy as jnp
 import jax
 import chex
-from smax.environments.mini_smac.mini_smac_env import EnvParams
 
 
-def create_heuristic_policy(env, params: EnvParams, team: int, shoot: bool = True):
+def create_heuristic_policy(env, team: int, shoot: bool = True):
     num_unit_features = len(env.unit_features)
     num_move_actions = env.num_movement_actions
 
@@ -17,7 +16,7 @@ def create_heuristic_policy(env, params: EnvParams, team: int, shoot: bool = Tru
             -- If you can't attack:
                 -- Go to just past the middle of the enemy's half
         """
-        attack_range = params.unit_type_attack_ranges[0]
+        attack_range = env.unit_type_attack_ranges[0]
         first_enemy_idx = (env.num_agents_per_team - 1) * num_unit_features
         own_feats_idx = (env.num_agents_per_team * 2 - 1) * num_unit_features
 
@@ -26,8 +25,8 @@ def create_heuristic_policy(env, params: EnvParams, team: int, shoot: bool = Tru
 
         own_position = scaled_position_to_map(
             obs[own_feats_idx + 1 : own_feats_idx + 3],
-            params.map_width,
-            params.map_height,
+            env.map_width,
+            env.map_height,
         )
         enemy_positions = jnp.zeros((env.num_agents_per_team, 2))
         enemy_positions = enemy_positions.at[:, 0].set(
@@ -38,8 +37,8 @@ def create_heuristic_policy(env, params: EnvParams, team: int, shoot: bool = Tru
         )
         enemy_positions = scaled_position_to_map(
             enemy_positions,
-            params.unit_type_sight_ranges[0],
-            params.unit_type_sight_ranges[0],
+            env.unit_type_sight_ranges[0],
+            env.unit_type_sight_ranges[0],
         )
         # visible if health is > 0. Otherwise out of range or dead
         visible_enemy_mask = obs[first_enemy_idx:own_feats_idx:num_unit_features] > 0
