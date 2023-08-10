@@ -53,10 +53,12 @@ class HanabiGame(MultiAgentEnv):
 
         if num_moves is None:
             self.num_moves = np.sum(np.array([
+                # noop
+                1,
                 # discard, play
                 hand_size * 2,
                 # hint color, rank
-                num_agents * (num_colors + num_ranks)
+                (num_agents - 1) * (num_colors + num_ranks)
             ])).squeeze()
 
         if obs_size is None:
@@ -73,8 +75,8 @@ class HanabiGame(MultiAgentEnv):
         if observation_spaces is None:
             self.observation_spaces = {i: Discrete(self.obs_size) for i in self.agents}
 
-    def get_legal_moves(self, hands: chex.Array, fireworks: chex.Array, info_tokens: chex.Array,
-                        cur_player: int) -> chex.Array:
+    def get_legal_moves(self, hands: chex.Array, fireworks: chex.Array, info_tokens: chex.Array, cur_player: int,
+                        ) -> chex.Array:
 
         def _get_player_legal_moves(carry, unused):
             """
@@ -87,7 +89,7 @@ class HanabiGame(MultiAgentEnv):
             hands, fireworks, info_tokens, aidx = carry
             legal_moves = jnp.zeros(self.num_moves)
             # discard always legal
-            legal_moves = legal_moves.at[1:self.hand_size].set(1)
+            legal_moves = legal_moves.at[1:self.hand_size+1].set(1)
             move_idx += self.hand_size
             # play moves always legal
             legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(1)
@@ -109,7 +111,7 @@ class HanabiGame(MultiAgentEnv):
                 return carry, valid_hints
 
             _, valid_hints = lax.scan(_get_hints_for_hand, (0, other_hands), None, self.num_agents - 1)
-            valid_hints = jnp.roll(valid_hints, aidx)
+            valid_hints = jnp.roll(valid_hints, aidx, axis=0)
             num_hints = (self.num_agents - 1) * (self.num_colors + self.num_ranks)
             valid_hints = jnp.concatenate(valid_hints, axis=0)
             info_tokens_available = (jnp.sum(info_tokens) != 0)
@@ -127,7 +129,6 @@ class HanabiGame(MultiAgentEnv):
 
         return legal_moves
 
-    @partial(jax.jit, static_argnums=[0])
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
 
         def _gen_cards(aidx, unused):
@@ -198,30 +199,39 @@ class HanabiGame(MultiAgentEnv):
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
-    def get_obs(self, state: State) -> chex.Array:
+    def get_obs(self, state: State) -> Dict:
         """
         Card knowledge observation: includes per card information of past hints
         as well as simple inferred knowledge.
         Currently only returns obs of current player.
         """
-        aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
-        hands = state.player_hands
-        other_hands = jnp.delete(hands, aidx, axis=0, assume_unique_indices=True)
-        other_hands = jnp.roll(other_hands, aidx, axis=0)
-        other_hands = jnp.reshape(other_hands, (-1,))
-        knowledge = state.card_knowledge.at[aidx].get()
-        knowledge = jnp.reshape(knowledge, (-1,))
-        legal_moves = state.legal_moves.at[aidx].get()
-        fireworks = jnp.reshape(state.fireworks, (-1,))
-        last_moves = jnp.reshape(state.last_moves, (-1,))
-        obs = jnp.concatenate([knowledge, other_hands, legal_moves, last_moves, fireworks,
-                               state.info_tokens, state.life_tokens, state.cur_player_idx])
-        return obs
+        @partial(jax.vmap, in_axes=[0, None])
+        def _observation(aidx: int, state: State) -> chex.Array:
+            hands = state.player_hands
+            other_hands = jnp.delete(hands, aidx, axis=0, assume_unique_indices=True)
+            other_hands = jnp.roll(other_hands, aidx, axis=0)
+            other_hands = jnp.reshape(other_hands, (-1,))
+            knowledge = state.card_knowledge.at[aidx].get()
+            knowledge = jnp.reshape(knowledge, (-1,))
+            legal_moves = state.legal_moves.at[aidx].get()
+            fireworks = jnp.reshape(state.fireworks, (-1,))
+            last_moves = jnp.reshape(state.last_moves, (-1,))
+            obs = jnp.concatenate([knowledge, other_hands, legal_moves, last_moves, fireworks,
+                                   state.info_tokens, state.life_tokens, state.cur_player_idx])
+            return obs
+
+        obs = _observation(self.agent_range, state)
+        return {a: obs[i] for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
-    def step_env(self, key: chex.PRNGKey, state: State,
-                 action: int) -> Tuple[chex.Array, State, Dict, Dict, Dict]:
-        state, reward = self.step_agent(key, state, action)
+    def step_env(self, key: chex.PRNGKey, state: State, actions: Dict,
+                 ) -> Tuple[chex.Array, State, Dict, Dict, Dict]:
+        # get the actions as array
+        actions = jnp.array([actions[i] for i in self.agents])
+        aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
+        action = actions.at[aidx].get()
+        action = action[0] - 1
+        state, reward = self.step_agent(key, state, aidx, action)
 
         done = self.terminal(state)
         dones = {agent: done for agent in self.agents}
@@ -240,16 +250,14 @@ class HanabiGame(MultiAgentEnv):
             info
         )
 
-    def step_agent(self, key: chex.PRNGKey, state: State,
-                   action: int) -> Tuple[State, int]:
-        aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
-        reward = 0
-
+    def step_agent(self, key: chex.PRNGKey, state: State, aidx: int, action: int,
+                   ) -> Tuple[State, int]:
         is_discard = (action < self.hand_size)
         is_hint = ((2 * self.hand_size) <= action)
+        reward = 0
 
         def _discard_play_fn(state, action):
-            # action -= 1
+            # get hand and card info
             hand_before = state.player_hands.at[aidx].get()
             card_idx = ((is_discard * action) + (jnp.logical_not(is_discard) * (action - self.hand_size))
                         ).astype(int)
@@ -300,10 +308,10 @@ class HanabiGame(MultiAgentEnv):
             )
 
         def _hint_fn(state, action):
-            # action -= 1
+            # get effective hint action index
             action_idx = action - (2 * self.hand_size)
-            hints_per_player = self.num_colors + self.num_ranks
             # get player hint is being given to
+            hints_per_player = self.num_colors + self.num_ranks
             hint_player_before = jnp.floor(action_idx / hints_per_player).astype(int)
             hint_player = ((aidx + 1 + hint_player_before) % self.num_agents).astype(int)
             hint_idx = (action_idx % hints_per_player).astype(int)
@@ -335,14 +343,14 @@ class HanabiGame(MultiAgentEnv):
             rank_hint_matches_flipped = 1 - rank_hint_matches
             # update relevant player's card knowledge
             updated_color_knowledge = cur_color_knowledge - cur_color_knowledge * jnp.outer(color_hint_matches_flipped,
-                                                                      hint_color)
+                                                                                            hint_color)
             updated_rank_knowledge = cur_rank_knowledge - cur_rank_knowledge * jnp.outer(rank_hint_matches_flipped,
-                                                                    hint_rank)
+                                                                                         hint_rank)
             # update card knowledge with negative information
             updated_color_knowledge = updated_color_knowledge - updated_color_knowledge * jnp.outer(color_hint_matches,
-                                                                      neg_hint_color)
+                                                                                                    neg_hint_color)
             updated_rank_knowledge = updated_rank_knowledge - updated_rank_knowledge * jnp.outer(rank_hint_matches,
-                                                                    neg_hint_rank)
+                                                                                                 neg_hint_rank)
             updated_knowledge = jnp.concatenate([updated_color_knowledge, updated_rank_knowledge], axis=1)
             card_knowledge = state.card_knowledge.at[hint_player].set(updated_knowledge)
             # remove an info token
@@ -362,9 +370,10 @@ class HanabiGame(MultiAgentEnv):
         deck_empty = (state.num_cards_dealt >= state.deck_size)
         terminal = jnp.logical_or(jnp.logical_or(out_of_lives, game_won), deck_empty)
         cur_player = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
-        legal_moves = self.get_legal_moves(state.player_hands, state.fireworks, state.info_tokens, cur_player)
+        legal_moves = self.get_legal_moves(state.player_hands, state.fireworks, state.info_tokens,
+                                           cur_player)
         last_moves = state.last_moves.at[aidx, :].set(0)
-        last_moves = last_moves.at[aidx, action].set(1)
+        last_moves = last_moves.at[aidx, action+1].set(1)
         reward += (jnp.logical_not(out_of_lives) * (fireworks_after - fireworks_before))
         aidx = (aidx + 1) % self.num_agents
 
