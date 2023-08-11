@@ -14,7 +14,7 @@ rng, key_reset, key_act, key_step = jax.random.split(rng, 4)
 env = make('simple_world_comm_v2')
 
 # Reset the environment.
-obs, state = env.reset(key_reset, env_params)
+obs, state = env.reset(key_reset)
 
 # Sample random actions.
 key_act = jax.random.split(key_a, env.num_agents)
@@ -23,7 +23,6 @@ actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enu
 # Perform the step transition.
 n_obs, n_state, reward, done, infos = env.step(key_step, state, action)
 ```
-Tutorials can be found in the `tutorials` directory. An example environment loop can be found in `smax_introduction.py`
 
 ## Installation
 Using Conda, run the following commands. You must ensure you install the correct JAX version, more information can be found [here](https://github.com/google/jax#installation)
