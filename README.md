@@ -26,9 +26,10 @@ n_obs, n_state, reward, done, infos = env.step(key_step, state, action)
 Tutorials can be found in the `tutorials` directory. An example environment loop can be found in `smax_introduction.py`
 
 ## Installation
-Using Conda, run the following commands (which can also be found in `env_commands`). You must ensure you install the correct JAX version, more information can be found [here](https://github.com/google/jax#installation)
+Using Conda, run the following commands. You must ensure you install the correct JAX version, more information can be found [here](https://github.com/google/jax#installation)
 ```
-conda create -n majax python=3.8
+conda create -n smax python=3.8
+conda activate smax
 
 # NOTE this installs jax for CUDA 12
 # if you have a different CUDA version or no GPU, see https://github.com/google/jax#installation
