@@ -15,6 +15,8 @@ from flax import struct
 from typing import Tuple, Optional, Dict
 from functools import partial
 
+import matplotlib.pyplot as plt
+
 @struct.dataclass
 class State:
     """ Basic MPE State """
@@ -132,7 +134,7 @@ class SimpleMPE(MultiAgentEnv):
             assert len(self.moveable) == self.num_entities, f"Moveable array length {len(self.moveable)} does not match number of entities {self.num_entities}"
             assert self.moveable.dtype == bool, f"Moveable array must be boolean, got {self.moveable}"
         else:
-            self.moveable = jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
+            self.moveable = jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)])
         if "silent" in kwargs:
             self.silent = kwargs["silent"]
             assert len(self.silent) == self.num_agents, f"Silent array length {len(self.silent)} does not match number of agents {self.num_agents}"
@@ -154,11 +156,10 @@ class SimpleMPE(MultiAgentEnv):
             assert len(self.accel) == self.num_agents, f"Accel array length {len(self.accel)} does not match number of agents {self.num_agents}"
             assert jnp.all(self.accel > 0), f"Accel array must be positive, got {self.accel}"
         else:
-            self.accel = jnp.full((self.num_agents), ACCEL),
+            self.accel = jnp.full((self.num_agents), ACCEL)
         if "max_speed" in kwargs:
             self.max_speed = kwargs["max_speed"]
-            assert len(self.max_speed) == self.num_agents, f"Max speed array length {len(self.max_speed)} does not match number of agents {self.num_agents}"
-            assert jnp.all(self.max_speed > 0), f"Max speed array must be positive, got {self.max_speed}"
+            assert len(self.max_speed) == self.num_entities, f"Max speed array length {len(self.max_speed)} does not match number of entities {self.num_entities}"
         else:
             self.max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED), jnp.full((self.num_landmarks), 0.0)])
         if "u_noise" in kwargs:
@@ -224,7 +225,7 @@ class SimpleMPE(MultiAgentEnv):
         return obs, state, reward, dones, info
     
     @partial(jax.jit, static_argnums=[0])
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         """ Initialise with random positions """
         
         key_a, key_l = jax.random.split(key)        
@@ -242,7 +243,7 @@ class SimpleMPE(MultiAgentEnv):
             step=0,
         )
         
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
     
     @partial(jax.jit, static_argnums=[0])
     def get_obs(self, state: State) -> dict:
@@ -277,7 +278,7 @@ class SimpleMPE(MultiAgentEnv):
 
         return self.action_decoder(self.agent_range, actions)
     
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_continuous_action(self, a_idx:int, action: chex.Array) -> Tuple[chex.Array, chex.Array]:
         u = jnp.array([
             action[1] - action[2],
@@ -288,7 +289,7 @@ class SimpleMPE(MultiAgentEnv):
         c = action[5:] 
         return u, c
     
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
+    @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_discrete_action(self, a_idx:int, action: chex.Array) -> Tuple[chex.Array, chex.Array]:
         u = jnp.zeros((self.dim_p,))        
         idx = jax.lax.select(action <= 2, 0, 1)
@@ -451,6 +452,41 @@ class SimpleMPE(MultiAgentEnv):
     ### === PLOTTING === ### 
     def init_render(self, ax, state: State):
         from matplotlib.patches import Circle
+        from matplotlib import pyplot
+        import io
+        import numpy as np
+
+        ax_lim = 2
+        ax.clear()
+        ax.set_xlim([-ax_lim, ax_lim])
+        ax.set_ylim([-ax_lim, ax_lim])
+        for i in range(self.num_entities):
+            c = Circle(state.p_pos[i], self.rad[i], color=onp.array(self.colour[i])/255)
+            ax.add_patch(c)
+
+        '''canvas = ax.figure.canvas
+        canvas.draw()
+        print('canvas width height', canvas.get_width_height())
+        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8',  sep='')
+        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))'''
+        
+        with io.BytesIO() as buff:
+            ax.savefig(buff, format='raw')
+            buff.seek(0)
+            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
+        w, h = ax.canvas.get_width_height()
+        im = data.reshape((int(h), int(w), -1))
+        
+        return ax.imshow(im)
+    
+    def update_render(self, im, state: State):
+        ax = im.axes 
+        return self.init_render(ax, state)
+    
+    def plot(self, ax, state: State):
+        from matplotlib.patches import Circle
+        import matplotlib.pyplot as plt
+        import io
         import numpy as np
 
         ax_lim = 2
@@ -463,16 +499,11 @@ class SimpleMPE(MultiAgentEnv):
 
         canvas = ax.figure.canvas
         canvas.draw()
-
+        print('canvas width height', canvas.get_width_height())
         rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
         rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
         
-        return ax.imshow(rgb_array)
-    
-    def update_render(self, im, state: State):
-        ax = im.axes 
-        return self.init_render(ax, state)
-    
+        plt.pause(0.01)
 
 if __name__=="__main__":
     from smax.viz.visualizer import Visualizer
@@ -481,10 +512,8 @@ if __name__=="__main__":
     key = jax.random.PRNGKey(0)
     
     env = SimpleMPE(num_agents)
-    params = env.default_params
 
-    obs, state = env.reset_env(key, params)
-    
+    obs, state = env.reset(key)
     
     mock_action = jnp.array([[1.0, 1.0, 0.1, 0.1, 0.0]])
     
@@ -508,14 +537,18 @@ if __name__=="__main__":
         key, key_act = jax.random.split(key)
         key_act = jax.random.split(key_act, env.num_agents)
         actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enumerate(env.agents)} 
-        print('actions', actions)
+        #print('actions', actions)
         
-        obs, state, rew, dones, _ = env.step_env(key, state, actions, params)
-        print('state', obs)
+        obs, state, rew, dones, _ = env.step_env(key, state, actions)
+        #print('state', obs)
         
-        #env.render(state, params)
+        #env.render(state)
         #raise
         #pygame.time.wait(300)
 
-    viz = Visualizer(env, state_seq, params)
-    viz.animate(view=True)
+    fig, ax = plt.subplots()
+    for state in state_seq:
+        env.plot(ax, state)
+
+    '''viz = Visualizer(env, state_seq)
+    viz.animate(view=True)'''
