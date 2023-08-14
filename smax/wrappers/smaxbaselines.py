@@ -7,7 +7,7 @@ from flax import struct
 from functools import partial
 #from gymnax.environments import environment, spaces
 from typing import Optional, Tuple, Union
-from smax.environments.multi_agent_env import MultiAgentEnv, State, EnvParams
+from smax.environments.multi_agent_env import MultiAgentEnv, State
 
 class SMAXWrapper(object):
     """ Base class for all SMAX wrappers. """
@@ -37,9 +37,9 @@ class ArrayInterface(SMAXWrapper):
     
     @partial(jax.jit, static_argnums=(0,))
     def reset(
-        self, key: chex.PRNGKey, params: Optional[EnvParams] = None
+        self, key: chex.PRNGKey
     ) -> Tuple[chex.Array, State]:
-        obs, state = self._env.reset(key, params)
+        obs, state = self._env.reset(key)
         obs = jnp.stack([obs[a] for a in self._env.agent_list])
         obs = jnp.reshape(obs, (self._env.num_agents, -1))
         return obs, state
@@ -50,12 +50,9 @@ class ArrayInterface(SMAXWrapper):
         key,
         state,
         actions,
-        params=None,
     ):
-        if params is None:
-            params = self._env.default_params
         actions = {a: actions[i] for i, a in enumerate(self._env.agents)}
-        obs, state, reward, done, info = self._env.step(key, state, actions, params)
+        obs, state, reward, done, info = self._env.step(key, state, actions)
         obs = jnp.stack([obs[a] for a in self._env.agent_list])
         obs = jnp.reshape(obs, (self._env.num_agents, -1))
         reward = jnp.stack([reward[a] for a in self._env.agent_list])
@@ -92,9 +89,9 @@ class LogWrapper(SMAXWrapper):
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
-        self, key: chex.PRNGKey, params: Optional[EnvParams] = None
+        self, key: chex.PRNGKey 
     ) -> Tuple[chex.Array, State]:
-        obs, env_state = self._env.reset(key, params)
+        obs, env_state = self._env.reset(key)
         state = LogEnvState(env_state, 
                             jnp.zeros((self._env.num_agents,)),
                             jnp.zeros((self._env.num_agents,)),
@@ -108,10 +105,9 @@ class LogWrapper(SMAXWrapper):
         key: chex.PRNGKey,
         state: LogEnvState,
         action: Union[int, float],
-        params: Optional[EnvParams] = None,
     ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(
-            key, state.env_state, action, params
+            key, state.env_state, action
         )
         ep_done = done["__all__"]
         new_episode_return = state.episode_returns + self._batchify_floats(reward)
