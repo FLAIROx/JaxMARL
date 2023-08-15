@@ -309,7 +309,7 @@ class MiniSMAC(MultiAgentEnv):
                 jnp.maximum(unit_health[delta.attacked_idx] + delta.health_diff, 0.0)
             )
             return unit_health, None
-
+        # TODO, just sum the deltas and take the max w/ 0
         unit_health, _ = jax.lax.scan(update_health, state.unit_health, deltas)
         state = state.replace(
             unit_health=unit_health,

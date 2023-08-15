@@ -8,7 +8,7 @@ from typing import Optional
 from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import (
-    HeuristicEnemyMiniSMAC,
+    EnemyMiniSMAC,
 )
 
 
@@ -70,10 +70,8 @@ class MiniSMACVisualizer(Visualizer):
         reward_seq=None,
     ):
         super().__init__(env, state_seq, reward_seq)
-        self.heuristic_enemy = isinstance(env, HeuristicEnemyMiniSMAC)
+        self.heuristic_enemy = isinstance(env, EnemyMiniSMAC)
         self.have_expanded = False
-        if self.heuristic_enemy:
-            self.heuristic_policy = create_heuristic_policy(env, 1, shoot=env.enemy_shoots)
 
     def expand_state_seq(self):
         """Because the minismac environment ticks faster than the states received
@@ -82,19 +80,13 @@ class MiniSMACVisualizer(Visualizer):
         for i, (key, state, actions) in enumerate(self.state_seq):
             if self.heuristic_enemy:
                 agents = self.env.all_agents
+                # There is a split in the step function of MultiAgentEnv
+                # We call split here so that the action key is the same.
+                key, _ = jax.random.split(key)
                 key, key_action = jax.random.split(key)
-                key_action = jax.random.split(
-                    key_action, num=self.env.num_agents_per_team
-                )
                 obs = self.env.get_all_unit_obs(state)
                 obs = jnp.array([obs[agent] for agent in self.env.enemy_agents])
-                enemy_actions = jax.vmap(self.heuristic_policy)(key_action, obs)
-                enemy_actions = {
-                    agent: enemy_actions[
-                        self.env.agent_ids[agent] % self.env.num_agents_per_team
-                    ]
-                    for agent in self.env.enemy_agents
-                }
+                enemy_actions = self.env.get_enemy_actions(key_action, obs)
                 actions = {k: v.squeeze() for k, v in actions.items()}
                 actions = {**enemy_actions, **actions}
             else:

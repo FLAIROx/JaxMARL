@@ -16,20 +16,52 @@ Below is an example of a simple environment loop, using random actions.
 
 import jax
 import jax.numpy as jnp
+import flax.linen as nn
+import distrax
 from smax import make
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.viz.visualizer import Visualizer, MiniSMACVisualizer
 import os
+from typing import Sequence
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
-max_steps = 5
+max_steps = 30
 key = jax.random.PRNGKey(1)
-key, key_r, key_a = jax.random.split(key, 3)
+key, key_r, key_a, key_p = jax.random.split(key, 4)
+
+class LearnedPolicy(nn.Module):
+    action_dim: Sequence[int]
+    activation: str = "tanh"
+
+    @nn.compact
+    def __call__(self, x):
+        if self.activation == "relu":
+            activation = nn.relu
+        else:
+            activation = nn.tanh
+        actor_mean = nn.Dense(self.action_dim)(x)
+        actor_mean = activation(actor_mean)
+        pi = distrax.Categorical(logits=actor_mean)
+
+        critic = nn.Dense(1)(x)
+        critic = activation(critic)
+
+        return pi, jnp.squeeze(critic, axis=-1)
+
+def init_policy(env, rng):
+    network = LearnedPolicy(env.action_space(env.agents[0]).n, activation="tanh")
+    rng, _rng = jax.random.split(rng)
+    init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
+    params = network.init(_rng, init_x)
+    return params
 
 # Instantiate environment
 with jax.disable_jit(False):
     env = make("HeuristicEnemyMiniSMAC", enemy_shoots=True)
     # env = make("MiniSMAC")
+    # params = init_policy(env, key_p)
+    # learned_policy = LearnedPolicy(env.action_space(env.agents[0]).n, activation="tanh")
+    # env = make("LearnedPolicyEnemyMiniSMAC", params=params, policy=learned_policy)
     obs, state = env.reset(key_r)
     print("list of agents in environment", env.agents)
 
@@ -52,7 +84,7 @@ with jax.disable_jit(False):
             agent: policy(key_a[i], obs[agent]) for i, agent in enumerate(env.agents)
         }
         # actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
-        state_seq.append((key_seq, state, actions))
+        state_seq.append((key_s, state, actions))
         # Step environment
         obs, state, rewards, dones, infos = env.step(key_s, state, actions)
         returns = {a: returns[a] + rewards[a] for a in env.agents}
