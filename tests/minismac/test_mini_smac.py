@@ -12,8 +12,10 @@ def create_env(key):
         map_width=32,
         map_height=32,
         world_steps_per_env_step=8,
-        unit_velocity=5.0,
+        unit_type_velocities=jnp.array([5.0]),
+        unit_type_health=jnp.array([1.0]),
         unit_type_attacks=jnp.array([0.02]),
+        unit_type_weapon_cooldowns=jnp.array([0.2]),
         time_per_step=1.0 / 16,
         won_battle_bonus=5.0,
         unit_type_attack_ranges=jnp.array([3.0]),
@@ -61,7 +63,6 @@ def test_move_actions(action, vec_diff, do_jit):
         _, state, _, _, _ = env.step(key_step, state, actions)
         assert jnp.allclose(state.unit_positions[0], init_pos + vec_diff)
 
-
 @pytest.mark.parametrize(
     (
         "unit_1_idx",
@@ -80,10 +81,10 @@ def test_move_actions(action, vec_diff, do_jit):
             5,
             jnp.array([1.0, 1.0]),
             jnp.array([1.0, 2.0]),
-            0.84,
-            0.84,
-            0.032,
-            0.032,
+            0.96,
+            0.96,
+            0.008,
+            0.008,
             False,
         ),
         (
@@ -91,10 +92,10 @@ def test_move_actions(action, vec_diff, do_jit):
             5,
             jnp.array([1.0, 1.0]),
             jnp.array([1.0, 2.0]),
-            0.84,
-            0.84,
-            0.032,
-            0.032,
+            0.96,
+            0.96,
+            0.008,
+            0.008,
             True,
         ),
         (

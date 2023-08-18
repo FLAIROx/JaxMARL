@@ -19,15 +19,18 @@ import jax.numpy as jnp
 import flax.linen as nn
 import distrax
 from smax import make
+from smax.environments.mini_smac import map_name_to_scenario
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.viz.visualizer import Visualizer, MiniSMACVisualizer
 import os
 from typing import Sequence
+
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
 max_steps = 30
 key = jax.random.PRNGKey(1)
 key, key_r, key_a, key_p = jax.random.split(key, 4)
+
 
 class LearnedPolicy(nn.Module):
     action_dim: Sequence[int]
@@ -48,6 +51,7 @@ class LearnedPolicy(nn.Module):
 
         return pi, jnp.squeeze(critic, axis=-1)
 
+
 def init_policy(env, rng):
     network = LearnedPolicy(env.action_space(env.agents[0]).n, activation="tanh")
     rng, _rng = jax.random.split(rng)
@@ -55,9 +59,18 @@ def init_policy(env, rng):
     params = network.init(_rng, init_x)
     return params
 
+
 # Instantiate environment
 with jax.disable_jit(False):
-    env = make("HeuristicEnemyMiniSMAC", enemy_shoots=True)
+    scenario = map_name_to_scenario("3m")
+    env = make(
+        "HeuristicEnemyMiniSMAC",
+        enemy_shoots=True,
+        scenario=scenario,
+        num_agents_per_team=3,
+        use_self_play_reward=False,
+        walls_cause_death=True,
+    )
     # env = make("MiniSMAC")
     # params = init_policy(env, key_p)
     # learned_policy = LearnedPolicy(env.action_space(env.agents[0]).n, activation="tanh")
@@ -73,7 +86,7 @@ with jax.disable_jit(False):
     }
     print("example action dict", actions)
 
-    policy = create_heuristic_policy(env, 0)
+    policy = create_heuristic_policy(env, 0, shoot=True)
     state_seq = []
     returns = {a: 0 for a in env.agents}
     for i in range(max_steps):
@@ -83,6 +96,7 @@ with jax.disable_jit(False):
         actions = {
             agent: policy(key_a[i], obs[agent]) for i, agent in enumerate(env.agents)
         }
+        # actions = {agent: jnp.array(1) for agent in env.agents}
         # actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
         state_seq.append((key_s, state, actions))
         # Step environment

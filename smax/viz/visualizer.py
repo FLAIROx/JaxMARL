@@ -94,7 +94,9 @@ class MiniSMACVisualizer(Visualizer):
             for _ in range(self.env.world_steps_per_env_step):
                 expanded_state_seq.append((key, state, actions))
                 world_actions = jnp.array([actions[i] for i in agents])
-                state = self.env._world_step(state, world_actions)
+                key, step_key = jax.random.split(key)
+                state = self.env._world_step(step_key, state, world_actions)
+                state = self.env._kill_agents_touching_walls(state)
                 state = self.env._update_dead_agents(state)
                 state = self.env._push_units_away(state)
             state = state.replace(terminal=self.env.is_terminal(state))
