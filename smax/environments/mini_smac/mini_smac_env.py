@@ -63,6 +63,10 @@ def register_scenario(map_name, scenario):
     MAP_NAME_TO_SCENARIO[map_name] = scenario
 
 
+# TODO Features to add:
+# -- Different team sizes for allies and enemies
+# -- Zerg Health Regeneration
+# -- Protoss Shields
 class MiniSMAC(MultiAgentEnv):
     def __init__(
         self,
@@ -89,6 +93,7 @@ class MiniSMAC(MultiAgentEnv):
         unit_type_health=jnp.array([45.0, 125.0, 160, 150, 35, 80]),
         unit_type_weapon_cooldowns=jnp.array([0.61, 1.07, 1.87, 0.86, 0.5, 0.59]),
         use_self_play_reward=False,
+        see_enemy_actions=True,
         won_battle_bonus=1.0,
         walls_cause_death=True,
         max_steps=100,
@@ -119,6 +124,7 @@ class MiniSMAC(MultiAgentEnv):
         self.unit_type_bits = len(self.unit_type_names)
         self.max_steps = max_steps
         self.won_battle_bonus = won_battle_bonus
+        self.see_enemy_actions = see_enemy_actions
         self.agents = [f"ally_{i}" for i in range(self.num_agents_per_team)] + [
             f"enemy_{i}" for i in range(self.num_agents_per_team)
         ]
@@ -207,7 +213,9 @@ class MiniSMAC(MultiAgentEnv):
         def world_step_fn(carry, _):
             state, step_key = carry
             step_key, world_step_key = jax.random.split(step_key)
-            state = partial(self._world_step, actions=actions)(key=world_step_key, state=state)
+            state = partial(self._world_step, actions=actions)(
+                key=world_step_key, state=state
+            )
             state = self._kill_agents_touching_walls(state)
             state = self._update_dead_agents(state)
             state = self._push_units_away(state)
@@ -288,7 +296,7 @@ class MiniSMAC(MultiAgentEnv):
             # only award the won_battle_bonus when all the enemy is dead
             # AND there is at least one ally alive. Otherwise it's a draw.
             # This can't happen in SC2 because actions happen in a random order,
-            # but I'd rather VMAP over events where possible, which means we 
+            # but I'd rather VMAP over events where possible, which means we
             # can get draws.
             won_battle_bonus = jax.lax.cond(
                 won_battle & ~lost_battle, lambda: self.won_battle_bonus, lambda: 0.0
@@ -321,10 +329,10 @@ class MiniSMAC(MultiAgentEnv):
         return state.replace(unit_alive=unit_alive)
 
     def _kill_agents_touching_walls(self, state: State):
-        units_touching_walls = jnp.any(state.unit_positions <= 0.0, axis=-1) | jnp.any(
+        units_touching_walls = jnp.logical_or(jnp.any(state.unit_positions <= 0.0, axis=-1), jnp.any(
             state.unit_positions >= jnp.array([self.map_width, self.map_height]),
             axis=-1,
-        )
+        ))
         unit_health = jnp.where(units_touching_walls, 0.0, state.unit_health)
         unit_health = jax.lax.select(
             self.walls_cause_death, unit_health, state.unit_health
@@ -479,10 +487,12 @@ class MiniSMAC(MultiAgentEnv):
         # get the features of every unit, as well as the teams that they belong to.
         def get_features(i):
             empty_features = jnp.zeros(shape=(len(self.own_features),))
-            features = empty_features.at[0].set(state.unit_health[i])
+            features = empty_features.at[0].set(
+                state.unit_health[i] / self.unit_type_health[state.unit_types[i]]
+            )
             features = features.at[1:3].set(state.unit_positions[i])
-            features = features.at[4].set(state.unit_weapon_cooldowns[i])
-            features = features.at[5 + state.unit_types[i]].set(1)
+            features = features.at[3].set(state.unit_weapon_cooldowns[i])
+            features = features.at[4 + state.unit_types[i]].set(1)
             return jax.lax.cond(
                 state.unit_alive[i], lambda: features, lambda: empty_features
             )
@@ -503,6 +513,7 @@ class MiniSMAC(MultiAgentEnv):
             # j here means 'the jth unit that is not i'
             # The observation is such that allies are always first
             # so for units in the second team we count in reverse.
+            team_i_idx = (i >= self.num_agents_per_team).astype(jnp.int32)
             j = jax.lax.cond(
                 i < self.num_agents_per_team,
                 lambda: j,
@@ -515,16 +526,23 @@ class MiniSMAC(MultiAgentEnv):
                 lambda: j,
                 lambda: j + offset,
             )
+            team_j_idx = (j_idx >= self.num_agents_per_team).astype(jnp.int32)
             empty_features = jnp.zeros(shape=(len(self.unit_features),))
-            features = empty_features.at[0].set(state.unit_health[j_idx])
+            features = empty_features.at[0].set(
+                state.unit_health[j_idx]
+                / self.unit_type_health[state.unit_types[j_idx]]
+            )
             features = features.at[1:3].set(
                 (state.unit_positions[j_idx] - state.unit_positions[i])
                 / self.unit_type_sight_ranges[state.unit_types[i]]
             )
             # TODO encode as one hot?
-            features = features.at[4].set(actions[j_idx])
-            features = features.at[5].set(state.unit_weapon_cooldowns[j_idx])
-            features = features.at[6 + state.unit_types[j_idx]].set(1)
+            action_obs = jax.lax.select(
+                (team_i_idx == team_j_idx) | self.see_enemy_actions, actions[j_idx], 0
+            )
+            features = features.at[3].set(action_obs)
+            features = features.at[4].set(state.unit_weapon_cooldowns[j_idx])
+            features = features.at[5 + state.unit_types[j_idx]].set(1)
             visible = (
                 jnp.linalg.norm(state.unit_positions[j_idx] - state.unit_positions[i])
                 < self.unit_type_sight_ranges[state.unit_types[i]]
@@ -537,12 +555,14 @@ class MiniSMAC(MultiAgentEnv):
 
         def get_self_features(i):
             empty_features = jnp.zeros(shape=(len(self.own_features),))
-            features = empty_features.at[0].set(state.unit_health[i])
+            features = empty_features.at[0].set(
+                state.unit_health[i] / self.unit_type_health[state.unit_types[i]]
+            )
             features = features.at[1:3].set(
                 state.unit_positions[i] / jnp.array([self.map_width, self.map_height])
             )
-            features = features.at[4].set(state.unit_weapon_cooldowns[i])
-            features = features.at[5 + state.unit_types[i]].set(1)
+            features = features.at[3].set(state.unit_weapon_cooldowns[i])
+            features = features.at[4 + state.unit_types[i]].set(1)
             return jax.lax.cond(
                 state.unit_alive[i], lambda: features, lambda: empty_features
             )

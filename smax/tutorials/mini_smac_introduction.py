@@ -70,6 +70,7 @@ with jax.disable_jit(False):
         num_agents_per_team=3,
         use_self_play_reward=False,
         walls_cause_death=True,
+        see_enemy_actions=False,
     )
     # env = make("MiniSMAC")
     # params = init_policy(env, key_p)
