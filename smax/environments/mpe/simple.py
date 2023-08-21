@@ -16,6 +16,8 @@ from typing import Tuple, Optional, Dict
 from functools import partial
 
 import matplotlib.pyplot as plt
+import matplotlib
+print('matplotlib backend', matplotlib.get_backend())
 
 @struct.dataclass
 class State:
@@ -25,7 +27,7 @@ class State:
     c: chex.Array  # communication state [num_agents, [dim_c]]
     done: chex.Array # bool [num_agents, ]
     step: int # current step
-    goal: int = None # index of target landmark, not used in all envs
+    goal: int = None # index of target landmark, used in: SimpleSpeakerListenerMPE, SimpleReferenceMPE, SimplePushMPE, SimpleAdversaryMPE
     
 '''@struct.dataclass
 class TargetState(State):
@@ -186,11 +188,13 @@ class SimpleMPE(MultiAgentEnv):
         else:
             self.contact_margin = CONTACT_MARGIN
 
-        # PLOTTING
+        # PLOTTING TODO make sure these are used
         self.render_mode = "human"
         self.width = 700
         self.height = 700
         self.renderOn = False
+        
+        print("accel", self.accel)
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, key: chex.PRNGKey, state: State, actions: dict):
@@ -438,7 +442,7 @@ class SimpleMPE(MultiAgentEnv):
         dist_min = self.rad[a] + self.rad[b]
         delta_pos = state.p_pos[a] - state.p_pos[b]
         dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
-        return (dist < dist_min) & (self.collide[a] & params.collide[b]) #& (a != b)
+        return (dist < dist_min) & (self.collide[a] & self.collide[b]) #& (a != b)
         
     @partial(jax.vmap, in_axes=(None, 0))
     def map_bounds_reward(self, x):
@@ -450,7 +454,7 @@ class SimpleMPE(MultiAgentEnv):
         return jax.lax.select(m, mr, br) * ~w
 
     ### === PLOTTING === ### 
-    def init_render(self, ax, state: State):
+    def init_render_test(self, ax, state: State):
         from matplotlib.patches import Circle
         from matplotlib import pyplot
         import io
@@ -483,12 +487,13 @@ class SimpleMPE(MultiAgentEnv):
         ax = im.axes 
         return self.init_render(ax, state)
     
-    def plot(self, ax, state: State):
+    def init_render(self, ax, state: State):
         from matplotlib.patches import Circle
         import matplotlib.pyplot as plt
         import io
         import numpy as np
-
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        #from PIL import Image
         ax_lim = 2
         ax.clear()
         ax.set_xlim([-ax_lim, ax_lim])
@@ -497,13 +502,18 @@ class SimpleMPE(MultiAgentEnv):
             c = Circle(state.p_pos[i], self.rad[i], color=onp.array(self.colour[i])/255)
             ax.add_patch(c)
 
-        canvas = ax.figure.canvas
+        fig = ax.get_figure()
+        canvas = FigureCanvasAgg(fig)
+        #canvas = ax.figure.canvas
         canvas.draw()
         print('canvas width height', canvas.get_width_height())
+        buf = canvas.buffer_rgba()
+        print('print size', np.shape(buf))
         rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
+        print('rgb array size', np.shape(rgb_array))
         rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
         
-        plt.pause(0.01)
+        return ax.imshow(rgb_array)
 
 if __name__=="__main__":
     from smax.viz.visualizer import Visualizer
@@ -546,9 +556,14 @@ if __name__=="__main__":
         #raise
         #pygame.time.wait(300)
 
-    fig, ax = plt.subplots()
+    #fig, ax = plt.subplots()
+    fig = plt.Figure(figsize=(5, 5), dpi=100)
+    ax = fig.add_subplot(111)
+    #from matplotlib.backends.backend_agg import FigureCanvasAgg
+    
+    '''plt.ion()
     for state in state_seq:
-        env.plot(ax, state)
+        env.plot(ax, state)'''
 
-    '''viz = Visualizer(env, state_seq)
-    viz.animate(view=True)'''
+    viz = Visualizer(env, state_seq)
+    viz.animate(view=True)

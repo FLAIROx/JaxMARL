@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from smax.environments.mpe.simple import TargetState, SimpleMPE, EnvParams
+from smax.environments.mpe.simple import State, SimpleMPE
 from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
@@ -19,6 +19,7 @@ class SimpleAdversaryMPE(SimpleMPE):
 
         num_agents = num_good_agents + num_adversaries
         num_landmarks = num_obs 
+        num_entities = num_landmarks + num_agents
 
         self.num_good_agents, self.num_adversaries = num_good_agents, num_adversaries
 
@@ -36,6 +37,11 @@ class SimpleAdversaryMPE(SimpleMPE):
 
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
             [OBS_COLOUR] * num_obs 
+            
+        # Parameters
+        rad=jnp.concatenate([jnp.full((num_agents), 0.15),
+                            jnp.full((num_landmarks), 0.08)])
+        collide = jnp.full((num_entities), False)
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -45,9 +51,11 @@ class SimpleAdversaryMPE(SimpleMPE):
                          #action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
-                         colour=colour)
+                         colour=colour,
+                         rad=rad, 
+                         collide=collide,)
         
-    @property
+    '''@property
     def default_params(self) -> EnvParams:
         params = EnvParams(
             max_steps=MAX_STEPS,
@@ -68,9 +76,9 @@ class SimpleAdversaryMPE(SimpleMPE):
             contact_margin=CONTACT_MARGIN,
             dt=DT,            
         )
-        return params
+        return params'''
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, TargetState]:
+    def reset_env(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -81,7 +89,7 @@ class SimpleAdversaryMPE(SimpleMPE):
         
         g_idx = jax.random.randint(key_g, (), minval=0, maxval=self.num_landmarks)
         
-        state = TargetState(
+        state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
@@ -90,12 +98,12 @@ class SimpleAdversaryMPE(SimpleMPE):
             goal=g_idx,
         )
         
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
-    def get_obs(self, state: TargetState, params: EnvParams):
+    def get_obs(self, state: State):
 
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx, state: TargetState, params: EnvParams):
+        @partial(jax.vmap, in_axes=(0, None))
+        def _common_stats(aidx, state: State):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -110,7 +118,7 @@ class SimpleAdversaryMPE(SimpleMPE):
             
             return landmark_pos, other_pos
 
-        landmark_pos, other_pos = _common_stats(self.agent_range, state, params)
+        landmark_pos, other_pos = _common_stats(self.agent_range, state)
 
         def _good(aidx):
             goal_rel_pos = state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx]
@@ -132,7 +140,7 @@ class SimpleAdversaryMPE(SimpleMPE):
         obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
         return obs
     
-    def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: State,) -> Dict[str, float]:
 
         adv_rew = jnp.sum(jnp.linalg.norm(state.p_pos[:self.num_adversaries] - state.p_pos[state.goal+self.num_agents], axis=1))
         pos_rew = -1 * jnp.min(jnp.linalg.norm(state.p_pos[self.num_adversaries:self.num_agents] - state.p_pos[state.goal+self.num_agents], axis=1))

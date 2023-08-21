@@ -92,7 +92,7 @@ class SimpleWorldCommMPE(SimpleMPE):
                          silent=silent,
                          collide=collide,
                          accel=accel,
-                         max_speed=max_speed)
+                         max_speed=max_speed,)
         
     
     def set_actions(self, actions: dict):

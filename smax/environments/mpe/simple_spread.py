@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from smax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from smax.environments.mpe.simple import SimpleMPE, State
 from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
@@ -29,6 +29,10 @@ class SimpleSpreadMPE(SimpleMPE):
         self.local_ratio = local_ratio
         assert self.local_ratio >= 0.0 and self.local_ratio <= 1.0, "local_ratio must be between 0.0 and 1.0"
         
+        # Parameters
+        rad=jnp.concatenate([jnp.full((num_agents), 0.15),
+                            jnp.full((num_landmarks), AGENT_RADIUS)])
+        
         super().__init__(num_agents=num_agents,
                         agents=agents,
                         num_landmarks=num_landmarks,
@@ -36,36 +40,14 @@ class SimpleSpreadMPE(SimpleMPE):
                         action_type=action_type,
                         observation_spaces=observation_spaces,
                         dim_c=dim_c,
-                        colour=colour)
-                        
-    @property
-    def default_params(self) -> EnvParams:
-        params = EnvParams(
-            max_steps=25,
-            rad=jnp.concatenate([jnp.full((self.num_agents), 0.15),
-                            jnp.full((self.num_landmarks), AGENT_RADIUS)]), 
-            moveable=jnp.concatenate([jnp.full((self.num_agents), True),
-                                      jnp.full((self.num_landmarks), False)]),
-            silent = jnp.full((self.num_agents), 1),
-            collide = jnp.concatenate([jnp.full((self.num_agents), True),
-                                       jnp.full((self.num_landmarks), False)]), 
-            mass=jnp.full((self.num_entities), 1),
-            accel = jnp.full((self.num_agents), ACCEL),
-            max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
-                                jnp.full((self.num_landmarks), 0.0)]),
-            u_noise=jnp.full((self.num_agents), 0),
-            c_noise=jnp.full((self.num_agents), 0),
-            damping=DAMPING,  # physical damping
-            contact_force=CONTACT_FORCE,  # contact response parameters
-            contact_margin=CONTACT_MARGIN,
-            dt=DT,            
-        )
-        return params
-    
-    def get_obs(self, state: State, params: EnvParams):
+                        colour=colour,
+                        rad=rad)
 
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx, state, params):
+    
+    def get_obs(self, state: State):
+
+        @partial(jax.vmap, in_axes=(0, None))
+        def _common_stats(aidx: int, state: State):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -85,7 +67,7 @@ class SimpleSpreadMPE(SimpleMPE):
             
             return landmark_pos, other_pos, comm
 
-        landmark_pos, other_pos, comm = _common_stats(self.agent_range, state, params)
+        landmark_pos, other_pos, comm = _common_stats(self.agent_range, state)
 
         def _obs(aidx):
             return jnp.concatenate([
@@ -99,25 +81,23 @@ class SimpleSpreadMPE(SimpleMPE):
         obs = {a: _obs(i) for i, a in enumerate(self.agents)}
         return obs
     
-    def rewards(self, state, params) -> Dict[str, float]:
+    def rewards(self, state: State) -> Dict[str, float]:
 
-        @partial(jax.vmap, in_axes=(0, None, None, None))
-        def _collisions(agent_idx, other_idx, state, params):
-            return jax.vmap(self.is_collision, in_axes=(None, 0, None, None))(
+        @partial(jax.vmap, in_axes=(0, None, None))
+        def _collisions(agent_idx: int, other_idx: int, state: State):
+            return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
                 agent_idx,
                 other_idx,
                 state,
-                params,
             )
 
         c = _collisions(self.agent_range, 
                         self.agent_range, 
-                        state,
-                        params)  # [agent, agent, collison]
+                        state,)  # [agent, agent, collison]
 
         #jax.debug.print('c {c}', c=c)
 
-        def _good(aidx, collisions):
+        def _good(aidx: int, collisions: chex.Array):
 
             rew = -1 * jnp.sum(collisions[aidx]) + 1
             #mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
@@ -125,7 +105,7 @@ class SimpleSpreadMPE(SimpleMPE):
             
             return rew 
         
-        def _land(land_pos):
+        def _land(land_pos: chex.Array):
             d = state.p_pos[:self.num_agents] -  land_pos
             #jax.debug.print('dists {d}', d=jnp.linalg.norm(d, axis=1))
             return -1 * jnp.min(jnp.linalg.norm(d, axis=1))
