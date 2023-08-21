@@ -12,7 +12,7 @@ from smax import make
 from smax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
 from smax.environments.mpe.default_params import DISCRETE_ACT, CONTINUOUS_ACT
 
-num_episodes, num_steps, tolerance = 500, 25, 1e-4
+num_episodes, num_steps, tolerance = 1000, 25, 1e-4
 
 
 """
@@ -64,19 +64,14 @@ def np_state_to_jax(env_zoo, env_jax):
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
         return CryptoState(**state)
     if env_zoo.metadata["name"] == 'simple_speaker_listener_v4':
-        from smax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_b.name[-1])
-        return TargetState(**state)
+        return State(**state)
     if env_zoo.metadata["name"] == 'simple_push_v3' or env_zoo.metadata["name"] == 'simple_adversary_v3':
-        from smax.environments.mpe.simple import TargetState
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_a.name[-1])
-        return TargetState(**state)
+        return State(**state)
     if env_zoo.metadata["name"] == 'simple_reference_v3':
-        from smax.environments.mpe.simple import TargetState
-        
         state["goal"] = np.flip(np.array([int(env_zoo.aec_env.env.world.agents[i].goal_b.name[-1]) for i in range(2)]))
-        #print('goals', state["goal"])
-        return TargetState(**state)
+        return State(**state)
     else:
         return State(**state)
 
@@ -114,11 +109,11 @@ def test_step(zoo_env_name, action_type=CONTINUOUS_ACT):
     zoo_obs = env_zoo.reset()
 
     #env_jax = env_jax()
-    env_jax, env_params = make(zoo_env_name, action_type=action_type)
+    env_jax = make(zoo_env_name, action_type=action_type)
     
     #env_params = env_jax.default_params
     key, key_reset = jax.random.split(key)
-    env_jax.reset(key_reset, env_params)
+    env_jax.reset(key_reset)
     for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}", leave=True):
         obs = env_zoo.reset()
         for s in range(num_steps):
@@ -152,19 +147,28 @@ mpe_env_mapper = {
 
 if __name__=="__main__":
     
-    test_step("MPE_simple_spread_v3")
-    test_step("MPE_simple_crypto_v3")
-    
-    test_step("MPE_simple_tag_v3")
-    test_step("MPE_simple_world_comm_v3")
-    test_step("MPE_simple_reference_v3")
-    
-    test_step("MPE_simple_speaker_listener_v4")
-    
+    #test_step("MPE_simple_v3")
+    #test_step("MPE_simple_crypto_v3")
+    #test_step("MPE_simple_reference_v3")
+    #test_step("MPE_simple_speaker_listener_v4")
+    #test_step("MPE_simple_world_comm_v3")
     test_step("MPE_simple_adversary_v3")
-
-    test_step("MPE_simple_v3")
     test_step("MPE_simple_push_v3")
+    #
+    test_step("MPE_simple_tag_v3")
+    test_step("MPE_simple_spread_v3")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
+    
     
     print(' *** All tests passed ***')
     
