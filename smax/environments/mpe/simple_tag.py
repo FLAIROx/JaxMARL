@@ -39,10 +39,10 @@ class SimpleTagMPE(SimpleMPE):
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + [OBS_COLOUR] * num_obs 
             
         # Parameters
-        rad=jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
-                            jnp.full((self.num_good_agents), 0.05),
-                            jnp.full((num_landmarks), 0.2)])
-        accel = jnp.concatenate([jnp.full((self.num_adversaries), 3.0),
+        rad = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
+                            jnp.full((self.num_good_agents), AGENT_RADIUS),
+                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
+        accel = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_ACCEL),
                                 jnp.full((self.num_good_agents), 4.0)])
         max_speed = jnp.concatenate([jnp.full((self.num_adversaries), 1.0),
                                 jnp.full((self.num_good_agents), 1.3),
@@ -64,8 +64,8 @@ class SimpleTagMPE(SimpleMPE):
 
     def get_obs(self, state: State):
 
-        @partial(jax.vmap, in_axes=(0, None))
-        def _common_stats(aidx, state):
+        @partial(jax.vmap, in_axes=(0))
+        def _common_stats(aidx):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -83,7 +83,7 @@ class SimpleTagMPE(SimpleMPE):
             
             return landmark_pos, other_pos, other_vel
 
-        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range, state)
+        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range)
 
         def _good(aidx):
             return jnp.concatenate([
@@ -107,10 +107,10 @@ class SimpleTagMPE(SimpleMPE):
         obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
         return obs
     
-    def rewards(self, state) -> Dict[str, float]:
+    def rewards(self, state: State) -> Dict[str, float]:
 
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _collisions(agent_idx, other_idx, state):
+        @partial(jax.vmap, in_axes=(0, None))
+        def _collisions(agent_idx: int, other_idx: int):
             return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
                 agent_idx,
                 other_idx,
@@ -119,16 +119,16 @@ class SimpleTagMPE(SimpleMPE):
 
         c = _collisions(jnp.arange(self.num_good_agents)+self.num_adversaries, 
                         jnp.arange(self.num_adversaries), 
-                        state)  # [agent, adversary, collison]
+                        )  # [agent, adversary, collison]
 
-        def _good(aidx, collisions):
+        def _good(aidx: int, collisions: chex.Array):
 
             rew = -10 * jnp.sum(collisions[aidx])
 
             mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
             rew -= mr
             return rew 
-
+        jax.debug.print('collisions {c}', c=c)
         ad_rew = 10 * jnp.sum(c)
 
         rew = {a: ad_rew for a in self.adversaries}

@@ -130,40 +130,47 @@ class SimpleMPE(MultiAgentEnv):
             assert len(self.rad) == self.num_entities, f"Rad array length {len(self.rad)} does not match number of entities {self.num_entities}"
             assert jnp.all(self.rad > 0), f"Rad array must be positive, got {self.rad}"
         else:
-            self. rad = jnp.concatenate([jnp.full((self.num_agents), 0.15), jnp.full((self.num_landmarks), 0.2)])
+            self.rad = jnp.concatenate([jnp.full((self.num_agents), 0.15), jnp.full((self.num_landmarks), 0.2)])
+            
         if "moveable" in kwargs:
             self.moveable = kwargs["moveable"]
             assert len(self.moveable) == self.num_entities, f"Moveable array length {len(self.moveable)} does not match number of entities {self.num_entities}"
             assert self.moveable.dtype == bool, f"Moveable array must be boolean, got {self.moveable}"
         else:
             self.moveable = jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)])
+            
         if "silent" in kwargs:
             self.silent = kwargs["silent"]
             assert len(self.silent) == self.num_agents, f"Silent array length {len(self.silent)} does not match number of agents {self.num_agents}"
         else:
             self.silent = jnp.full((self.num_agents), 1)
+            
         if "collide" in kwargs:
             self.collide = kwargs["collide"]
             assert len(self.collide) == self.num_entities, f"Collide array length {len(self.collide)} does not match number of entities {self.num_entities}"
         else:
             self.collide = jnp.full((self.num_entities), False)
+            
         if "mass" in kwargs:
             self.mass = kwargs["mass"]
             assert len(self.mass) == self.num_entities, f"Mass array length {len(self.mass)} does not match number of entities {self.num_entities}"
             assert jnp.all(self.mass > 0), f"Mass array must be positive, got {self.mass}"
         else:
-            self.mass = jnp.full((self.num_entities), 1)
+            self.mass = jnp.full((self.num_entities), MASS)
+            
         if "accel" in kwargs:
             self.accel = kwargs["accel"]
             assert len(self.accel) == self.num_agents, f"Accel array length {len(self.accel)} does not match number of agents {self.num_agents}"
             assert jnp.all(self.accel > 0), f"Accel array must be positive, got {self.accel}"
         else:
             self.accel = jnp.full((self.num_agents), ACCEL)
+            
         if "max_speed" in kwargs:
             self.max_speed = kwargs["max_speed"]
             assert len(self.max_speed) == self.num_entities, f"Max speed array length {len(self.max_speed)} does not match number of entities {self.num_entities}"
         else:
             self.max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED), jnp.full((self.num_landmarks), 0.0)])
+            
         if "u_noise" in kwargs:
             self.u_noise = kwargs["u_noise"]
             assert len(self.u_noise) == self.num_agents, f"U noise array length {len(self.u_noise)} does not match number of agents {self.num_agents}"
@@ -174,15 +181,18 @@ class SimpleMPE(MultiAgentEnv):
             assert len(self.c_noise) == self.num_agents, f"C noise array length {len(self.c_noise)} does not match number of agents {self.num_agents}"
         else:
             self.c_noise = jnp.full((self.num_agents), 0)
+            
         if "damping" in kwargs:
             self.damping = kwargs["damping"]
             assert self.damping >= 0, f"Damping must be non-negative, got {self.damping}"
         else:
             self.damping = DAMPING 
+            
         if "contact_force" in kwargs:
             self.contact_force = kwargs["contact_force"]
         else:
             self.contact_force = CONTACT_FORCE
+            
         if "contact_margin" in kwargs:
             self.contact_margin = kwargs["contact_margin"]
         else:
@@ -194,7 +204,6 @@ class SimpleMPE(MultiAgentEnv):
         self.height = 700
         self.renderOn = False
         
-        print("accel", self.accel)
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, key: chex.PRNGKey, state: State, actions: dict):
@@ -202,9 +211,10 @@ class SimpleMPE(MultiAgentEnv):
         u, c = self.set_actions(actions)
         if c.shape[1] < self.dim_c:  # This is due to the MPE code carrying around 0s for the communication channels
             c = jnp.concatenate([c, jnp.zeros((self.num_agents, self.dim_c - c.shape[1]))], axis=1)
-
+        jax.debug.print('u input {u}', u=u)
         key, key_w = jax.random.split(key)
         p_pos, p_vel = self._world_step(key_w, state, u)
+        jax.debug.print('pos output {pos}, vel output: {vel}', pos=p_pos, vel=p_vel)
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
         done = jnp.full((self.num_agents), state.step>=self.max_steps)
@@ -314,12 +324,13 @@ class SimpleMPE(MultiAgentEnv):
         # apply agent physical controls
         key_noise = jax.random.split(key, self.num_agents)
         p_force = self._apply_action_force(key_noise, p_force, u, self.u_noise, self.moveable[:self.num_agents])
+        jax.debug.print('jax p_force post agent {p_force}', p_force=p_force)
         
         # apply environment forces
         p_force = jnp.concatenate([p_force, jnp.zeros((self.num_landmarks, 2))])
         p_force = self._apply_environment_force(p_force, state)
         #print('p_force post apply env force', p_force)
-        #jax.debug.print('jax p_force {p_force}', p_force=p_force)
+        jax.debug.print('jax p_force final: {p_force}', p_force=p_force)
 
         # integrate physical state
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, self.mass, self.moveable, self.max_speed)
@@ -341,33 +352,32 @@ class SimpleMPE(MultiAgentEnv):
         #print('p force shape', p_force.shape, 'noise shape', noise.shape, 'u shape', u.shape)
         return jax.lax.select(moveable, u + noise, p_force)
 
-    def _apply_environment_force(self, p_force_all, state: State):
+    def _apply_environment_force(self, p_force_all: chex.Array, state: State):
         """ gather physical forces acting on entities """
         
-        @partial(jax.vmap, in_axes=[0, None])
-        def __env_force_outer(idx, state):
+        @partial(jax.vmap, in_axes=[0])
+        def __env_force_outer(idx: int):
             
-            @partial(jax.vmap, in_axes=[None, 0, None])
-            def __env_force_inner(idx_a, idx_b, state):
+            @partial(jax.vmap, in_axes=[None, 0])
+            def __env_force_inner(idx_a: int, idx_b: int):
 
                 l = idx_b <= idx_a 
                 l_a = jnp.zeros((2, 2))
                 
                 collision_force = self._get_collision_force(idx_a, idx_b, state) 
+                jax.debug.print('{a} {b} {f}', a=idx_a, b=idx_b, f=collision_force)
                 return jax.lax.select(l, l_a, collision_force)
             
-            p_force_t = __env_force_inner(idx, self.entity_range, state)
+            p_force_t = __env_force_inner(idx, self.entity_range)
 
-            #print('p force t s', p_force_t.shape)
 
             p_force_a = jnp.sum(p_force_t[:, 0], axis=0)  # ego force from other agents
             p_force_o = p_force_t[:, 1]
             p_force_o = p_force_o.at[idx].set(p_force_a)
-            #print('p force a', p_force_o.shape)
 
             return p_force_o
         
-        p_forces = __env_force_outer(self.entity_range, state)
+        p_forces = __env_force_outer(self.entity_range)
         p_forces = jnp.sum(p_forces, axis=0)  
         
         return p_forces + p_force_all        
@@ -403,13 +413,15 @@ class SimpleMPE(MultiAgentEnv):
             agent.state.c = agent.action.c + noise
             
             
-    # get collision forces for any contact between two agents # TODO entities
-    def _get_collision_force(self, idx_a, idx_b, state: State):
+    # get collision forces for any contact between two agents
+    def _get_collision_force(self, idx_a: int, idx_b: int, state: State):
         
         dist_min = self.rad[idx_a] + self.rad[idx_b]
         delta_pos = state.p_pos[idx_a] - state.p_pos[idx_b]
                 
         dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
+        
+        # softmax penetration
         k = self.contact_margin
         penetration = jnp.logaddexp(0, -(dist - dist_min) / k) * k
         force = self.contact_force * delta_pos / dist * penetration
@@ -417,7 +429,7 @@ class SimpleMPE(MultiAgentEnv):
         force_b = -force * self.moveable[idx_b]
         force = jnp.array([force_a, force_b])
             
-        c = ~self.collide[idx_a] |  ~self.collide[idx_b]
+        c = ~self.collide[idx_a] |  ~self.collide[idx_b] | idx_a == idx_b
         c_force = jnp.zeros((2, 2)) 
         return jax.lax.select(c, c_force, force)
     
@@ -437,15 +449,15 @@ class SimpleMPE(MultiAgentEnv):
         return self.classes
     
     ### === UTILITIES === ###
-    def is_collision(self, a:int, b:int, state: State):
+    def is_collision(self, a: int, b: int, state: State):
         """ check if two entities are colliding """
         dist_min = self.rad[a] + self.rad[b]
         delta_pos = state.p_pos[a] - state.p_pos[b]
         dist = jnp.sqrt(jnp.sum(jnp.square(delta_pos)))
-        return (dist < dist_min) & (self.collide[a] & self.collide[b]) #& (a != b)
+        return (dist < dist_min) & (self.collide[a] & self.collide[b]) & (a != b)
         
     @partial(jax.vmap, in_axes=(None, 0))
-    def map_bounds_reward(self, x):
+    def map_bounds_reward(self, x: float):
         """ vmap over x, y coodinates"""
         w = x < 0.9
         m = x < 1.0

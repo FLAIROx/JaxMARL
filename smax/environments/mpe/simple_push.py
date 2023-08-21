@@ -43,6 +43,9 @@ class SimplePushMPE(SimpleMPE):
 
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
             list(OBS_COLOUR)
+            
+        rad=jnp.concatenate([jnp.full((num_agents), AGENT_RADIUS),
+                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -52,7 +55,8 @@ class SimplePushMPE(SimpleMPE):
                          action_type=action_type,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
-                         colour=colour)
+                         colour=colour,
+                         rad=rad)
         
     '''@property
     def default_params(self) -> EnvParams:
@@ -76,7 +80,7 @@ class SimplePushMPE(SimpleMPE):
         )
         return params'''
     
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -100,8 +104,8 @@ class SimplePushMPE(SimpleMPE):
 
     def get_obs(self, state: State,):
 
-        @partial(jax.vmap, in_axes=(0, None))
-        def _common_stats(aidx: int, state: State):
+        @partial(jax.vmap, in_axes=(0))
+        def _common_stats(aidx: int):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -119,7 +123,7 @@ class SimplePushMPE(SimpleMPE):
             
             return landmark_pos, other_pos, other_vel
 
-        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range, state,)
+        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range)
 
         def _good(aidx):
             goal_rel_pos = state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx]

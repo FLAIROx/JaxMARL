@@ -78,7 +78,7 @@ class SimpleAdversaryMPE(SimpleMPE):
         )
         return params'''
     
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
