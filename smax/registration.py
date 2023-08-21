@@ -10,6 +10,7 @@ from .environments import (
     SimpleReferenceMPE,
     MiniSMAC,
     HeuristicEnemyMiniSMAC,
+    LearnedPolicyEnemyMiniSMAC,
     SwitchRiddle,
     Ant,
     Humanoid,
@@ -53,6 +54,8 @@ def make(env_id: str, **env_kwargs):
         env = MiniSMAC(**env_kwargs)
     elif env_id == "HeuristicEnemyMiniSMAC":
         env = HeuristicEnemyMiniSMAC(**env_kwargs)
+    elif env_id == "LearnedPolicyEnemyMiniSMAC":
+        env = LearnedPolicyEnemyMiniSMAC(**env_kwargs)
 
     # 4. Mujoco
     elif env_id == "ant_4x2":
@@ -82,6 +85,7 @@ registered_envs = [
     "switch_riddle",
     "MiniSMAC",
     "HeuristicEnemyMiniSMAC",
+    "LearnedPolicyEnemyMiniSMAC",
     "ant_4x2",
     "halfcheetah_6x1",
     "hopper_3x1",

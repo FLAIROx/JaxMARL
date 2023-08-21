@@ -10,6 +10,6 @@ from .mpe import (
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
 )
-from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC
+from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC, LearnedPolicyEnemyMiniSMAC
 from .switch_riddle import SwitchRiddle
 from .mamujoco import Ant, Humanoid, Hopper, Walker2d, HalfCheetah

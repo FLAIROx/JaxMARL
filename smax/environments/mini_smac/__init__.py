@@ -1,2 +1,2 @@
-from .mini_smac_env import MiniSMAC
-from .heuristic_enemy_mini_smac_env import HeuristicEnemyMiniSMAC
+from .mini_smac_env import MiniSMAC, map_name_to_scenario, register_scenario
+from .heuristic_enemy_mini_smac_env import HeuristicEnemyMiniSMAC, LearnedPolicyEnemyMiniSMAC
