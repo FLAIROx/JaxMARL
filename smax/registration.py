@@ -17,6 +17,7 @@ from .environments import (
     Hopper,
     Walker2d,
     HalfCheetah,
+    InTheGrid,
 )
 
 
@@ -69,6 +70,10 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "walker2d_2x3":
         env = Walker2d(**env_kwargs)
 
+    # 5. InTheGrid
+    elif env_id == "mg_in_the_grid":
+        env = InTheGrid(**env_kwargs)
+
     return env
 
 
@@ -91,4 +96,5 @@ registered_envs = [
     "hopper_3x1",
     "humanoid_9|8",
     "walker2d_2x3",
+    "mg_in_the_grid",
 ]
