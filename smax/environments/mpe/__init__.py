@@ -7,3 +7,4 @@ from .simple_crypto import SimpleCryptoMPE
 from .simple_speaker_listener import SimpleSpeakerListenerMPE
 from .simple_adversary import SimpleAdversaryMPE
 from .simple_reference import SimpleReferenceMPE
+from .visualizer import MPEVisualizer

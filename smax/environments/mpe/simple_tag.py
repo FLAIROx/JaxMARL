@@ -20,6 +20,7 @@ class SimpleTagMPE(SimpleMPE):
 
         num_agents = num_good_agents + num_adversaries
         num_landmarks = num_obs 
+        num_entities = num_agents + num_landmarks
 
         self.num_good_agents, self.num_adversaries = num_good_agents, num_adversaries
 
@@ -47,6 +48,7 @@ class SimpleTagMPE(SimpleMPE):
         max_speed = jnp.concatenate([jnp.full((self.num_adversaries), 1.0),
                                 jnp.full((self.num_good_agents), 1.3),
                                 jnp.full((num_landmarks), 0.0)])
+        collide = jnp.full((num_entities,), True)
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -59,6 +61,7 @@ class SimpleTagMPE(SimpleMPE):
                          rad=rad,
                          accel=accel,
                          max_speed=max_speed,
+                         collide=collide,
                          )
     
 
@@ -128,7 +131,6 @@ class SimpleTagMPE(SimpleMPE):
             mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
             rew -= mr
             return rew 
-        jax.debug.print('collisions {c}', c=c)
         ad_rew = 10 * jnp.sum(c)
 
         rew = {a: ad_rew for a in self.adversaries}

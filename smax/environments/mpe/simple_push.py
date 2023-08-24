@@ -44,8 +44,9 @@ class SimplePushMPE(SimpleMPE):
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
             list(OBS_COLOUR)
             
-        rad=jnp.concatenate([jnp.full((num_agents), AGENT_RADIUS),
+        rad = jnp.concatenate([jnp.full((num_agents), AGENT_RADIUS),
                             jnp.full((num_landmarks), LANDMARK_RADIUS)])
+        collide = jnp.concatenate([jnp.full((num_agents), True), jnp.full((num_landmarks), False)])
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -56,7 +57,10 @@ class SimplePushMPE(SimpleMPE):
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
                          colour=colour,
-                         rad=rad)
+                         rad=rad,
+                         collide=collide)
+        
+        
         
     '''@property
     def default_params(self) -> EnvParams:
@@ -125,7 +129,7 @@ class SimplePushMPE(SimpleMPE):
 
         landmark_pos, other_pos, other_vel = _common_stats(self.agent_range)
 
-        def _good(aidx):
+        def _good(aidx: int):
             goal_rel_pos = state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx]
 
             agent_colour = jnp.full((3,), 0.25)
@@ -142,7 +146,7 @@ class SimplePushMPE(SimpleMPE):
             ])
 
 
-        def _adversary(aidx):
+        def _adversary(aidx: int):
             return jnp.concatenate([
                 state.p_vel[aidx].flatten(), # 2
                 landmark_pos[aidx].flatten(), # 5, 2

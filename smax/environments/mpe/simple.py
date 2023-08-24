@@ -28,29 +28,7 @@ class State:
     done: chex.Array # bool [num_agents, ]
     step: int # current step
     goal: int = None # index of target landmark, used in: SimpleSpeakerListenerMPE, SimpleReferenceMPE, SimplePushMPE, SimpleAdversaryMPE
-    
-'''@struct.dataclass
-class TargetState(State):
-    """ MPE State with goal """
-    goal: int  '''
 
-'''@struct.dataclass
-class EnvParams:
-    """ MPE Environment Parameters """
-    max_steps: int  # max number of steps in an episode
-    rad: chex.Array  # entity radii
-    moveable: chex.Array  # true for entities that can move
-    silent: chex.Array  # true for entities that cannot communicate
-    collide: chex.Array  # true for entities that can collide
-    mass: chex.Array  # mass of entities
-    accel: chex.Array  # sensitivity, actions are multiplied by this
-    max_speed: chex.Array  # max speed of entities
-    u_noise: chex.Array  # physical action noise, set to 0 if no noise
-    c_noise: chex.Array  # communication action noise, set to 0 if no noise
-    damping: float  
-    contact_force: float  
-    contact_margin: float
-    dt: float  # time step length'''
 
 class SimpleMPE(MultiAgentEnv):
     
@@ -121,7 +99,6 @@ class SimpleMPE(MultiAgentEnv):
         self.dim_c = dim_c  # communication channel dimensionality
         self.dim_p = dim_p  # position dimensionality
 
-
         # Environment parameters
         self.max_steps = max_steps
         self.dt = dt
@@ -176,6 +153,7 @@ class SimpleMPE(MultiAgentEnv):
             assert len(self.u_noise) == self.num_agents, f"U noise array length {len(self.u_noise)} does not match number of agents {self.num_agents}"
         else:
             self.u_noise = jnp.full((self.num_agents), 0)
+            
         if "c_noise" in kwargs:
             self.c_noise = kwargs["c_noise"]
             assert len(self.c_noise) == self.num_agents, f"C noise array length {len(self.c_noise)} does not match number of agents {self.num_agents}"
@@ -198,23 +176,16 @@ class SimpleMPE(MultiAgentEnv):
         else:
             self.contact_margin = CONTACT_MARGIN
 
-        # PLOTTING TODO make sure these are used
-        self.render_mode = "human"
-        self.width = 700
-        self.height = 700
-        self.renderOn = False
-        
-
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, key: chex.PRNGKey, state: State, actions: dict):
         
         u, c = self.set_actions(actions)
         if c.shape[1] < self.dim_c:  # This is due to the MPE code carrying around 0s for the communication channels
             c = jnp.concatenate([c, jnp.zeros((self.num_agents, self.dim_c - c.shape[1]))], axis=1)
-        jax.debug.print('u input {u}', u=u)
+        #jax.debug.print('u input {u}', u=u)
         key, key_w = jax.random.split(key)
         p_pos, p_vel = self._world_step(key_w, state, u)
-        jax.debug.print('pos output {pos}, vel output: {vel}', pos=p_pos, vel=p_vel)
+        #jax.debug.print('pos output {pos}, vel output: {vel}', pos=p_pos, vel=p_vel)
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
         done = jnp.full((self.num_agents), state.step>=self.max_steps)
@@ -324,13 +295,13 @@ class SimpleMPE(MultiAgentEnv):
         # apply agent physical controls
         key_noise = jax.random.split(key, self.num_agents)
         p_force = self._apply_action_force(key_noise, p_force, u, self.u_noise, self.moveable[:self.num_agents])
-        jax.debug.print('jax p_force post agent {p_force}', p_force=p_force)
+        #jax.debug.print('jax p_force post agent {p_force}', p_force=p_force)
         
         # apply environment forces
         p_force = jnp.concatenate([p_force, jnp.zeros((self.num_landmarks, 2))])
         p_force = self._apply_environment_force(p_force, state)
         #print('p_force post apply env force', p_force)
-        jax.debug.print('jax p_force final: {p_force}', p_force=p_force)
+        #jax.debug.print('jax p_force final: {p_force}', p_force=p_force)
 
         # integrate physical state
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, self.mass, self.moveable, self.max_speed)
@@ -365,8 +336,10 @@ class SimpleMPE(MultiAgentEnv):
                 l_a = jnp.zeros((2, 2))
                 
                 collision_force = self._get_collision_force(idx_a, idx_b, state) 
-                jax.debug.print('{a} {b} {f}', a=idx_a, b=idx_b, f=collision_force)
-                return jax.lax.select(l, l_a, collision_force)
+                
+                xx = jax.lax.select(l, l_a, collision_force)
+                #jax.debug.print('{a} {b} {f}', a=idx_a, b=idx_b, f=xx)
+                return xx
             
             p_force_t = __env_force_inner(idx, self.entity_range)
 
@@ -413,7 +386,7 @@ class SimpleMPE(MultiAgentEnv):
             agent.state.c = agent.action.c + noise
             
             
-    # get collision forces for any contact between two agents
+    # get collision forces for any contact between two entities BUG
     def _get_collision_force(self, idx_a: int, idx_b: int, state: State):
         
         dist_min = self.rad[idx_a] + self.rad[idx_b]
@@ -429,8 +402,10 @@ class SimpleMPE(MultiAgentEnv):
         force_b = -force * self.moveable[idx_b]
         force = jnp.array([force_a, force_b])
             
-        c = ~self.collide[idx_a] |  ~self.collide[idx_b] | idx_a == idx_b
+        c = (~self.collide[idx_a]) |  (~self.collide[idx_b]) | (idx_a == idx_b)
         c_force = jnp.zeros((2, 2)) 
+        #jax.debug.print("collision check, idx: {a}, {b}. dist: {d}, dist min: {dm}, valid {c}", a=idx_a, b=idx_b, d=dist, dm=dist_min, c=c)
+        #jax.debug.print("c a {a}, c b {b}, ii {i}", a=~self.collide[idx_a], b=~self.collide[idx_b], i=(idx_a == idx_b))
         return jax.lax.select(c, c_force, force)
     
     def create_agent_classes(self):
@@ -465,36 +440,7 @@ class SimpleMPE(MultiAgentEnv):
         br = jnp.min(jnp.array([jnp.exp(2* x - 2), 10]))
         return jax.lax.select(m, mr, br) * ~w
 
-    ### === PLOTTING === ### 
-    def init_render_test(self, ax, state: State):
-        from matplotlib.patches import Circle
-        from matplotlib import pyplot
-        import io
-        import numpy as np
-
-        ax_lim = 2
-        ax.clear()
-        ax.set_xlim([-ax_lim, ax_lim])
-        ax.set_ylim([-ax_lim, ax_lim])
-        for i in range(self.num_entities):
-            c = Circle(state.p_pos[i], self.rad[i], color=onp.array(self.colour[i])/255)
-            ax.add_patch(c)
-
-        '''canvas = ax.figure.canvas
-        canvas.draw()
-        print('canvas width height', canvas.get_width_height())
-        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8',  sep='')
-        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))'''
-        
-        with io.BytesIO() as buff:
-            ax.savefig(buff, format='raw')
-            buff.seek(0)
-            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
-        w, h = ax.canvas.get_width_height()
-        im = data.reshape((int(h), int(w), -1))
-        
-        return ax.imshow(im)
-    
+    ### === PLOTTING === ###     
     def update_render(self, im, state: State):
         ax = im.axes 
         return self.init_render(ax, state)
@@ -518,11 +464,11 @@ class SimpleMPE(MultiAgentEnv):
         canvas = FigureCanvasAgg(fig)
         #canvas = ax.figure.canvas
         canvas.draw()
-        print('canvas width height', canvas.get_width_height())
+        #print('canvas width height', canvas.get_width_height())
         buf = canvas.buffer_rgba()
-        print('print size', np.shape(buf))
+        #print('print size', np.shape(buf))
         rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
-        print('rgb array size', np.shape(rgb_array))
+        #print('rgb array size', np.shape(rgb_array))
         rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
         
         return ax.imshow(rgb_array)

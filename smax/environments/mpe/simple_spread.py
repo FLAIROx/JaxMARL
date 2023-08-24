@@ -30,8 +30,9 @@ class SimpleSpreadMPE(SimpleMPE):
         assert self.local_ratio >= 0.0 and self.local_ratio <= 1.0, "local_ratio must be between 0.0 and 1.0"
         
         # Parameters
-        rad=jnp.concatenate([jnp.full((num_agents), 0.15),
+        rad = jnp.concatenate([jnp.full((num_agents), 0.15),
                             jnp.full((num_landmarks), AGENT_RADIUS)])
+        collide = jnp.concatenate([jnp.full((num_agents), True), jnp.full((num_landmarks), False)])
         
         super().__init__(num_agents=num_agents,
                         agents=agents,
@@ -41,13 +42,13 @@ class SimpleSpreadMPE(SimpleMPE):
                         observation_spaces=observation_spaces,
                         dim_c=dim_c,
                         colour=colour,
-                        rad=rad)
-
+                        rad=rad,
+                        collide=collide)
     
     def get_obs(self, state: State):
 
-        @partial(jax.vmap, in_axes=(0, None))
-        def _common_stats(aidx: int, state: State):
+        @partial(jax.vmap, in_axes=(0))
+        def _common_stats(aidx: int):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -67,9 +68,9 @@ class SimpleSpreadMPE(SimpleMPE):
             
             return landmark_pos, other_pos, comm
 
-        landmark_pos, other_pos, comm = _common_stats(self.agent_range, state)
+        landmark_pos, other_pos, comm = _common_stats(self.agent_range)
 
-        def _obs(aidx):
+        def _obs(aidx: int):
             return jnp.concatenate([
                 state.p_vel[aidx].flatten(), # 2
                 state.p_pos[aidx].flatten(), # 2
@@ -83,8 +84,8 @@ class SimpleSpreadMPE(SimpleMPE):
     
     def rewards(self, state: State) -> Dict[str, float]:
 
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _collisions(agent_idx: int, other_idx: int, state: State):
+        @partial(jax.vmap, in_axes=(0, None))
+        def _collisions(agent_idx: int, other_idx: int):
             return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
                 agent_idx,
                 other_idx,
@@ -93,13 +94,13 @@ class SimpleSpreadMPE(SimpleMPE):
 
         c = _collisions(self.agent_range, 
                         self.agent_range, 
-                        state,)  # [agent, agent, collison]
+                        )  # [agent, agent, collison]
 
         #jax.debug.print('c {c}', c=c)
 
-        def _good(aidx: int, collisions: chex.Array):
+        def _agent_rew(aidx: int, collisions: chex.Array):
 
-            rew = -1 * jnp.sum(collisions[aidx]) + 1
+            rew = -1 * jnp.sum(collisions[aidx]) 
             #mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
             #rew -= mr
             
@@ -112,6 +113,6 @@ class SimpleSpreadMPE(SimpleMPE):
 
         global_rew = jnp.sum(jax.vmap(_land)(state.p_pos[self.num_agents:]))
 
-        rew = {a: _good(i, c) * self.local_ratio + global_rew * (1-self.local_ratio)
+        rew = {a: _agent_rew(i, c) * self.local_ratio + global_rew * (1-self.local_ratio)
                for i, a in enumerate(self.agents)}
         return rew
