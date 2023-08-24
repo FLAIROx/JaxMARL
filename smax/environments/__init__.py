@@ -13,3 +13,4 @@ from .mpe import (
 from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC, LearnedPolicyEnemyMiniSMAC
 from .switch_riddle import SwitchRiddle
 from .mamujoco import Ant, Humanoid, Hopper, Walker2d, HalfCheetah
+from .matrix_games_in_the_grid import InTheGrid
