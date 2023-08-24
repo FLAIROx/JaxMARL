@@ -22,7 +22,7 @@ Following the PettingZoo implementation, we allow for both discrete or continuou
 
 ## Visulisation
 We animate a collected set of state sequences.
-```
+```python
 from smax.environments.mpe import MPEVisualizer
 
 state_seq = [state_t0, state_t1, ...]  # collected state sequences
