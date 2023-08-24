@@ -474,7 +474,8 @@ class SimpleMPE(MultiAgentEnv):
         return ax.imshow(rgb_array)
 
 if __name__=="__main__":
-    from smax.viz.visualizer import Visualizer
+    #from smax.viz.visualizer import Visualizer
+    from smax.environments.mpe import MPEVisualizer
 
     num_agents = 3
     key = jax.random.PRNGKey(0)
@@ -515,13 +516,13 @@ if __name__=="__main__":
         #pygame.time.wait(300)
 
     #fig, ax = plt.subplots()
-    fig = plt.Figure(figsize=(5, 5), dpi=100)
-    ax = fig.add_subplot(111)
+    #fig = plt.Figure(figsize=(5, 5), dpi=100)
+    #ax = fig.add_subplot(111)
     #from matplotlib.backends.backend_agg import FigureCanvasAgg
     
     '''plt.ion()
     for state in state_seq:
         env.plot(ax, state)'''
 
-    viz = Visualizer(env, state_seq)
-    viz.animate(view=True)
+    viz = MPEVisualizer(env, state_seq)
+    viz.animate('ani.gif')

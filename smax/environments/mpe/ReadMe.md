@@ -21,11 +21,14 @@ As our implementation closely follows the PettingZoo code, please refer to their
 Following the PettingZoo implementation, we allow for both discrete or continuous action spaces in all MPE envrionments. The environments use discrete actions by default.
 
 ## Visulisation
-We animate a collected set of state sequences
+We animate a collected set of state sequences.
 ```
+from smax.environments.mpe import MPEVisualizer
 
-viz = Visualizer(env, state_seq)
-viz.animate(view=True)
+state_seq = [state_t0, state_t1, ...]  # collected state sequences
+
+viz = MPEVisualizer(env, state_seq)
+viz.animate('animation.gif')
 ```
 
 ## Citation
@@ -41,5 +44,7 @@ The environments were orginally described in the following work:
 
 ## ToDos:
 [] improve viz code
+
 [] viz for communication
+
 [] improve tests using a heuristic policy
