@@ -2,7 +2,6 @@ from typing import Dict, Literal, Optional, Tuple
 import chex
 from smax.environments.multi_agent_env import MultiAgentEnv
 from gymnax.environments import spaces
-from flax import struct
 from brax import envs
 import jax
 import jax.numpy as jnp
@@ -11,11 +10,6 @@ from functools import partial
 from .mappings import _agent_action_mapping, _agent_observation_mapping
 
 # TODO: move homogenisation to a separate wrapper
-
-
-@struct.dataclass
-class EnvParams:
-    pass
 
 
 class MAMujocoEnv(MultiAgentEnv):
@@ -97,11 +91,9 @@ class MAMujocoEnv(MultiAgentEnv):
         }
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset_env(
-        self, key: chex.PRNGKey, params: EnvParams
-    ) -> Tuple[Dict[str, chex.Array], envs.State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], envs.State]:
         state = self.env.reset(key)
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=(0,))
     def step_env(
@@ -109,13 +101,12 @@ class MAMujocoEnv(MultiAgentEnv):
         key: chex.PRNGKey,
         state: envs.State,
         actions: Dict[str, chex.Array],
-        params: EnvParams,
     ) -> Tuple[
         Dict[str, chex.Array], envs.State, Dict[str, float], Dict[str, bool], Dict
     ]:
         global_action = self.map_agents_to_global_action(actions)
         next_state = self.env.step(state, global_action)  # type: ignore
-        observations = self.get_obs(next_state, params)
+        observations = self.get_obs(next_state)
         rewards = {agent: next_state.reward for agent in self.agents}
         rewards["__all__"] = next_state.reward
         dones = {agent: next_state.done.astype(jnp.bool_) for agent in self.agents}
@@ -128,12 +119,11 @@ class MAMujocoEnv(MultiAgentEnv):
             next_state.info,
         )
 
-    def get_obs(self, state: envs.State, params: EnvParams) -> Dict[str, chex.Array]:
+    def get_obs(self, state: envs.State) -> Dict[str, chex.Array]:
         """Extracts agent observations from the global state.
 
         Args:
             state: Global state of the environment.
-            params: Environment parameters.
 
         Returns:
             A dictionary of observations for each agent.
@@ -201,11 +191,6 @@ class MAMujocoEnv(MultiAgentEnv):
                 # Just agent's own observations
                 agent_obs[agent_name] = global_obs[obs_indices]
         return agent_obs
-
-    @property
-    def default_params(self) -> EnvParams:
-        """Default environment parameters."""
-        return EnvParams()
 
     @property
     def sys(self):
