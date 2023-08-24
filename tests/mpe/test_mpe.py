@@ -101,7 +101,7 @@ def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
                           ("MPE_simple_push_v3", CONTINUOUS_ACT),
                           ("MPE_simple_spread_v3", DISCRETE_ACT),
                           ("MPE_simple_spread_v3", CONTINUOUS_ACT),])
-def test_step(zoo_env_name, action_type=CONTINUOUS_ACT):
+def test_step(zoo_env_name, action_type=DISCRETE_ACT):
     print(f'-- Testing {zoo_env_name} --')
     key = jax.random.PRNGKey(0)
     
@@ -154,11 +154,11 @@ zoo_mpe_env_mapper = {
 
 if __name__=="__main__":
     print(' *** Testing MPE ***')
-    '''test_step("MPE_simple_v3")
+    test_step("MPE_simple_v3")
     test_step("MPE_simple_crypto_v3")
     test_step("MPE_simple_reference_v3")
     test_step("MPE_simple_speaker_listener_v4")
-    test_step("MPE_simple_world_comm_v3")'''
+    test_step("MPE_simple_world_comm_v3")
     test_step("MPE_simple_adversary_v3")
     test_step("MPE_simple_tag_v3")
 
