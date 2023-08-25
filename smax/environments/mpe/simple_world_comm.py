@@ -143,7 +143,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         c = c.at[self.leader_idx].set(lact[5:])
         return u, c
     
-    def get_obs(self, state: State) -> dict:        
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:        
         """ Returns observations of all agents """
         
         @partial(jax.vmap, in_axes=(0, None))

@@ -45,7 +45,7 @@ class SimpleSpreadMPE(SimpleMPE):
                         rad=rad,
                         collide=collide)
     
-    def get_obs(self, state: State):
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
 
         @partial(jax.vmap, in_axes=(0))
         def _common_stats(aidx: int):
@@ -55,15 +55,12 @@ class SimpleSpreadMPE(SimpleMPE):
 
             # Zero out unseen agents with other_mask
             other_pos = (state.p_pos[:self.num_agents] - state.p_pos[aidx]) 
-            #other_vel = state.p_vel[:self.num_agents] 
             
             # use jnp.roll to remove ego agent from other_pos and other_vel arrays
             other_pos = jnp.roll(other_pos, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
-            #other_vel = jnp.roll(other_vel, shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
             comm = jnp.roll(state.c[:self.num_agents], shift=self.num_agents-aidx-1, axis=0)[:self.num_agents-1]
             
             other_pos = jnp.roll(other_pos, shift=aidx, axis=0)
-            #other_vel = jnp.roll(other_vel, shift=aidx, axis=0)
             comm = jnp.roll(comm, shift=aidx, axis=0)
             
             return landmark_pos, other_pos, comm
@@ -96,19 +93,14 @@ class SimpleSpreadMPE(SimpleMPE):
                         self.agent_range, 
                         )  # [agent, agent, collison]
 
-        #jax.debug.print('c {c}', c=c)
 
         def _agent_rew(aidx: int, collisions: chex.Array):
 
             rew = -1 * jnp.sum(collisions[aidx]) 
-            #mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
-            #rew -= mr
-            
             return rew 
         
         def _land(land_pos: chex.Array):
             d = state.p_pos[:self.num_agents] -  land_pos
-            #jax.debug.print('dists {d}', d=jnp.linalg.norm(d, axis=1))
             return -1 * jnp.min(jnp.linalg.norm(d, axis=1))
 
         global_rew = jnp.sum(jax.vmap(_land)(state.p_pos[self.num_agents:]))

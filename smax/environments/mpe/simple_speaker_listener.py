@@ -59,9 +59,9 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         colour = [ADVERSARY_COLOUR] + [AGENT_COLOUR] + list(jnp.concatenate([COLOUR_1, COLOUR_2, COLOUR_3]))
         
         # Parameters
-        rad=jnp.concatenate([jnp.full((num_agents), ADVERSARY_RADIUS),
+        rad = jnp.concatenate([jnp.full((num_agents), ADVERSARY_RADIUS),
                                jnp.full((num_landmarks), 0.04)])
-        moveable=jnp.concatenate([jnp.array([False]), jnp.array([True]), jnp.full((num_landmarks), False)])
+        moveable = jnp.concatenate([jnp.array([False]), jnp.array([True]), jnp.full((num_landmarks), False)])
         silent = jnp.array([0, 1])
         collide = jnp.full((num_entities), False)
         
@@ -78,30 +78,8 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
                          moveable=moveable,
                          silent=silent,
                          collide=collide,)
-        
-    '''@property
-    def default_params(self) -> EnvParams:
-        params = EnvParams(
-            max_steps=25,
-            rad=jnp.concatenate([jnp.full((self.num_agents), ADVERSARY_RADIUS),
-                               jnp.full((self.num_landmarks), 0.04)]),
-            moveable=jnp.concatenate([jnp.array([False]), jnp.array([True]), jnp.full((self.num_landmarks), False)]),
-            silent = jnp.array([0, 1]),
-            collide = jnp.full((self.num_entities), False),
-            mass=jnp.full((self.num_entities), MASS),
-            accel = jnp.full((self.num_agents), ACCEL),
-            max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
-                                jnp.full((self.num_landmarks), 0.0)]),
-            u_noise=jnp.full((self.num_agents), 0),
-            c_noise=jnp.full((self.num_agents), 0),
-            damping=DAMPING,  # physical damping
-            contact_force=CONTACT_FORCE,  # contact response parameters
-            contact_margin=CONTACT_MARGIN,
-            dt=DT,
-        )
-        return params'''
     
-    def reset_env(self, key: chex.PRNGKey,) -> Tuple[chex.Array, State]:
+    def reset_env(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -162,7 +140,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         r =  -1 * jnp.sum(jnp.square(state.p_pos[1] - state.p_pos[state.goal+self.num_agents]))
         return {a: r for a in self.agents}
     
-    def get_obs(self, state: State):
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
         
         goal_colour = jnp.full((3,), 0.15)
         goal_colour = goal_colour.at[state.goal].set(0.65)        

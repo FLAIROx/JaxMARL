@@ -182,10 +182,10 @@ class SimpleMPE(MultiAgentEnv):
         u, c = self.set_actions(actions)
         if c.shape[1] < self.dim_c:  # This is due to the MPE code carrying around 0s for the communication channels
             c = jnp.concatenate([c, jnp.zeros((self.num_agents, self.dim_c - c.shape[1]))], axis=1)
-        #jax.debug.print('u input {u}', u=u)
+
         key, key_w = jax.random.split(key)
         p_pos, p_vel = self._world_step(key_w, state, u)
-        #jax.debug.print('pos output {pos}, vel output: {vel}', pos=p_pos, vel=p_vel)
+        
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
         done = jnp.full((self.num_agents), state.step>=self.max_steps)
@@ -231,7 +231,7 @@ class SimpleMPE(MultiAgentEnv):
         return self.get_obs(state), state
     
     @partial(jax.jit, static_argnums=[0])
-    def get_obs(self, state: State) -> dict:
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
         """ Return dictionary of agent observations """
 
         @partial(jax.vmap, in_axes=[0, None])
@@ -283,11 +283,6 @@ class SimpleMPE(MultiAgentEnv):
         u = u * self.accel[a_idx] * self.moveable[a_idx] 
         return u, jnp.zeros((self.dim_c,))     
     
-    # return all entities in the world TODO move this func, bit of a random place in file
-    @property
-    def entities(self):
-        return self.entity_range
-
     def _world_step(self, key: chex.PRNGKey, state: State, u: chex.Array):        
         
         p_force = jnp.zeros((self.num_agents, 2))  
@@ -306,21 +301,19 @@ class SimpleMPE(MultiAgentEnv):
         # integrate physical state
         p_pos, p_vel = self._integrate_state(p_force, state.p_pos, state.p_vel, self.mass, self.moveable, self.max_speed)
         
-        # c = self.comm_action() TODO ??
         return p_pos, p_vel
         
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0])
-    def _apply_comm_action(self, key: chex.PRNGKey, c, c_noise, silent):  # TODO typehints
+    def _apply_comm_action(self, key: chex.PRNGKey, c: chex.Array, c_noise: int, silent: int) -> chex.Array: 
         silence = jnp.zeros(c.shape)
         noise = jax.random.normal(key, shape=c.shape) * c_noise
         return jax.lax.select(silent, silence, c + noise)
         
     # gather agent action forces
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0])
-    def _apply_action_force(self, key, p_force, u, u_noise, moveable):
+    def _apply_action_force(self, key: chex.PRNGKey, p_force: chex.Array, u: chex.Array, u_noise: int, moveable: bool):
         
-        noise = jax.random.normal(key, shape=u.shape) * u_noise * 0.0 #NOTE temp zeroing
-        #print('p force shape', p_force.shape, 'noise shape', noise.shape, 'u shape', u.shape)
+        noise = jax.random.normal(key, shape=u.shape) * u_noise
         return jax.lax.select(moveable, u + noise, p_force)
 
     def _apply_environment_force(self, p_force_all: chex.Array, state: State):
@@ -373,19 +366,6 @@ class SimpleMPE(MultiAgentEnv):
           
         return p_pos, p_vel  
         
-    def _update_agent_state(self, agent): # TODO
-        # set communication state (directly for now)
-        if agent.silent:
-            agent.state.c = jnp.zeros(self.dim_c)
-        else:
-            noise = (
-                jnp.random.randn(*agent.action.c.shape) * agent.c_noise
-                if agent.c_noise
-                else 0.0
-            )
-            agent.state.c = agent.action.c + noise
-            
-            
     # get collision forces for any contact between two entities BUG
     def _get_collision_force(self, idx_a: int, idx_b: int, state: State):
         
@@ -404,8 +384,6 @@ class SimpleMPE(MultiAgentEnv):
             
         c = (~self.collide[idx_a]) |  (~self.collide[idx_b]) | (idx_a == idx_b)
         c_force = jnp.zeros((2, 2)) 
-        #jax.debug.print("collision check, idx: {a}, {b}. dist: {d}, dist min: {dm}, valid {c}", a=idx_a, b=idx_b, d=dist, dm=dist_min, c=c)
-        #jax.debug.print("c a {a}, c b {b}, ii {i}", a=~self.collide[idx_a], b=~self.collide[idx_b], i=(idx_a == idx_b))
         return jax.lax.select(c, c_force, force)
     
     def create_agent_classes(self):
@@ -420,7 +398,7 @@ class SimpleMPE(MultiAgentEnv):
             return {"agents": self.agents,}
 
 
-    def agent_classes(self):
+    def agent_classes(self) -> Dict[str, list]:
         return self.classes
     
     ### === UTILITIES === ###
@@ -506,23 +484,9 @@ if __name__=="__main__":
         key, key_act = jax.random.split(key)
         key_act = jax.random.split(key_act, env.num_agents)
         actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enumerate(env.agents)} 
-        #print('actions', actions)
         
         obs, state, rew, dones, _ = env.step_env(key, state, actions)
-        #print('state', obs)
-        
-        #env.render(state)
-        #raise
-        #pygame.time.wait(300)
 
-    #fig, ax = plt.subplots()
-    #fig = plt.Figure(figsize=(5, 5), dpi=100)
-    #ax = fig.add_subplot(111)
-    #from matplotlib.backends.backend_agg import FigureCanvasAgg
-    
-    '''plt.ion()
-    for state in state_seq:
-        env.plot(ax, state)'''
 
     viz = MPEVisualizer(env, state_seq)
     viz.animate('ani.gif')

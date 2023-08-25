@@ -31,11 +31,8 @@ class SimpleTagMPE(SimpleMPE):
         landmarks = ["landmark {}".format(i) for i in range(num_obs)]
 
         # Action and observation spaces
-        #action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
-
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (16,)) for i in self.adversaries }
         observation_spaces.update({i: Box(-jnp.inf, jnp.inf, (14,)) for i in self.good_agents})
-
 
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + [OBS_COLOUR] * num_obs 
             
@@ -65,7 +62,7 @@ class SimpleTagMPE(SimpleMPE):
                          )
     
 
-    def get_obs(self, state: State):
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
 
         @partial(jax.vmap, in_axes=(0))
         def _common_stats(aidx):

@@ -59,30 +59,6 @@ class SimplePushMPE(SimpleMPE):
                          colour=colour,
                          rad=rad,
                          collide=collide)
-        
-        
-        
-    '''@property
-    def default_params(self) -> EnvParams:
-        params = EnvParams(
-            max_steps=MAX_STEPS,
-            rad=jnp.concatenate([jnp.full((self.num_agents), AGENT_RADIUS),
-                            jnp.full((self.num_landmarks), LANDMARK_RADIUS)]),
-            moveable=jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
-            silent = jnp.full((self.num_agents), 1),
-            collide = jnp.concatenate([jnp.full((self.num_agents), True), jnp.full((self.num_landmarks), False)]),
-            mass=jnp.full((self.num_entities), MASS),
-            accel = jnp.full((self.num_agents), ACCEL),
-            max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
-                                jnp.full((self.num_landmarks), 0.0)]),
-            u_noise=jnp.full((self.num_agents), 0),
-            c_noise=jnp.full((self.num_agents), 0),
-            damping=DAMPING,  # physical damping
-            contact_force=CONTACT_FORCE,  # contact response parameters
-            contact_margin=CONTACT_MARGIN,
-            dt=DT,       
-        )
-        return params'''
     
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
@@ -106,7 +82,7 @@ class SimplePushMPE(SimpleMPE):
         
         return self.get_obs(state), state
 
-    def get_obs(self, state: State,):
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
 
         @partial(jax.vmap, in_axes=(0))
         def _common_stats(aidx: int):
@@ -142,7 +118,6 @@ class SimplePushMPE(SimpleMPE):
                 landmark_pos[aidx].flatten(), # 5, 2
                 OBS_COLOUR.flatten(), 
                 other_pos[aidx].flatten(), # 5, 2
-                #other_vel[aidx,-1:].flatten(), # 2
             ])
 
 

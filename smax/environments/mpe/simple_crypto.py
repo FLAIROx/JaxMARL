@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from flax import struct
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, State
-from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING, DISCRETE_ACT, CONTINUOUS_ACT 
+from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, DISCRETE_ACT, CONTINUOUS_ACT 
 from gymnax.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
@@ -70,7 +70,7 @@ class SimpleCryptoMPE(SimpleMPE):
             list(OBS_COLOUR)
             
         # Parameters
-        rad=jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
+        rad = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
                             jnp.full((self.num_good_agents), AGENT_RADIUS),
                             jnp.full((num_landmarks), LANDMARK_RADIUS)])
         moveable= jnp.full((num_entities), False)
@@ -91,29 +91,6 @@ class SimpleCryptoMPE(SimpleMPE):
                          silent=silent,
                          collide=collide,
                          )
-        
-    '''@property
-    def default_params(self) -> EnvParams:
-        params = EnvParams(
-            max_steps=MAX_STEPS,
-            rad=jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
-                            jnp.full((self.num_good_agents), AGENT_RADIUS),
-                            jnp.full((self.num_landmarks), LANDMARK_RADIUS)]),
-            moveable= jnp.full((self.num_entities), False),
-            silent = jnp.full((self.num_agents), 0),
-            collide = jnp.full((self.num_entities), False),
-            mass=jnp.full((self.num_entities), MASS),
-            accel = jnp.full((self.num_agents), ACCEL),
-            max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED),
-                                jnp.full((self.num_landmarks), 0.0)]),
-            u_noise=jnp.full((self.num_agents), 0),
-            c_noise=jnp.full((self.num_agents), 0),
-            damping=DAMPING,  # physical damping
-            contact_force=CONTACT_FORCE,  # contact response parameters
-            contact_margin=CONTACT_MARGIN,
-            dt=DT,       
-        )
-        return params'''
     
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, CryptoState]:
         
@@ -138,14 +115,6 @@ class SimpleCryptoMPE(SimpleMPE):
         )
         
         return self.get_obs(state), state
-
-    '''@partial(jax.vmap, in_axes=[None, 0, 0, None])
-    def _set_action(self, a_idx, action, params):
-        """ Communication action """
-        u = jnp.zeros((self.dim_p,))
-        c = action
-        
-        return u, c'''
     
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_continuous_action(self, a_idx: int, action: chex.Array) -> Tuple[chex.Array, chex.Array]:
@@ -162,11 +131,10 @@ class SimpleCryptoMPE(SimpleMPE):
         c = c.at[action].set(1.0)
         return u, c
 
-    def get_obs(self, state: CryptoState):
+    def get_obs(self, state: CryptoState) -> Dict[str, chex.Array]:
 
         goal_colour = state.goal_colour
         comm = state.c[SPEAKER_IDX]
-        #jax.debug.print('comm {c}', c=state.c)
         
         def _speaker():
             return jnp.concatenate([
@@ -182,12 +150,11 @@ class SimpleCryptoMPE(SimpleMPE):
             
         def _adversary():
             return comm
-    
-        # NOTE not a fan of this solution but it does work...        
+        
         obs = {
             SPEAKER: _speaker(),
             LISTENER: _listener(),
-            ADVERSARY_NAMES[0]: _adversary()
+            ADVERSARY: _adversary()
         }
         return obs
     
@@ -196,16 +163,10 @@ class SimpleCryptoMPE(SimpleMPE):
         comm_diff = jnp.sum(jnp.square(state.c - state.goal_colour), axis=1) # check axis
         
         comm_zeros = ~jnp.all(state.c==0)  # Ensure communication has happend
-        #jax.debug.print('comm z {z}', z=comm_zeros)
         
-        #mask = jnp.full((self.num_agents), -1)
-        #mask = mask.at[0].set(1)
-        #mask = mask.at[SPEAKER_IDX].set(0)
         mask = jnp.array([1, 0, -1])
         mask *= comm_zeros
 
-        #jax.debug.print('mask {m}', m=mask)
-        #jax.debug.print('comm diff {c}', c=comm_diff)
         def _good():
             return jnp.sum(comm_diff * mask) 
         
