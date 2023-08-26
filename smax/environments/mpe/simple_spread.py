@@ -31,7 +31,7 @@ class SimpleSpreadMPE(SimpleMPE):
         
         # Parameters
         rad = jnp.concatenate([jnp.full((num_agents), 0.15),
-                            jnp.full((num_landmarks), AGENT_RADIUS)])
+                            jnp.full((num_landmarks), 0.05)])
         collide = jnp.concatenate([jnp.full((num_agents), True), jnp.full((num_landmarks), False)])
         
         super().__init__(num_agents=num_agents,

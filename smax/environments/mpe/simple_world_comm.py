@@ -66,15 +66,15 @@ class SimpleWorldCommMPE(SimpleMPE):
             [OBS_COLOUR] * num_obs + [(39, 39, 166)] * num_food + [(153, 230, 153)] * num_forests
         
         # Parameters 
-        rad=jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
+        rad=jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
                                jnp.full((self.num_good_agents), 0.045),
-                               jnp.full((self.num_obs), LANDMARK_RADIUS),
+                               jnp.full((self.num_obs), 0.2),
                                jnp.full((self.num_food), 0.03),
                                jnp.full((self.num_forests), 0.3)])
         silent = jnp.insert(jnp.ones((num_agents-1)), 0, 0).astype(jnp.int32)
         collide = jnp.concatenate([jnp.full((num_agents+self.num_obs), True),
                                    jnp.full(self.num_food+self.num_forests, False)])
-        accel = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_ACCEL), jnp.full((self.num_good_agents), 4.0)])
+        accel = jnp.concatenate([jnp.full((self.num_adversaries), 3.0), jnp.full((self.num_good_agents), 4.0)])
         max_speed = jnp.concatenate([jnp.full((self.num_adversaries), 1.0),
                                  jnp.full((self.num_good_agents), 1.3),
                                  jnp.full((num_landmarks), 0.0)])

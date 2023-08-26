@@ -44,8 +44,8 @@ class SimplePushMPE(SimpleMPE):
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
             list(OBS_COLOUR)
             
-        rad = jnp.concatenate([jnp.full((num_agents), AGENT_RADIUS),
-                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
+        rad = jnp.concatenate([jnp.full((num_agents), 0.05),
+                            jnp.full((num_landmarks), 0.2)])
         collide = jnp.concatenate([jnp.full((num_agents), True), jnp.full((num_landmarks), False)])
         
         super().__init__(num_agents=num_agents, 

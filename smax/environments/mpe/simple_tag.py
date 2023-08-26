@@ -37,10 +37,10 @@ class SimpleTagMPE(SimpleMPE):
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + [OBS_COLOUR] * num_obs 
             
         # Parameters
-        rad = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
-                            jnp.full((self.num_good_agents), AGENT_RADIUS),
-                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
-        accel = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_ACCEL),
+        rad = jnp.concatenate([jnp.full((self.num_adversaries), 0.075),
+                            jnp.full((self.num_good_agents), 0.05),
+                            jnp.full((num_landmarks), 0.2)])
+        accel = jnp.concatenate([jnp.full((self.num_adversaries), 3.0),
                                 jnp.full((self.num_good_agents), 4.0)])
         max_speed = jnp.concatenate([jnp.full((self.num_adversaries), 1.0),
                                 jnp.full((self.num_good_agents), 1.3),

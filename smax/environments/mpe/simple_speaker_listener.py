@@ -59,7 +59,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         colour = [ADVERSARY_COLOUR] + [AGENT_COLOUR] + list(jnp.concatenate([COLOUR_1, COLOUR_2, COLOUR_3]))
         
         # Parameters
-        rad = jnp.concatenate([jnp.full((num_agents), ADVERSARY_RADIUS),
+        rad = jnp.concatenate([jnp.full((num_agents), 0.075),
                                jnp.full((num_landmarks), 0.04)])
         moveable = jnp.concatenate([jnp.array([False]), jnp.array([True]), jnp.full((num_landmarks), False)])
         silent = jnp.array([0, 1])

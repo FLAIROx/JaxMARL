@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from flax import struct
 from functools import partial
 from smax.environments.mpe.simple import SimpleMPE, State
-from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, DISCRETE_ACT, CONTINUOUS_ACT 
+from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
@@ -70,9 +70,9 @@ class SimpleCryptoMPE(SimpleMPE):
             list(OBS_COLOUR)
             
         # Parameters
-        rad = jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
-                            jnp.full((self.num_good_agents), AGENT_RADIUS),
-                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
+        rad = jnp.concatenate([jnp.full((self.num_adversaries), 0.05),
+                            jnp.full((self.num_good_agents), 0.05),
+                            jnp.full((num_landmarks), 0.05)])
         moveable= jnp.full((num_entities), False)
         silent = jnp.full((num_agents), 0)
         collide = jnp.full((num_entities), False)

@@ -133,20 +133,20 @@ class SimpleMPE(MultiAgentEnv):
             assert len(self.mass) == self.num_entities, f"Mass array length {len(self.mass)} does not match number of entities {self.num_entities}"
             assert jnp.all(self.mass > 0), f"Mass array must be positive, got {self.mass}"
         else:
-            self.mass = jnp.full((self.num_entities), MASS)
+            self.mass = jnp.full((self.num_entities), 1.0)
             
         if "accel" in kwargs:
             self.accel = kwargs["accel"]
             assert len(self.accel) == self.num_agents, f"Accel array length {len(self.accel)} does not match number of agents {self.num_agents}"
             assert jnp.all(self.accel > 0), f"Accel array must be positive, got {self.accel}"
         else:
-            self.accel = jnp.full((self.num_agents), ACCEL)
+            self.accel = jnp.full((self.num_agents), 5.0)
             
         if "max_speed" in kwargs:
             self.max_speed = kwargs["max_speed"]
             assert len(self.max_speed) == self.num_entities, f"Max speed array length {len(self.max_speed)} does not match number of entities {self.num_entities}"
         else:
-            self.max_speed = jnp.concatenate([jnp.full((self.num_agents), MAX_SPEED), jnp.full((self.num_landmarks), 0.0)])
+            self.max_speed = jnp.concatenate([jnp.full((self.num_agents), -1), jnp.full((self.num_landmarks), 0.0)])
             
         if "u_noise" in kwargs:
             self.u_noise = kwargs["u_noise"]
