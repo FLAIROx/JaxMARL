@@ -9,7 +9,7 @@ from gymnax.environments.spaces import Box
 
 # Obstacle Colours
 COLOUR_1 = jnp.array([0.1, 0.9, 0.1])
-COLOUR_2 = jnp.array([0.1, 0.1, 0.9])
+COLOUR_2 = jnp.array([0.1, 0.1, 0.9])  # BUG
 OBS_COLOUR = jnp.concatenate([COLOUR_1, COLOUR_2])
 
 

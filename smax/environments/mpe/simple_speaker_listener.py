@@ -10,7 +10,7 @@ SPEAKER = "speaker_0"
 LISTENER = "listener_0"
 AGENT_NAMES = [SPEAKER, LISTENER]
 
-COLOUR_1 = jnp.array([0.65, 0.15, 0.15])
+COLOUR_1 = jnp.array([0.65, 0.15, 0.15])  # BUG
 COLOUR_2 = jnp.array([0.15, 0.65, 0.15])
 COLOUR_3 = jnp.array([0.15, 0.15, 0.65])
 
@@ -86,7 +86,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
             collide=collide,
         )
 
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         key_a, key_l, key_g = jax.random.split(key, 3)
 
         p_pos = jnp.concatenate(

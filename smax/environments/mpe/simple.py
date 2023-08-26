@@ -502,9 +502,14 @@ class SimpleMPE(MultiAgentEnv):
         return self.init_render(ax, state)
 
     def init_render(self, ax, state: State):
+        """ 
+        TODO:
+        add step counter
+        add comm viz
+        """
+        
         from matplotlib.patches import Circle
         import matplotlib.pyplot as plt
-        import io
         import numpy as np
         from matplotlib.backends.backend_agg import FigureCanvasAgg
 
@@ -519,15 +524,12 @@ class SimpleMPE(MultiAgentEnv):
             )
             ax.add_patch(c)
 
+
         fig = ax.get_figure()
         canvas = FigureCanvasAgg(fig)
-        # canvas = ax.figure.canvas
         canvas.draw()
-        # print('canvas width height', canvas.get_width_height())
         buf = canvas.buffer_rgba()
-        # print('print size', np.shape(buf))
         rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
-        # print('rgb array size', np.shape(rgb_array))
         rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
 
         return ax.imshow(rgb_array)
@@ -561,7 +563,7 @@ if __name__ == "__main__":
     print("state", state)
     print("action spaces", env.action_spaces)
 
-    for _ in range(50):
+    for _ in range(25):
         state_seq.append(state)
         key, key_act = jax.random.split(key)
         key_act = jax.random.split(key_act, env.num_agents)
@@ -573,4 +575,4 @@ if __name__ == "__main__":
         obs, state, rew, dones, _ = env.step_env(key, state, actions)
 
     viz = MPEVisualizer(env, state_seq)
-    viz.animate("ani.gif")
+    viz.animate(None, view=True)
