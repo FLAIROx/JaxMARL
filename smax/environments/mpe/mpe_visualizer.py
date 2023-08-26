@@ -44,6 +44,4 @@ class MPEVisualizer(object):
         self.im = self.env.init_render(self.ax, self.state_seq[0])
 
     def update(self, frame):
-        self.im = self.env.update_render(
-            self.im, self.state_seq[frame]
-        )
+        self.im = self.env.update_render(self.im, self.state_seq[frame])
