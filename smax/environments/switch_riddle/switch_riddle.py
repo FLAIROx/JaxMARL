@@ -125,9 +125,12 @@ class SwitchRiddle(MultiAgentEnv):
         @partial(jax.vmap, in_axes=[0, None])
         def _observation(aidx: int, state: State) -> jnp.ndarray:
             """Return observation for agent i."""
-            return jnp.array([state.agent_in_room == aidx, state.bulb_state]).astype(
-                int
-            )
+            agent_in_room = state.agent_in_room == aidx
+            bulb_state = jnp.logical_and(
+                agent_in_room, # only the current agent in the room can see the bulb state
+                state.bulb_state
+            ) 
+            return jnp.array([agent_in_room, bulb_state]).astype(int)
 
         obs = _observation(self.agent_range, state)
         return {a: obs[i] for i, a in enumerate(self.agents)}
@@ -147,14 +150,19 @@ class SwitchRiddle(MultiAgentEnv):
 
 def example():
     num_agents = 5
-    print(f"Startig SwitchRiddle with {num_agents} agents")
     key = jax.random.PRNGKey(0)
-    env = SwitchRiddle(num_agents=num_agents)
+
+    from smax import make
+    env = make('switch_riddle', num_agents=num_agents)
+
     obs, state = env.reset(key)
     env.render(state)
 
     for _ in range(20):
         key, key_reset, key_act, key_step = jax.random.split(key, 4)
+
+        env.render(state)
+        print("obs:", obs)
 
         # Sample random actions.
         key_act = jax.random.split(key_act, env.num_agents)
@@ -172,8 +180,6 @@ def example():
         obs, state, reward, done, infos = env.step(key_step, state, actions)
 
         print("reward:", reward["agent_0"])
-        print("obs:", obs)
-        env.render(state)
 
 
 if __name__ == "__main__":
