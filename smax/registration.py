@@ -18,6 +18,7 @@ from .environments import (
     Walker2d,
     HalfCheetah,
     InTheGrid,
+    HanabiGame,
 )
 
 
@@ -73,6 +74,10 @@ def make(env_id: str, **env_kwargs):
     # 5. InTheGrid
     elif env_id == "mg_in_the_grid":
         env = InTheGrid(**env_kwargs)
+    
+    # 6. Hanabi
+    elif env_id == "hanabi":
+        env = HanabiGame(**env_kwargs)
 
     return env
 
@@ -97,4 +102,5 @@ registered_envs = [
     "humanoid_9|8",
     "walker2d_2x3",
     "mg_in_the_grid",
+    "hanabi",
 ]
