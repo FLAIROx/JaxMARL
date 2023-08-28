@@ -25,12 +25,12 @@ key, key_r, key_a = jax.random.split(key, 3)
 # Get one of the classic layouts (cramped_room, asymm_advantages, coord_ring, forced_coord, counter_circuit)
 layout = overcooked_layouts["cramped_room"]
 
-# # Or make your own!
+# Or make your own!
 # custom_layout_grid = """
 # WWOWW
 # WA  W
 # B P X
-# W   W
+# W  AW
 # WWOWW
 # """
 # layout = layout_grid_to_dict(custom_layout_grid)
@@ -59,6 +59,11 @@ for _ in range(max_steps):
     obs, state, rewards, dones, infos = env.step(key_s, state, actions)
 
 viz = OvercookedVisualizer()
+
+# Render to screen
 for s in state_seq:
     viz.render(env.agent_view_size, s, highlight=False)
     time.sleep(0.25)
+
+# # Or save an animation
+# viz.animate(state_seq, agent_view_size=5, filename='animation.gif')
