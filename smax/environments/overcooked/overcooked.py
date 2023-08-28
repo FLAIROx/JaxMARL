@@ -242,7 +242,10 @@ class Overcooked(MultiAgentEnv):
         # Set items at random on counters:
         # Sample items (0: empty, 1: onion, 2: plate, 3: dish)
         key, num_key, which_key = jax.random.split(key, 3)
-        num_spots = empty_table_mask.sum().item()
+
+        # TODO: This sampling has the desired behaviour won't jit due to variable num_spots. Find a fix.
+        # TODO: Consider having multiple masks with "items" being of same shape as all_pos
+        num_spots = empty_table_mask.sum()
         items = jax.random.randint(num_key, (num_spots,), 0, 4)
 
         num_onions = (items == 1).sum()
