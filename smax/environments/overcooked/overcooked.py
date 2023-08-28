@@ -46,18 +46,6 @@ class State:
     terminal: bool
 
 
-# TODO: Cleanup params and layout handling
-@struct.dataclass
-class EnvParams:
-    agent_view_size: int = 5
-    see_through_walls: bool = True
-    see_agent: bool = True
-    normalize_obs: bool = False
-    sample_n_walls: bool = False  # Sample n_walls uniformly in [0, n_walls]
-    max_steps: int = 400
-    random_reset: bool = False
-
-
 # Pot status indicated by an integer, which ranges from 23 to 0
 POT_EMPTY_STATUS = 23 # 22 = 1 onion in pot; 21 = 2 onions in pot; 20 = 3 onions in pot
 POT_FULL_STATUS = 20 # 3 onions. Below this status, pot is cooking, and status acts like a countdown timer.
@@ -72,18 +60,22 @@ class Overcooked(MultiAgentEnv):
     """Vanilla Overcooked"""
     def __init__(
             self,
-            height=4,
-            width=5,
-            n_walls=1,
-            agent_view_size=5,
             layout = FrozenDict(layouts["cramped_room"]),
+            random_reset: bool = False,
+            max_steps: int = 400,
     ):
         # Sets self.num_agents to 2
         super().__init__(num_agents=2)
 
         # self.obs_shape = (agent_view_size, agent_view_size, 3)
         # Observations given by 26 channels, most of which are boolean masks
-        self.obs_shape = (width, height, 26)
+        self.height = layout["height"]
+        self.width = layout["width"]
+        self.obs_shape = (self.width, self.height, 26)
+
+        self.agent_view_size = 5  # Hard coded. Only affects map padding -- not observations.
+        self.layout = layout
+        self.agents = ["agent_0", "agent_1"]
 
         self.action_set = jnp.array([
             Actions.right,
@@ -94,13 +86,8 @@ class Overcooked(MultiAgentEnv):
             Actions.interact,
         ])
 
-        self.height = height
-        self.width = width
-        self.n_walls = n_walls     # Here for future compatibility reasons with randomized starts
-
-        self.agent_view_size = agent_view_size
-        self.layout = layout
-        self.agents = ["agent_0", "agent_1"]
+        self.random_reset = random_reset
+        self.max_steps = max_steps
 
         # self.params = EnvParams(
         #     height=height,
@@ -116,29 +103,31 @@ class Overcooked(MultiAgentEnv):
         #     layout=layout
         # )
 
-    @property
-    def default_params(self) -> EnvParams:
-        # Default environment parameters
-        return EnvParams()
+    # @property
+    # def default_params(self) -> EnvParams:
+    #     # Default environment parameters
+    #     return EnvParams()
 
     def step_env(
             self,
             key: chex.PRNGKey,
             state: State,
             actions: Dict[str, chex.Array],
-            params: EnvParams
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Perform single timestep state transition."""
 
         acts = self.action_set.take(indices=jnp.array([actions["agent_0"], actions["agent_1"]]))
 
-        state, reward = self.step_agents(key, state, acts, params)
+        state, reward = self.step_agents(key, state, acts)
         # Check game condition & no. steps for termination condition
+
         state = state.replace(time=state.time + 1)
-        done = self.is_terminal(state, params)
+
+        # TODO: RETURN A FREAKING BOOL, NOT AN ARRAY, GODDAMNIT
+        done = self.is_terminal(state)
         state = state.replace(terminal=done)
 
-        obs = self.get_obs(state, params)
+        obs = self.get_obs(state)
         rewards = {"agent_0": reward, "agent_1": reward}
         dones = {"agent_0": done, "agent_1": done, "__all__": done}
 
@@ -150,10 +139,9 @@ class Overcooked(MultiAgentEnv):
             {},
         )
 
-    def reset_env(
+    def reset(
             self,
             key: chex.PRNGKey,
-            params: EnvParams
     ) -> Tuple[Dict[str, chex.Array], State]:
         """Reset environment state by resampling contents of maze_map
         - initial agent position
@@ -162,7 +150,7 @@ class Overcooked(MultiAgentEnv):
         """
 
         # Whether to fully randomize the start state
-        random_reset = params.random_reset
+        random_reset = self.random_reset
         layout = self.layout
 
         h = self.height
@@ -170,17 +158,6 @@ class Overcooked(MultiAgentEnv):
         num_agents = self.num_agents
         all_pos = np.arange(np.prod([h, w]), dtype=jnp.uint32)
 
-
-        # TODO: Cleanup random map generation
-        # Reset wall map, with shape H x W, and value of 1 at (i,j) iff there is a wall at (i,j)
-        # key, subkey = jax.random.split(key)
-        # wall_idx = jax.random.choice(
-        #     subkey, all_pos,
-        #     shape=(self.n_walls,),
-        #     replace=False)
-
-        # Replace wall_idx with fixed layout if applicable
-        # wall_idx = random_reset * wall_idx + (1-random_reset) * layout.get("wall_idx", wall_idx)
         wall_idx = layout.get("wall_idx")
 
         occupied_mask = jnp.zeros_like(all_pos)
@@ -227,49 +204,54 @@ class Overcooked(MultiAgentEnv):
         pot_status = jax.random.randint(subkey, (pot_idx.shape[0],), 0, 24)
         pot_status = pot_status * random_reset + (1-random_reset) * jnp.ones((pot_idx.shape[0])) * 23
 
+        # TODO: uncomment this block once randomized resets successfully compile.
         # Set random items on the map if `random_reset == True`
-        def set_pos_fn(item_idx, empty_table_mask):
-            empty_table_mask = empty_table_mask.at[item_idx].set(0)
-            item_pos = jnp.array([item_idx % w, item_idx // w], dtype=jnp.uint32).transpose()
-            return item_pos, empty_table_mask
+        # # TODO: Ensure these two methods return items of the same shape, otherwise it throws an error.
+        # def set_pos_fn(item_idx, empty_table_mask):
+        #     empty_table_mask = empty_table_mask.at[item_idx].set(0)
+        #     item_pos = jnp.array([item_idx % w, item_idx // w], dtype=jnp.uint32).transpose()
+        #     return item_pos, empty_table_mask
+        #
+        # def empty_pos_fn(item_idx, empty_table_mask):
+        #     # This operation works even if item_idx is empty
+        #     item_idx = jnp.array([])
+        #     item_pos = jnp.array([item_idx % w, item_idx // w], dtype=jnp.uint32).transpose()
+        #     return item_pos, empty_table_mask
+        #
+        # # Set items at random on counters:
+        # # Sample items (0: empty, 1: onion, 2: plate, 3: dish)
+        # key, num_key, which_key = jax.random.split(key, 3)
+        #
+        # # TODO: This sampling has the desired behaviour but won't jit due to variable num_spots. Find a fix.
+        # # TODO: Consider having multiple masks with "items" being of same shape as all_pos
+        # num_spots = empty_table_mask.sum()
+        # items = jax.random.randint(num_key, (num_spots,), 0, 4)
+        #
+        # num_onions = (items == 1).sum()
+        # onion_idx = jax.random.choice(which_key, all_pos, shape=(num_onions,),
+        #                               p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        # onion_pos, empty_table_mask = jax.lax.cond(num_onions > 0 and random_reset, set_pos_fn, empty_pos_fn,
+        #                                            onion_idx, empty_table_mask)
+        #
+        # key, which_key = jax.random.split(key, 2)
+        # num_plates = (items == 2).sum()
+        # plate_idx = jax.random.choice(which_key, all_pos, shape=(num_plates,),
+        #                               p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        # plate_pos, empty_table_mask = jax.lax.cond(num_plates > 0 and random_reset, set_pos_fn, empty_pos_fn,
+        #                                            plate_idx, empty_table_mask)
+        #
+        # key, which_key = jax.random.split(key, 2)
+        # num_dishes = (items == 3).sum()
+        # dish_idx = jax.random.choice(which_key, all_pos, shape=(num_dishes,),
+        #                               p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        # dish_pos, empty_table_mask = jax.lax.cond(num_dishes > 0 and random_reset, set_pos_fn, empty_pos_fn,
+        #                                            dish_idx, empty_table_mask)
 
-        def empty_pos_fn(item_idx, empty_table_mask):
-            # This operation works even if item_idx is empty
-            item_idx = jnp.array([])
-            item_pos = jnp.array([item_idx % w, item_idx // w], dtype=jnp.uint32).transpose()
-            return item_pos, empty_table_mask
-
-        # Set items at random on counters:
-        # Sample items (0: empty, 1: onion, 2: plate, 3: dish)
-        key, num_key, which_key = jax.random.split(key, 3)
-
-        # TODO: This sampling has the desired behaviour won't jit due to variable num_spots. Find a fix.
-        # TODO: Consider having multiple masks with "items" being of same shape as all_pos
-        num_spots = empty_table_mask.sum()
-        items = jax.random.randint(num_key, (num_spots,), 0, 4)
-
-        num_onions = (items == 1).sum()
-        onion_idx = jax.random.choice(which_key, all_pos, shape=(num_onions,),
-                                      p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
-        onion_pos, empty_table_mask = jax.lax.cond(num_onions > 0 and random_reset, set_pos_fn, empty_pos_fn,
-                                                   onion_idx, empty_table_mask)
-
-        key, which_key = jax.random.split(key, 2)
-        num_plates = (items == 2).sum()
-        plate_idx = jax.random.choice(which_key, all_pos, shape=(num_plates,),
-                                      p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
-        plate_pos, empty_table_mask = jax.lax.cond(num_plates > 0 and random_reset, set_pos_fn, empty_pos_fn,
-                                                   plate_idx, empty_table_mask)
-
-        key, which_key = jax.random.split(key, 2)
-        num_dishes = (items == 3).sum()
-        dish_idx = jax.random.choice(which_key, all_pos, shape=(num_dishes,),
-                                      p=(empty_table_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
-        dish_pos, empty_table_mask = jax.lax.cond(num_dishes > 0 and random_reset, set_pos_fn, empty_pos_fn,
-                                                   dish_idx, empty_table_mask)
+        onion_pos = jnp.array([])
+        plate_pos = jnp.array([])
+        dish_pos = jnp.array([])
 
         maze_map = make_overcooked_map(
-            params,
             wall_map,
             goal_pos,
             agent_pos,
@@ -294,9 +276,10 @@ class Overcooked(MultiAgentEnv):
         agent_inv = random_reset * random_agent_inv + \
                     (1-random_reset) * jnp.array([OBJECT_TO_INDEX['empty'], OBJECT_TO_INDEX['empty']])
 
+        # TODO: Restore this, but sample timestep as Int (not array) since otherwise it affects the multi_agent_env.py `step` function
         # Random reset must also set timestep since we have a "urgency" feature for last 40 timesteps
-        key, subkey = jax.random.split(key)
-        timestep = jax.random.randint(subkey, (1,), 0, params.max_steps) * random_reset
+        # key, subkey = jax.random.split(key)
+        # timestep = jax.random.randint(subkey, (1,), 0, self.max_steps) * random_reset
 
         state = State(
             agent_pos=agent_pos,
@@ -307,15 +290,15 @@ class Overcooked(MultiAgentEnv):
             pot_pos=pot_pos,
             wall_map=wall_map.astype(jnp.bool_),
             maze_map=maze_map,
-            time=jnp.array(timestep, dtype=jnp.int32),
-            terminal=jnp.array(False),
+            time=0,
+            terminal=False,
         )
 
-        obs = self.get_obs(state, params)
+        obs = self.get_obs(state)
 
         return lax.stop_gradient(obs), lax.stop_gradient(state)
 
-    def get_obs(self, state: State, params: EnvParams) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
         """Return a full observation, of size (height x width x n_layers), where n_layers = 26.
         Layers are of shape (height x width) and  are binary (0/1) except where indicated otherwise.
         The obs is very sparse (most elements are 0), which prob. contributes to generalization problems in Overcooked.
@@ -376,7 +359,7 @@ class Overcooked(MultiAgentEnv):
                                * pot_loc_layer + MAX_ONIONS_IN_POT * soup_loc   # 0/3, as long as cooking or done
         pot_cooking_time_layer = pot_status * (pot_status < POT_FULL_STATUS)                           # Timer: 19 to 0
         soup_ready_layer = pot_loc_layer * (pot_status == POT_READY_STATUS) + soup_loc                 # Ready soups, plated or not
-        urgency_layer = jnp.ones(maze_map.shape, dtype=jnp.uint8) * ((self.max_steps(params) - state.time) < URGENCY_CUTOFF)
+        urgency_layer = jnp.ones(maze_map.shape, dtype=jnp.uint8) * ((self.max_steps - state.time) < URGENCY_CUTOFF)
 
         agent_pos_layers = jnp.zeros((2, height, width), dtype=jnp.uint8)
         agent_pos_layers = agent_pos_layers.at[0, state.agent_pos[0, 1], state.agent_pos[0, 0]].set(1)
@@ -485,7 +468,7 @@ class Overcooked(MultiAgentEnv):
 
 
     def step_agents(
-            self, key: chex.PRNGKey, state: State, action: chex.Array, params: EnvParams,
+            self, key: chex.PRNGKey, state: State, action: chex.Array,
     ) -> Tuple[State, float]:
 
         # TODO: VERIFY IF THIS HANDLES ACTIONS OF UNEXPECTED SHAPE (i.e. extra dimensions of size 1)
@@ -761,10 +744,10 @@ class Overcooked(MultiAgentEnv):
         reward = jnp.array(successful_delivery, dtype=float)*DELIVERY_REWARD
         return maze_map, inventory, reward
 
-    def is_terminal(self, state: State, params: EnvParams) -> bool:
+    def is_terminal(self, state: State) -> bool:
         """Check whether state is terminal."""
-        done_steps = state.time >= params.max_steps
-        return jnp.logical_or(done_steps, state.terminal)
+        done_steps = state.time >= self.max_steps
+        return done_steps | state.terminal
 
     def get_eval_solved_rate_fn(self):
         def _fn(ep_stats):
@@ -798,19 +781,19 @@ class Overcooked(MultiAgentEnv):
 
         return spaces.Box(0, 255, self.obs_shape)
 
-    def state_space(self, params) -> spaces.Dict:
+    def state_space(self) -> spaces.Dict:
         """State space of the environment."""
         h = self.height
         w = self.width
-        agent_view_size = se;f.agent_view_size
+        agent_view_size = self.agent_view_size
         return spaces.Dict({
             "agent_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
             "agent_dir": spaces.Discrete(4),
             "goal_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
             "maze_map": spaces.Box(0, 255, (w + agent_view_size, h + agent_view_size, 3), dtype=jnp.uint32),
-            "time": spaces.Discrete(params.max_steps),
+            "time": spaces.Discrete(self.max_steps),
             "terminal": spaces.Discrete(2),
         })
 
-    def max_steps(self, params) -> int:
-        return params.max_steps
+    def max_steps(self) -> int:
+        return self.max_steps

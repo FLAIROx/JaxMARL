@@ -6,9 +6,6 @@ Uses the PettingZoo Parallel API. All agents act synchronously, with actions,
 observations, returns and dones passed as dictionaries keyed by agent names. 
 The code can be found in `multiagentgymnax/multi_agent_env.py`
 
-The class follows an identical structure to that of `gymnax` with one execption. 
-The class is instatiated with `num_agents`, defining the number of agents within the environment.
-
 ## Environment loop
 Below is an example of a simple environment loop, using random actions.
 
@@ -17,7 +14,7 @@ Below is an example of a simple environment loop, using random actions.
 import jax 
 from smax import make
 from smax.viz.overcooked_visualizer import OvercookedVisualizer
-from smax.environments.overcooked import overcooked_layouts
+from smax.environments.overcooked import Overcooked, overcooked_layouts, layout_grid_to_dict
 import time
 
 # Parameters + random keys
@@ -25,14 +22,23 @@ max_steps = 100
 key = jax.random.PRNGKey(0)
 key, key_r, key_a = jax.random.split(key, 3)
 
-# Get layout (cramped_room / forced_coord)
+# Get one of the classic layouts (cramped_room, asymm_advantages, coord_ring, forced_coord, counter_circuit)
 layout = overcooked_layouts["cramped_room"]
 
-# Instantiate environment
-env, params = make('Overcooked', height=layout["height"], width=layout["width"], layout=layout)
-params = params.replace(max_steps=max_steps)
+# # Or make your own!
+# custom_layout_grid = """
+# WWOWW
+# WA  W
+# B P X
+# W   W
+# WWOWW
+# """
+# layout = layout_grid_to_dict(custom_layout_grid)
 
-obs, state = env.reset(key_r, params)
+# Instantiate environment
+env = make('Overcooked', layout=layout, max_steps=max_steps)
+
+obs, state = env.reset(key_r)
 print('list of agents in environment', env.agents)
 
 # Sample random actions
@@ -50,9 +56,9 @@ for _ in range(max_steps):
     actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
 
     # Step environment
-    obs, state, rewards, dones, infos = env.step(key_s, state, actions, params)
+    obs, state, rewards, dones, infos = env.step(key_s, state, actions)
 
 viz = OvercookedVisualizer()
 for s in state_seq:
-    viz.render(params, s, highlight=False)
+    viz.render(env.agent_view_size, s, highlight=False)
     time.sleep(0.25)

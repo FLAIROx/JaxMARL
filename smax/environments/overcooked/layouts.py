@@ -114,7 +114,7 @@ def layout_grid_to_dict(grid):
         # Transform lists to arrays
         layout_dict[key] = jnp.array(layout_dict[key])
 
-    return layout_dict
+    return FrozenDict(layout_dict)
 
 
 overcooked_layouts = {
@@ -122,5 +122,5 @@ overcooked_layouts = {
     "asymm_advantages" : FrozenDict(asymm_advantages),
     "coord_ring" : FrozenDict(coord_ring),
     "forced_coord" : FrozenDict(forced_coord),
-    "counter_circuit" : FrozenDict(layout_grid_to_dict(counter_circuit_grid))
+    "counter_circuit" : layout_grid_to_dict(counter_circuit_grid)
 }

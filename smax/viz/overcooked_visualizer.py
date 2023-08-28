@@ -29,15 +29,14 @@ class OvercookedVisualizer:
 		self._lazy_init_window()
 		self.window.show(block=block)
 
-	def render(self, params, state, highlight=True, tile_size=TILE_PIXELS):
+	def render(self, agent_view_size, state, highlight=True, tile_size=TILE_PIXELS):
 		"""Method for rendering the state in a window. Esp. useful for interactive mode."""
-		return self._render_state(params, state, highlight, tile_size)
+		return self._render_state(agent_view_size, state, highlight, tile_size)
 
-	def animate(self, state_seq, params, filename="animation.gif"):
+	def animate(self, state_seq, agent_view_size, filename="animation.gif"):
 		"""Animate a gif give a state sequence and save if to file."""
 		import imageio
 
-		agent_view_size = params.agent_view_size
 		padding = agent_view_size - 2  # show
 
 		def get_frame(state):
@@ -72,13 +71,12 @@ class OvercookedVisualizer:
 
 		self.window.show_img(img)
 
-	def _render_state(self, params, state, highlight=True, tile_size=TILE_PIXELS):
+	def _render_state(self, agent_view_size, state, highlight=True, tile_size=TILE_PIXELS):
 		"""
 		Render the state
 		"""
 		self._lazy_init_window()
 
-		agent_view_size = params.agent_view_size
 		padding = agent_view_size-2 # show
 		grid = np.asarray(state.maze_map[padding:-padding, padding:-padding, :])
 		grid_offset = np.array([1,1])

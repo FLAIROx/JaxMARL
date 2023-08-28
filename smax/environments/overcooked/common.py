@@ -74,7 +74,6 @@ DIR_TO_VEC = jnp.array([
 
 
 def make_overcooked_map(
-	params,
 	wall_map,
 	goal_pos,
 	agent_pos,
@@ -131,6 +130,8 @@ def make_overcooked_map(
 		dtype=jnp.uint8
 	)
 	maze_map = maze_map.at[pot_y, pot_x, :].set(pots)
+
+	# TODO: maze_map += onion * onion_mask ...
 
 	if len(onion_pos) > 0:
 		onion_x = onion_pos[:, 0]
