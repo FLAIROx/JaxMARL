@@ -1,4 +1,10 @@
-""" PureJAXRL implementation of PPO"""
+""" 
+Based on PureJaxRL Implementation of PPO
+
+doing homogenous first with continuous actions. Also terminate synchronously
+
+NOTE: currently implemented using the gymnax to smax wrapper
+"""
 
 import jax
 import jax.numpy as jnp
@@ -9,8 +15,15 @@ from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
-import gymnax
 from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
+import smax
+from smax.wrappers.smaxbaselines import LogWrapper
+from smax.wrappers.gymnax import GymnaxToSMAX
+from utils import batchify, unbatchify
+from smax.environments.overcooked import overcooked_layouts
+from smax.viz.overcooked_visualizer import OvercookedVisualizer
+
+import matplotlib.pyplot as plt
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -48,7 +61,7 @@ class ActorCritic(nn.Module):
         )
 
         return pi, jnp.squeeze(critic, axis=-1)
-
+    
 
 class Transition(NamedTuple):
     done: jnp.ndarray
@@ -59,17 +72,62 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
+def get_rollout(train_state, config):
+    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    # env_params = env.default_params
+    # env = LogWrapper(env)
+
+    network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+    key = jax.random.PRNGKey(0)
+    key, key_r, key_a = jax.random.split(key, 3)
+
+    init_x = jnp.zeros(env.observation_space().shape)
+    init_x = init_x.flatten()
+
+    network.init(key_a, init_x)
+    network_params = train_state.params
+
+    done = False
+
+    obs, state = env.reset(key_r)
+    state_seq = [state]
+    while not done:
+        key, key_a0, key_a1, key_s = jax.random.split(key, 4)
+
+        # obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
+        # breakpoint()
+        obs = {k: v.flatten() for k, v in obs.items()}
+
+        pi_0, _ = network.apply(network_params, obs["agent_0"])
+        pi_1, _ = network.apply(network_params, obs["agent_1"])
+
+        actions = {"agent_0": pi_0.sample(seed=key_a0), "agent_1": pi_1.sample(seed=key_a1)}
+        # env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
+        # env_act = {k: v.flatten() for k, v in env_act.items()}
+
+        # STEP ENV
+        obs, state, reward, done, info = env.step(key_s, state, actions)
+        done = done["__all__"]
+
+        state_seq.append(state)
+
+    return state_seq
+
 def make_train(config):
+    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#     env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
+
+    config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
-        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"] 
     )
     config["MINIBATCH_SIZE"] = (
-        config["NUM_ENVS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
+        config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
-    env, env_params = gymnax.make(config["ENV_NAME"])
-    env = FlattenObservationWrapper(env)
+    
+    #env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
     env = LogWrapper(env)
-
+    
     def linear_schedule(count):
         frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
         return config["LR"] * frac
@@ -77,9 +135,12 @@ def make_train(config):
     def train(rng):
 
         # INIT NETWORK
-        network = ActorCritic(env.action_space(env_params).n, activation=config["ACTIVATION"])
+        network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros(env.observation_space(env_params).shape)
+        init_x = jnp.zeros(env.observation_space().shape)
+        
+        init_x = init_x.flatten()
+        
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -93,12 +154,12 @@ def make_train(config):
             params=network_params,
             tx=tx,
         )
-
+        
         # INIT ENV
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
-        obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
-
+        obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
+        
         # TRAIN LOOP
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
@@ -107,18 +168,33 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-                pi, value = network.apply(train_state.params, last_obs)
+
+                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+                
+                pi, value = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
-
+                env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
+                
+                env_act = {k:v.flatten() for k,v in env_act.items()}
+                
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
-                obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0,None))(
-                    rng_step, env_state, action, env_params
+                
+                obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
+                    rng_step, env_state, env_act
                 )
+                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 transition = Transition(
-                    done, action, value, reward, log_prob, last_obs, info
+                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
+                    action,
+                    value,
+                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
+                    log_prob,
+                    obs_batch,
+                    info
+                    
                 )
                 runner_state = (train_state, env_state, obsv, rng)
                 return runner_state, transition
@@ -126,12 +202,11 @@ def make_train(config):
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
-            print(traj_batch)
             
-
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, rng = runner_state
-            _, last_val = network.apply(train_state.params, last_obs)
+            last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+            _, last_val = network.apply(train_state.params, last_obs_batch)
 
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
@@ -158,7 +233,7 @@ def make_train(config):
                 return advantages, advantages + traj_batch.value
 
             advantages, targets = _calculate_gae(traj_batch, last_val)
-
+            
             # UPDATE NETWORK
             def _update_epoch(update_state, unused):
                 def _update_minbatch(train_state, batch_info):
@@ -213,8 +288,8 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
                 batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
                 assert (
-                    batch_size == config["NUM_STEPS"] * config["NUM_ENVS"]
-                ), "batch size must be equal to number of steps * number of envs"
+                    batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"]
+                ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
                 batch = jax.tree_util.tree_map(
@@ -242,7 +317,7 @@ def make_train(config):
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
-
+            
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
 
@@ -259,9 +334,9 @@ def make_train(config):
 if __name__ == "__main__":
     config = {
         "LR": 2.5e-4,
-        "NUM_ENVS": 4,
+        "NUM_ENVS": 16,
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e5,
+        "TOTAL_TIMESTEPS": 5e6,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 4,
         "GAMMA": 0.99,
@@ -271,9 +346,24 @@ if __name__ == "__main__":
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
         "ACTIVATION": "tanh",
-        "ENV_NAME": "CartPole-v1",
+        "ENV_NAME": "Overcooked",
+        "ENV_KWARGS": {"layout" : overcooked_layouts["cramped_room"]},
         "ANNEAL_LR": True,
     }
     rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config))
-    out = train_jit(rng)
+    with jax.disable_jit(False):
+        train_jit = jax.jit(make_train(config))
+        out = train_jit(rng)
+
+    filename = f'{config["ENV_NAME"]}_cramped_room_new'
+
+    plt.plot(out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1))
+    plt.xlabel("Update Step")
+    plt.ylabel("Return")
+    plt.savefig(f'{filename}.png')
+
+    train_state = out["runner_state"][0]
+    state_seq = get_rollout(train_state, config)
+    viz = OvercookedVisualizer()
+    # agent_view_size is hardcoded as it determines the padding around the layout.
+    viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")

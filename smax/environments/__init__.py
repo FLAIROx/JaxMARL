@@ -14,4 +14,6 @@ from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC, LearnedPolicyEnemyMiniS
 from .switch_riddle import SwitchRiddle
 from .overcooked import Overcooked, overcooked_layouts
 from .mamujoco import Ant, Humanoid, Hopper, Walker2d, HalfCheetah
+from .hanabi import HanabiGame
 from .matrix_games_in_the_grid import InTheGrid
+
