@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from smax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
+from smax.environments.mpe.simple import SimpleMPE, State
 from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box
 
@@ -43,6 +43,10 @@ class SimplePushMPE(SimpleMPE):
 
         colour = [ADVERSARY_COLOUR] * num_adversaries + [AGENT_COLOUR] * num_good_agents + \
             list(OBS_COLOUR)
+            
+        rad = jnp.concatenate([jnp.full((num_agents), AGENT_RADIUS),
+                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
+        collide = jnp.concatenate([jnp.full((num_agents), True), jnp.full((num_landmarks), False)])
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -52,9 +56,13 @@ class SimplePushMPE(SimpleMPE):
                          action_type=action_type,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
-                         colour=colour)
+                         colour=colour,
+                         rad=rad,
+                         collide=collide)
         
-    @property
+        
+        
+    '''@property
     def default_params(self) -> EnvParams:
         params = EnvParams(
             max_steps=MAX_STEPS,
@@ -74,9 +82,9 @@ class SimplePushMPE(SimpleMPE):
             contact_margin=CONTACT_MARGIN,
             dt=DT,       
         )
-        return params
+        return params'''
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, TargetState]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -87,7 +95,7 @@ class SimplePushMPE(SimpleMPE):
         
         g_idx = jax.random.randint(key_g, (), minval=0, maxval=self.num_landmarks)
         
-        state = TargetState(
+        state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
@@ -96,12 +104,12 @@ class SimplePushMPE(SimpleMPE):
             goal=g_idx,
         )
         
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
-    def get_obs(self, state: TargetState, params: EnvParams):
+    def get_obs(self, state: State,):
 
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx, state, params):
+        @partial(jax.vmap, in_axes=(0))
+        def _common_stats(aidx: int):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
@@ -119,9 +127,9 @@ class SimplePushMPE(SimpleMPE):
             
             return landmark_pos, other_pos, other_vel
 
-        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range, state, params)
+        landmark_pos, other_pos, other_vel = _common_stats(self.agent_range)
 
-        def _good(aidx):
+        def _good(aidx: int):
             goal_rel_pos = state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx]
 
             agent_colour = jnp.full((3,), 0.25)
@@ -138,7 +146,7 @@ class SimplePushMPE(SimpleMPE):
             ])
 
 
-        def _adversary(aidx):
+        def _adversary(aidx: int):
             return jnp.concatenate([
                 state.p_vel[aidx].flatten(), # 2
                 landmark_pos[aidx].flatten(), # 5, 2
@@ -149,7 +157,7 @@ class SimplePushMPE(SimpleMPE):
         obs.update({a: _good(i+self.num_adversaries) for i, a in enumerate(self.good_agents)})
         return obs
     
-    def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: State,) -> Dict[str, float]:
 
         def _good(aidx):
             return -jnp.linalg.norm(state.p_pos[state.goal+self.num_agents] - state.p_pos[aidx])

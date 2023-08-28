@@ -4,7 +4,7 @@ import chex
 from typing import Tuple, Dict
 from flax import struct
 from functools import partial
-from smax.environments.mpe.simple import SimpleMPE, State, EnvParams
+from smax.environments.mpe.simple import SimpleMPE, State
 from smax.environments.mpe.default_params import AGENT_COLOUR, ADVERSARY_COLOUR, AGENT_RADIUS, LANDMARK_RADIUS, ADVERSARY_RADIUS, MASS, DT, MAX_STEPS, CONTACT_FORCE, CONTACT_MARGIN, ACCEL, MAX_SPEED, DAMPING, DISCRETE_ACT, CONTINUOUS_ACT 
 from gymnax.environments.spaces import Box, Discrete
 
@@ -18,8 +18,8 @@ OBS_COLOUR = jnp.array([[255, 0, 0, 0], [0, 255, 0, 0]])
 @struct.dataclass
 class CryptoState(State):
     """ State for the simple crypto environment. """
-    goal_colour: chex.Array
-    private_key: chex.Array
+    goal_colour: chex.Array = None
+    private_key: chex.Array = None
 
 class SimpleCryptoMPE(SimpleMPE):
     """ 
@@ -39,6 +39,7 @@ class SimpleCryptoMPE(SimpleMPE):
         dim_c = 4  # Communication channel dimension
 
         num_landmarks = num_landmarks 
+        num_entities = num_landmarks + num_agents
 
         self.num_good_agents, self.num_adversaries = 2, 1
         self.num_agents = num_agents
@@ -67,6 +68,14 @@ class SimpleCryptoMPE(SimpleMPE):
 
         colour = [ADVERSARY_COLOUR] * self.num_adversaries + [AGENT_COLOUR] * self.num_good_agents + \
             list(OBS_COLOUR)
+            
+        # Parameters
+        rad=jnp.concatenate([jnp.full((self.num_adversaries), ADVERSARY_RADIUS),
+                            jnp.full((self.num_good_agents), AGENT_RADIUS),
+                            jnp.full((num_landmarks), LANDMARK_RADIUS)])
+        moveable= jnp.full((num_entities), False)
+        silent = jnp.full((num_agents), 0)
+        collide = jnp.full((num_entities), False)
         
         super().__init__(num_agents=num_agents, 
                          agents=agents,
@@ -76,9 +85,14 @@ class SimpleCryptoMPE(SimpleMPE):
                          action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
-                         colour=colour)
+                         colour=colour,
+                         rad=rad,
+                         moveable=moveable,
+                         silent=silent,
+                         collide=collide,
+                         )
         
-    @property
+    '''@property
     def default_params(self) -> EnvParams:
         params = EnvParams(
             max_steps=MAX_STEPS,
@@ -99,9 +113,9 @@ class SimpleCryptoMPE(SimpleMPE):
             contact_margin=CONTACT_MARGIN,
             dt=DT,       
         )
-        return params
+        return params'''
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, CryptoState]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, CryptoState]:
         
         key_a, key_l, key_g, key_k = jax.random.split(key, 4)        
         
@@ -123,7 +137,7 @@ class SimpleCryptoMPE(SimpleMPE):
             private_key=jnp.array(OBS_COLOUR[k_idx], dtype=jnp.float32).flatten(),
         )
         
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
     '''@partial(jax.vmap, in_axes=[None, 0, 0, None])
     def _set_action(self, a_idx, action, params):
@@ -133,22 +147,22 @@ class SimpleCryptoMPE(SimpleMPE):
         
         return u, c'''
     
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
-    def _decode_continuous_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+    @partial(jax.vmap, in_axes=[None, 0, 0])
+    def _decode_continuous_action(self, a_idx: int, action: chex.Array) -> Tuple[chex.Array, chex.Array]:
         """ Communication action """
         u = jnp.zeros((self.dim_p,))
         c = action
         return u, c
     
-    @partial(jax.vmap, in_axes=[None, 0, 0, None])
-    def _decode_discrete_action(self, a_idx: int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+    @partial(jax.vmap, in_axes=[None, 0, 0])
+    def _decode_discrete_action(self, a_idx: int, action: chex.Array) -> Tuple[chex.Array, chex.Array]:
         """ Communication action """
         u = jnp.zeros((self.dim_p,))
         c = jnp.zeros((self.dim_c,))
         c = c.at[action].set(1.0)
         return u, c
 
-    def get_obs(self, state: CryptoState, params: EnvParams):
+    def get_obs(self, state: CryptoState):
 
         goal_colour = state.goal_colour
         comm = state.c[SPEAKER_IDX]
@@ -177,7 +191,7 @@ class SimpleCryptoMPE(SimpleMPE):
         }
         return obs
     
-    def rewards(self, state: CryptoState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: CryptoState) -> Dict[str, float]:
 
         comm_diff = jnp.sum(jnp.square(state.c - state.goal_colour), axis=1) # check axis
         

@@ -2,11 +2,15 @@ from smax.environments.multi_agent_env import MultiAgentEnv
 from functools import partial
 import jax
 
+
 class RolloutManager:
-    def __init__(self, env: MultiAgentEnv, batch_size:int):
+    def __init__(self, env: MultiAgentEnv, batch_size: int):
         self.env = env
         self.batch_size = batch_size
-        self.batch_samplers = {agent: jax.jit(jax.vmap(env.action_space(agent).sample, in_axes=0)) for agent in self.env.agents}
+        self.batch_samplers = {
+            agent: jax.jit(jax.vmap(env.action_space(agent).sample, in_axes=0))
+            for agent in self.env.agents
+        }
 
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key):

@@ -5,20 +5,21 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from typing import Optional
 
-from smax.environments.multi_agent_env import MultiAgentEnv, EnvParams
+from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
-from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import HeuristicEnemyMiniSMAC
+from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import (
+    EnemyMiniSMAC,
+)
+
 
 class Visualizer(object):
     def __init__(
         self,
         env: MultiAgentEnv,
         state_seq,
-        env_params: Optional[EnvParams] = None,
         reward_seq=None,
     ):
         self.env = env
-        self.env_params = self.env.default_params if env_params is None else env_params
 
         self.interval = 64
         self.state_seq = state_seq
@@ -49,51 +50,56 @@ class Visualizer(object):
             # plt.close()
 
     def init(self):
-        self.im = self.env.init_render(self.ax, self.state_seq[0], self.env_params)
+        self.im = self.env.init_render(self.ax, self.state_seq[0])
 
     def update(self, frame):
         self.im = self.env.update_render(
-            self.im, self.state_seq[frame], self.env_params
+            self.im, self.state_seq[frame]
         )
 
 
 class MiniSMACVisualizer(Visualizer):
     """Visualiser especially for the MiniSMAC environments. Needed because they have an internal model that ticks much faster
-    than the learner's 'step' calls. This  means that we need to expand the state_sequence """
+    than the learner's 'step' calls. This  means that we need to expand the state_sequence
+    """
+
     def __init__(
         self,
         env: MultiAgentEnv,
         state_seq,
-        env_params: Optional[EnvParams] = None,
         reward_seq=None,
     ):
-        super().__init__(env, state_seq, env_params, reward_seq)
-        self.heuristic_enemy = isinstance(env, HeuristicEnemyMiniSMAC)
+        super().__init__(env, state_seq, reward_seq)
+        self.heuristic_enemy = isinstance(env, EnemyMiniSMAC)
         self.have_expanded = False
-        if self.heuristic_enemy:
-            self.heuristic_policy = create_heuristic_policy(env, env_params, 1)
 
     def expand_state_seq(self):
         """Because the minismac environment ticks faster than the states received
         we need to expand the states to visualise them"""
         expanded_state_seq = []
-        for key, state, actions in self.state_seq:
+        for i, (key, state, actions) in enumerate(self.state_seq):
             if self.heuristic_enemy:
                 agents = self.env.all_agents
+                # There is a split in the step function of MultiAgentEnv
+                # We call split here so that the action key is the same.
+                key, _ = jax.random.split(key)
                 key, key_action = jax.random.split(key)
-                key_action = jax.random.split(key_action, num=self.env_params.num_agents_per_team)
-                obs = self.env.get_all_unit_obs(state, self.env_params)
+                obs = self.env.get_all_unit_obs(state)
                 obs = jnp.array([obs[agent] for agent in self.env.enemy_agents])
-                enemy_actions = jax.vmap(self.heuristic_policy)(key_action, obs)
-                enemy_actions = {agent: enemy_actions[self.env.agent_ids[agent]] for agent in self.env.enemy_agents}
+                enemy_actions = self.env.get_enemy_actions(key_action, obs)
+                actions = {k: v.squeeze() for k, v in actions.items()}
                 actions = {**enemy_actions, **actions}
             else:
                 agents = self.env.agents
             for _ in range(self.env.world_steps_per_env_step):
                 expanded_state_seq.append((key, state, actions))
                 world_actions = jnp.array([actions[i] for i in agents])
-                state = self.env._world_step(state, world_actions, self.env_params)
+                key, step_key = jax.random.split(key)
+                state = self.env._world_step(step_key, state, world_actions)
+                state = self.env._kill_agents_touching_walls(state)
                 state = self.env._update_dead_agents(state)
+                state = self.env._push_units_away(state)
+            state = state.replace(terminal=self.env.is_terminal(state))
         self.state_seq = expanded_state_seq
         self.have_expanded = True
 
@@ -103,12 +109,14 @@ class MiniSMACVisualizer(Visualizer):
         return super().animate(save_fname, view)
 
     def init(self):
-        self.im = self.env.init_render(self.ax, self.state_seq[0], 0, self.env_params)
+        self.im = self.env.init_render(
+            self.ax, self.state_seq[0], 0, 0
+        )
 
     def update(self, frame):
         self.im = self.env.update_render(
             self.im,
             self.state_seq[frame],
             frame % self.env.world_steps_per_env_step,
-            self.env_params,
+            frame // self.env.world_steps_per_env_step,
         )

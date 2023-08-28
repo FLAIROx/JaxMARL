@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from smax.environments.mpe.simple import SimpleMPE, TargetState, EnvParams
+from smax.environments.mpe.simple import SimpleMPE, State
 from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box, Discrete
 
@@ -24,6 +24,8 @@ class SimpleReferenceMPE(SimpleMPE):
         assert num_agents == 2, "SimpleReferenceMPE only supports 2 agents"        
         assert num_landmarks == 3, "SimpleReferenceMPE only supports 3 landmarks" 
         
+        num_entites = num_agents + num_landmarks
+        
         self.local_ratio = local_ratio
         
         dim_c = 10 
@@ -43,6 +45,9 @@ class SimpleReferenceMPE(SimpleMPE):
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (21,)) for i in agents}
         colour = [AGENT_COLOUR] * num_agents + list(OBS_COLOUR)
         
+        silent = jnp.full((num_agents), 0)
+        collide = jnp.full((num_entites), False)
+        
         super().__init__(num_agents=num_agents, 
                          agents=agents,
                          num_landmarks=num_landmarks,
@@ -51,9 +56,11 @@ class SimpleReferenceMPE(SimpleMPE):
                          action_spaces=action_spaces,
                          observation_spaces=observation_spaces,
                          dim_c=dim_c,
-                         colour=colour)
+                         colour=colour,
+                         silent=silent,
+                         collide=collide,)
         
-    @property
+    '''@property
     def default_params(self) -> EnvParams:
         params = EnvParams(
             max_steps=MAX_STEPS,
@@ -73,9 +80,9 @@ class SimpleReferenceMPE(SimpleMPE):
             contact_margin=CONTACT_MARGIN,
             dt=DT,       
         )
-        return params
+        return params'''
     
-    def reset_env(self, key: chex.PRNGKey, params: EnvParams) -> Tuple[chex.Array, TargetState]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         
         key_a, key_l, key_g = jax.random.split(key, 3)        
         
@@ -86,7 +93,7 @@ class SimpleReferenceMPE(SimpleMPE):
         
         g_idx = jax.random.randint(key_g, (2,), minval=0, maxval=self.num_landmarks)
         
-        state = TargetState(
+        state = State(
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
@@ -95,19 +102,19 @@ class SimpleReferenceMPE(SimpleMPE):
             goal=g_idx,
         )
         
-        return self.get_obs(state, params), state
+        return self.get_obs(state), state
 
-    def get_obs(self, state: TargetState, params: EnvParams):
+    def get_obs(self, state: State,) -> Dict:
 
-        @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx, state, params):
+        @partial(jax.vmap, in_axes=(0, None))
+        def _common_stats(aidx: int, state: State):
             """ Values needed in all observations """
             
             landmark_pos = state.p_pos[self.num_agents:] - state.p_pos[aidx]  # Landmark positions in agent reference frame
             
             return landmark_pos
 
-        landmark_pos = _common_stats(self.agent_range, state, params)
+        landmark_pos = _common_stats(self.agent_range, state)
 
         def _agent(aidx):
             other_idx = (aidx + 1) % 2
@@ -122,7 +129,7 @@ class SimpleReferenceMPE(SimpleMPE):
         return obs
     
     @partial(jax.vmap, in_axes=[None, 0, 0, None])
-    def _decode_discrete_action(self, a_idx:int, action: chex.Array, params: EnvParams) -> Tuple[chex.Array, chex.Array]:
+    def _decode_discrete_action(self, a_idx: int, action: chex.Array) -> Tuple[chex.Array, chex.Array]:
         u = jnp.zeros((self.dim_p,))    
         c = jnp.zeros((self.dim_c,)) 
         u_act = action % 5
@@ -130,11 +137,11 @@ class SimpleReferenceMPE(SimpleMPE):
         idx = jax.lax.select(u_act <= 2, 0, 1)
         u_val = jax.lax.select(u_act % 2 == 0, 1.0, -1.0) * (u_act != 0)
         u = u.at[idx].set(u_val)  
-        u = u * params.accel[a_idx] * params.moveable[a_idx] 
+        u = u * self.accel[a_idx] * self.moveable[a_idx] 
         c = c.at[c_act].set(1.0)
         return u, c
     
-    def rewards(self, state: TargetState, params: EnvParams) -> Dict[str, float]:
+    def rewards(self, state: State) -> Dict[str, float]:
 
         @partial(jax.vmap, in_axes=(0, None))
         def _agent(aidx, state):
