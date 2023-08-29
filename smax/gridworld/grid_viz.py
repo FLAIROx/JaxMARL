@@ -4,7 +4,7 @@ import numpy as np
 
 from smax.viz.window import Window
 import smax.viz.grid_rendering as rendering
-from smax.gridworld.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
+from smax.environments.overcooked.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
 
 
 INDEX_TO_COLOR = [k for k,v in COLOR_TO_INDEX.items()]
@@ -61,27 +61,29 @@ class GridVisualizer:
 		# === Compute highlight mask
 		highlight_mask = np.zeros(shape=(h,w), dtype=np.bool)
 
-		f_vec = state.agent_dir
-		r_vec = np.array([-f_vec[1], f_vec[0]])
+		if highlight:
+			# TODO: Fix this for multiple agents
+			f_vec = state.agent_dir
+			r_vec = np.array([-f_vec[1], f_vec[0]])
 
-		fwd_bound1 = state.agent_pos
-		fwd_bound2 = state.agent_pos + state.agent_dir*(agent_view_size-1)
-		side_bound1 = state.agent_pos - r_vec*(agent_view_size//2) 
-		side_bound2 = state.agent_pos + r_vec*(agent_view_size//2)
+			fwd_bound1 = state.agent_pos
+			fwd_bound2 = state.agent_pos + state.agent_dir*(agent_view_size-1)
+			side_bound1 = state.agent_pos - r_vec*(agent_view_size//2)
+			side_bound2 = state.agent_pos + r_vec*(agent_view_size//2)
 
-		min_bound = np.min(np.stack([
-					fwd_bound1, 
-					fwd_bound2, 
-					side_bound1, 
-					side_bound2]) + grid_offset, 0)
+			min_bound = np.min(np.stack([
+						fwd_bound1,
+						fwd_bound2,
+						side_bound1,
+						side_bound2]) + grid_offset, 0)
 
-		min_y = min(max(min_bound[1], 0), highlight_mask.shape[0]-1)
-		min_x = min(max(min_bound[0],0), highlight_mask.shape[1]-1)
+			min_y = min(max(min_bound[1], 0), highlight_mask.shape[0]-1)
+			min_x = min(max(min_bound[0],0), highlight_mask.shape[1]-1)
 
-		max_y = min(max(min_bound[1]+agent_view_size, 0), highlight_mask.shape[0]-1)
-		max_x = min(max(min_bound[0]+agent_view_size, 0), highlight_mask.shape[1]-1)
+			max_y = min(max(min_bound[1]+agent_view_size, 0), highlight_mask.shape[0]-1)
+			max_x = min(max(min_bound[0]+agent_view_size, 0), highlight_mask.shape[1]-1)
 
-		highlight_mask[min_y:max_y,min_x:max_x] = True
+			highlight_mask[min_y:max_y,min_x:max_x] = True
 
 		# Render the whole grid
 		img = GridVisualizer._render_grid(
@@ -114,7 +116,7 @@ class GridVisualizer:
 				(0.12, 0.81),
 			)
 			tri_fn = rendering.rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5*math.pi*agent_dir_idx)
-			rendering.fill_coords(img, tri_fn, (255, 0, 0))
+			rendering.fill_coords(img, tri_fn, COLORS[color])
 		elif obj_type == OBJECT_TO_INDEX['empty']:
 			rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS[color])
 		else:
@@ -137,7 +139,11 @@ class GridVisualizer:
 			obj[0] == OBJECT_TO_INDEX['agent'] and \
 			agent_dir_idx is not None:
 			obj = np.array(obj)
-			obj[-1] = agent_dir_idx
+
+			# TODO: Fix this for multiagents. Currently the orientation of other agents is wrong
+			if len(agent_dir_idx) == 1:
+				# Hacky way of making agent views orientations consistent with global view
+				obj[-1] = agent_dir_idx[0]
 
 		no_object = obj is None or (
 			obj[0] in [OBJECT_TO_INDEX['empty'], OBJECT_TO_INDEX['unseen']] \

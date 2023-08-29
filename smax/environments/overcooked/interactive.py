@@ -5,21 +5,21 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from smax.gridworld.maze import Maze #, Actions
-from smax.gridworld.ma_maze import MAMaze
+# from smax.gridworld.maze import Maze #, Actions
+# from smax.gridworld.ma_maze import MAMaze
 from smax.environments.overcooked.overcooked import Overcooked
-from smax.environments.overcooked.layouts import layouts
+from smax.environments.overcooked.layouts import overcooked_layouts as layouts
 
 
 def redraw(state, obs, extras):
-    extras['viz'].render(extras['params'], state, highlight=False)
+    extras['viz'].render(extras['agent_view_size'], state, highlight=False)
 
-    if extras['obs_viz'] is not None:
-        if extras['env'] == "MAMaze" or "Overcooked":
-            obs_viz.render_grid(np.asarray(obs['image'][0]), k_rot90=3, agent_dir_idx=[3])
-            obs_viz2.render_grid(np.asarray(obs['image'][1]), k_rot90=3, agent_dir_idx=[3])
-        else:
-            obs_viz.render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
+    # if extras['obs_viz'] is not None:
+    #     if extras['env'] == "MAMaze" or "Overcooked":
+    #         obs_viz.render_grid(np.asarray(obs['image'][0]), k_rot90=3, agent_dir_idx=[3])
+    #         obs_viz2.render_grid(np.asarray(obs['image'][1]), k_rot90=3, agent_dir_idx=[3])
+    #     else:
+    #         obs_viz.render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
 
 
 def reset(key, env, extras):
@@ -34,14 +34,14 @@ def reset(key, env, extras):
 
 
 def step(env, action, extras):
-    # TODO: Handle actions better (e.g. choose which agent to control)
     key, subkey = jax.random.split(extras['rng'])
 
-    print("action:", jnp.array([action, action.left]))
-    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, action]))
+    actions = {"agent_0" : jnp.array(action), "agent_1" : jnp.array(action)}
+    print("Actions : ", actions)
+    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], actions)
     extras['obs'] = obs
     extras['state'] = state
-    print(f"reward={reward}, agent_dir={obs['agent_dir']}, agent_inv={state.agent_inv}")
+    print(f"t={state.time}: reward={reward['agent_0']}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done['__all__']}")
     
     if extras["debug"]:
         layers = [f"player_{i}_loc" for i in range(2)]
@@ -64,15 +64,15 @@ def step(env, action, extras):
             "tomatoes",
             "urgency"
         ])
-        print("obs_shape: ", obs["image"].shape)
-        print("OBS: \n", obs["image"][1])
-        debug_obs = jnp.transpose(obs["image"][1], (2,0,1))
+        print("obs_shape: ", obs["agent_0"].shape)
+        print("OBS: \n", obs["agent_0"])
+        debug_obs = jnp.transpose(obs["agent_0"], (2,0,1))
         for i, layer in enumerate(layers):
             print(layer)
             print(debug_obs[i])
     # print(f"agent obs =\n {obs}")
 
-    if done or (jnp.array([action, action]) == Actions.done).any():
+    if done["__all__"] or (jnp.array([action, action]) == Actions.done).any():
         key, subkey = jax.random.split(subkey)
         reset(subkey, env, extras)
     else:
@@ -165,7 +165,13 @@ if __name__ == '__main__':
         "--layout",
         type=str,
         help="Overcooked layout",
-        default=""
+        default="cramped_room"
+    )
+    parser.add_argument(
+        '--random_reset',
+        default=False,
+        help="Reset to random state",
+        action='store_true'
     )
     parser.add_argument(
         "--seed",
@@ -179,30 +185,30 @@ if __name__ == '__main__':
         help="draw the agent sees (partially observable view)",
         action='store_true'
     )
-    parser.add_argument(
-        '--height',
-        default=13,
-        type=int,
-        help="height",
-    )
-    parser.add_argument(
-        '--width',
-        default=13,
-        type=int,
-        help="width",
-    )
-    parser.add_argument(
-        '--n_walls',
-        default=50,
-        type=int,
-        help="Number of walls",
-    )
-    parser.add_argument(
-        '--agent_view_size',
-        default=5,
-        type=int,
-        help="Number of walls",
-    )
+    # parser.add_argument(
+    #     '--height',
+    #     default=13,
+    #     type=int,
+    #     help="height",
+    # )
+    # parser.add_argument(
+    #     '--width',
+    #     default=13,
+    #     type=int,
+    #     help="width",
+    # )
+    # parser.add_argument(
+    #     '--n_walls',
+    #     default=50,
+    #     type=int,
+    #     help="Number of walls",
+    # )
+    # parser.add_argument(
+    #     '--agent_view_size',
+    #     default=5,
+    #     type=int,
+    #     help="Number of walls",
+    # )
     parser.add_argument(
         '--debug',
         default=False,
@@ -211,51 +217,43 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    if args.env == "Maze":
-        env = Maze(
-            height=13,
-            width=13,
-            n_walls=25,
-            see_agent=True,
-        )
-        from smax.gridworld.grid_viz import GridVisualizer as Visualizer
-        from smax.gridworld.maze import Actions
+    # if args.env == "Maze":
+    #     env = Maze(
+    #         height=13,
+    #         width=13,
+    #         n_walls=25,
+    #         see_agent=True,
+    #     )
+    #     from smax.gridworld.grid_viz import GridVisualizer as Visualizer
+    #     from smax.gridworld.maze import Actions
+    #
+    #     params = env.params
+    #
+    # elif args.env == "MAMaze":
+    #     env = MAMaze(
+    #         height=13,
+    #         width=13,
+    #         n_walls=25,
+    #         see_agent=True,
+    #         n_agents=2
+    #     )
+    #     from smax.gridworld.grid_viz import GridVisualizer as Visualizer
+    #     from smax.gridworld.maze import Actions
+    #
+    #     params = env.params
 
-    elif args.env == "MAMaze":
-        env = MAMaze(
-            height=13,
-            width=13,
-            n_walls=25,
-            see_agent=True,
-            n_agents=2
-        )
-        from smax.gridworld.grid_viz import GridVisualizer as Visualizer
-        from smax.gridworld.maze import Actions
-
-    elif args.env == "Overcooked":
+    if args.env == "Overcooked":
         if len(args.layout) > 0:
             layout = layouts[args.layout]
             env = Overcooked(
-                height=layout["height"],
-                width=layout["width"],
-                n_walls=1,
-                see_agent=True,
-                n_agents=2,
-                fixed_layout=True,
-                layout=layout
+                layout=layout,
+                random_reset=args.random_reset
             )
         else:
-            env = Overcooked(
-                height=13,
-                width=13,
-                n_walls=25,
-                see_agent=True,
-                n_agents=2
-            )
+            print("You must provide a layout.")
         from smax.viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
         from smax.environments.overcooked.overcooked import Actions
 
-    params = env.params
 
     viz = Visualizer()
     obs_viz = None
@@ -265,30 +263,24 @@ if __name__ == '__main__':
         if args.env == "MAMaze" or "Overcooked":
             obs_viz2 = Visualizer()
 
-    with jax.disable_jit(True):
-        jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
+    with jax.disable_jit(False):
+        jit_reset = jax.jit(env.reset)
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)
         key, subkey = jax.random.split(key)
         o0, s0 = jit_reset(subkey)
-        viz.render(params, s0, highlight=False)
-        if obs_viz is not None:
-            if args.env == "MAMaze" or args.env == "Overcooked":
-                obs_viz.render_grid(np.asarray(o0['image'][0]), k_rot90=3, agent_dir_idx=[3])
-                obs_viz2.render_grid(np.asarray(o0['image'][1]), k_rot90=3, agent_dir_idx=[3])
-            else:
-                obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
+        viz.render(env.agent_view_size, s0, highlight=False)
 
         key, subkey = jax.random.split(key)
         extras = {
             'rng': subkey,
             'state': s0,
             'obs': o0,
-            'params': params,
             'viz': viz,
             'obs_viz': obs_viz,
             'obs_viz2': obs_viz2,
             'jit_reset': jit_reset,
+            'agent_view_size': env.agent_view_size,
             'env': args.env,
             'debug': args.debug
         }
@@ -299,3 +291,4 @@ if __name__ == '__main__':
         else:
             viz.window.reg_key_handler(partial(key_handler, env, extras))
             viz.show(block=True)
+

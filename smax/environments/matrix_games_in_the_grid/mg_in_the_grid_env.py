@@ -1,6 +1,6 @@
 import math
 from enum import IntEnum
-from typing import Any, Optional, Tuple, Union, List
+from typing import Any, Optional, Tuple, Union, List, Dict
 import itertools
 
 import chex
@@ -198,7 +198,7 @@ class InTheGrid(MultiAgentEnv):
     """
 
     # used for caching
-    tile_cache: dict[tuple[Any, ...], Any] = {}
+    tile_cache: Dict[Tuple[Any, ...], Any] = {}
 
     def __init__(
         self,
