@@ -90,6 +90,7 @@ class EpsilonGreedy:
 
 
 class ScannedRNN(nn.Module):
+
     @partial(
         nn.scan,
         variable_broadcast="params",
@@ -102,19 +103,20 @@ class ScannedRNN(nn.Module):
         """Applies the module."""
         rnn_state = carry
         ins, resets = x
+        hidden_size = ins.shape[-1]
         rnn_state = jnp.where(
             resets[:, np.newaxis],
-            self.initialize_carry(ins.shape[-1], *ins.shape[:-1]),
+            self.initialize_carry(hidden_size, *ins.shape[:-1]),
             rnn_state,
         )
-        new_rnn_state, y = nn.GRUCell()(rnn_state, ins)
+        new_rnn_state, y = nn.GRUCell(hidden_size)(rnn_state, ins)
         return new_rnn_state, y
 
     @staticmethod
     def initialize_carry(hidden_size, *batch_size):
         # Use a dummy key since the default state init fn is just zeros.
-        return nn.GRUCell.initialize_carry(
-            jax.random.PRNGKey(0), (*batch_size,), hidden_size
+        return nn.GRUCell(hidden_size, parent=None).initialize_carry(
+            jax.random.PRNGKey(0), (*batch_size, hidden_size)
         )
     
 class AgentRNN(nn.Module):
@@ -183,8 +185,8 @@ class MixingNetwork(nn.Module):
         q_vals = jnp.transpose(q_vals, (1, 2, 0)) # (time_steps, batch_size, n_agents)
         
         # hypernetwork
-        w_1 = HyperNetwork(hidden_dim=self.hypernet_hidden_dim, output_dim=self.embedding_dim*n_agents, init_scale=1e-3)(states)
-        b_1 = nn.Dense(self.embedding_dim, kernel_init=orthogonal(1e-4), bias_init=constant(0.))(states)
+        w_1 = HyperNetwork(hidden_dim=self.hypernet_hidden_dim, output_dim=self.embedding_dim*n_agents, init_scale=1e-2)(states)
+        b_1 = nn.Dense(self.embedding_dim, kernel_init=orthogonal(1e-5), bias_init=constant(0.))(states)
         w_2 = HyperNetwork(hidden_dim=self.hypernet_hidden_dim, output_dim=self.embedding_dim, init_scale=1e-2)(states)
         b_2 = HyperNetwork(hidden_dim=self.embedding_dim, output_dim=1, init_scale=1e-5)(states)
         
@@ -202,15 +204,18 @@ class MixingNetwork(nn.Module):
 
 
 def make_train(config):
+
+    env = make(config['ENV_NAME'], num_agents=config["NUM_AGENTS"])
+    config["NUM_STEPS"] = config.get("NUM_STEPS", env.max_steps)
+    config["NUM_UPDATES"] = (
+        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+    )
+
+    def linear_schedule(count):
+        frac = 1.0 - (count / config["NUM_UPDATES"])
+        return config["LR"] * frac
     
     def train(rng):
-        
-        env, env_params = make(config['ENV_NAME'], num_agents=config["NUM_AGENTS"])
-        config["NUM_STEPS"] = config.get("NUM_STEPS", env_params.max_steps)
-        config["NUM_UPDATES"] = (
-            config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
-        )
-
 
         # INIT ENV
         rng, _rng = jax.random.split(rng)
@@ -257,7 +262,7 @@ def make_train(config):
         network_params = frozen_dict.freeze({'agent':agent_params, 'mixer':mixer_params})
         tx = optax.chain(
             optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
-            optax.adam(config["LR"], eps=1e-5),
+            optax.adamw(learning_rate=linear_schedule, eps=config['EPS_ADAM'], weight_decay=config['WEIGHT_DECAY_ADAM']),
         )
         train_state = TrainState.create(
             apply_fn=None,
@@ -372,11 +377,6 @@ def make_train(config):
                 targets = learn_traj.rewards['__all__'][:-1] + config["GAMMA"]*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_mix
 
                 loss = jnp.mean((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2)
-                
-                loss += sum(
-                    config["L2_LOSS_LAMBDA"] * (w ** 2).mean() # add a l2 regularization term to discourage large weights
-                    for w in jax.tree_util.tree_leaves(params["mixer"]["params"])
-                )
                 
                 return loss
 

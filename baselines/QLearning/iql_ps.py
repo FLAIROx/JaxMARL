@@ -98,6 +98,7 @@ class EpsilonGreedy:
 
 
 class ScannedRNN(nn.Module):
+
     @partial(
         nn.scan,
         variable_broadcast="params",
@@ -110,19 +111,20 @@ class ScannedRNN(nn.Module):
         """Applies the module."""
         rnn_state = carry
         ins, resets = x
+        hidden_size = ins.shape[-1]
         rnn_state = jnp.where(
             resets[:, np.newaxis],
-            self.initialize_carry(ins.shape[-1], *ins.shape[:-1]),
+            self.initialize_carry(hidden_size, *ins.shape[:-1]),
             rnn_state,
         )
-        new_rnn_state, y = nn.GRUCell()(rnn_state, ins)
+        new_rnn_state, y = nn.GRUCell(hidden_size)(rnn_state, ins)
         return new_rnn_state, y
 
     @staticmethod
     def initialize_carry(hidden_size, *batch_size):
         # Use a dummy key since the default state init fn is just zeros.
-        return nn.GRUCell.initialize_carry(
-            jax.random.PRNGKey(0), (*batch_size,), hidden_size
+        return nn.GRUCell(hidden_size, parent=None).initialize_carry(
+            jax.random.PRNGKey(0), (*batch_size, hidden_size)
         )
 
 
@@ -167,14 +169,14 @@ class AgentRNN(nn.Module):
 
 
 def make_train(config):
+
+    env = make(config['ENV_NAME'], num_agents=config["NUM_AGENTS"])
+    config["NUM_STEPS"] = config.get("NUM_STEPS", env.max_steps)
+    config["NUM_UPDATES"] = (
+        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+    )
     
     def train(rng):
-        
-        env, env_params = make(config['ENV_NAME'], num_agents=config["NUM_AGENTS"])
-        config["NUM_STEPS"] = config.get("NUM_STEPS", env_params.max_steps)
-        config["NUM_UPDATES"] = (
-            config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
-        )
 
         # INIT ENV
         rng, _rng = jax.random.split(rng)
@@ -358,7 +360,7 @@ def make_train(config):
                 'timesteps': time_state['timesteps']*config['NUM_ENVS'],
                 'updates' : time_state['updates'],
                 'loss': loss,
-                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x), traj_batch.rewards)
+                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards)
             }
 
             if config.get("DEBUG"):
