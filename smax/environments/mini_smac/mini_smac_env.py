@@ -33,24 +33,48 @@ class WorldDelta:
 
 
 MAP_NAME_TO_SCENARIO = {
-    "3m": jnp.zeros((6,), dtype=jnp.uint8),
-    "2s3z": jnp.array([2, 2, 3, 3, 3] * 2, dtype=jnp.uint8),
-    "25m": jnp.zeros((50,), dtype=jnp.uint8),
-    "3s5z": jnp.array(
-        [
-            2,
-            2,
-            2,
-            3,
-            3,
-            3,
-            3,
-            3,
-        ]
-        * 2,
-        dtype=jnp.uint8,
+    # name: (unit_types, n_allies, n_enemies)
+    "3m": (jnp.zeros((6,), dtype=jnp.uint8), 3, 3),
+    "2s3z": (jnp.array([2, 2, 3, 3, 3] * 2, dtype=jnp.uint8), 5, 5),
+    "25m": (jnp.zeros((50,), dtype=jnp.uint8), 25, 25),
+    "3s5z": (
+        jnp.array(
+            [
+                2,
+                2,
+                2,
+                3,
+                3,
+                3,
+                3,
+                3,
+            ]
+            * 2,
+            dtype=jnp.uint8,
+        ),
+        8,
+        8,
     ),
-    "8m": jnp.zeros((16,), dtype=jnp.uint8),
+    "8m": (jnp.zeros((16,), dtype=jnp.uint8), 8, 8),
+    "5m_vs_6m": (jnp.zeros((11,), dtype=jnp.uint8), 5, 6),
+    "10m_vs_11m": (jnp.zeros((21,), dtype=jnp.uint8), 10, 11),
+    "27m_vs_30m": (jnp.zeros((57,), dtype=jnp.uint8), 27, 30),
+    "3s5z_vs_3s6z": (
+        jnp.concatenate(
+            [
+                jnp.array([2, 2, 2, 3, 3, 3, 3, 3], dtype=jnp.uint8),
+                jnp.array([2, 2, 2, 3, 3, 3, 3, 3, 3], dtype=jnp.uint8),
+            ]
+        ),
+        8,
+        9,
+    ),
+    "3s_vs_5z": (jnp.array([2, 2, 2, 3, 3, 3, 3, 3], dtype=jnp.uint8), 3, 5),
+    "6h_vs_8z": (
+        jnp.array([5, 5, 5, 5, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3], dtype=jnp.uint8),
+        6,
+        8,
+    ),
 }
 
 
@@ -63,14 +87,11 @@ def register_scenario(map_name, scenario):
     MAP_NAME_TO_SCENARIO[map_name] = scenario
 
 
-# TODO Features to add:
-# -- Different team sizes for allies and enemies
-# -- Zerg Health Regeneration
-# -- Protoss Shields
 class MiniSMAC(MultiAgentEnv):
     def __init__(
         self,
-        num_agents_per_team=5,
+        num_allies=5,
+        num_enemies=5,
         map_width=32,
         map_height=32,
         world_steps_per_env_step=8,
@@ -98,20 +119,17 @@ class MiniSMAC(MultiAgentEnv):
         walls_cause_death=True,
         max_steps=100,
     ) -> None:
-        self.num_agents_per_team = (
-            num_agents_per_team if scenario is None else scenario.shape[0] // 2
-        )
-        self.num_agents = (
-            num_agents_per_team * 2 if scenario is None else scenario.shape[0]
-        )
+        self.num_allies = num_allies if scenario is None else scenario[1]
+        self.num_enemies = num_enemies if scenario is None else scenario[2]
+        self.num_agents = self.num_allies + self.num_enemies
         self.walls_cause_death = walls_cause_death
         self.unit_type_names = unit_type_names
         self.unit_type_shorthands = unit_type_shorthands
-        self.num_movement_actions = 4
+        self.num_movement_actions = 5  # 5 cardinal directions + stop
         self.world_steps_per_env_step = world_steps_per_env_step
         self.map_width = map_width
         self.map_height = map_height
-        self.scenario = scenario
+        self.scenario = scenario if scenario is None else scenario[0]
         self.use_self_play_reward = use_self_play_reward
         self.time_per_step = time_per_step
         self.unit_type_velocities = unit_type_velocities
@@ -125,12 +143,12 @@ class MiniSMAC(MultiAgentEnv):
         self.max_steps = max_steps
         self.won_battle_bonus = won_battle_bonus
         self.see_enemy_actions = see_enemy_actions
-        self.agents = [f"ally_{i}" for i in range(self.num_agents_per_team)] + [
-            f"enemy_{i}" for i in range(self.num_agents_per_team)
+        self.agents = [f"ally_{i}" for i in range(self.num_allies)] + [
+            f"enemy_{i}" for i in range(self.num_enemies)
         ]
         self.agent_ids = {agent: i for i, agent in enumerate(self.agents)}
         self.teams = jnp.zeros((self.num_agents,), dtype=jnp.uint8)
-        self.teams = self.teams.at[self.num_agents_per_team :].set(1)
+        self.teams = self.teams.at[self.num_allies :].set(1)
         self.own_features = ["health", "position_x", "position_y", "weapon_cooldown"]
         self.own_features += [f"unit_type_bit_{i}" for i in range(self.unit_type_bits)]
         self.unit_features = [
@@ -144,36 +162,42 @@ class MiniSMAC(MultiAgentEnv):
             f"unit_type_bits_{i}" for i in range(self.unit_type_bits)
         ]
         self.obs_size = (
-            len(self.unit_features) * (self.num_agents_per_team - 1)
-            + len(self.unit_features) * self.num_agents_per_team
+            len(self.unit_features) * (self.num_allies - 1)
+            + len(self.unit_features) * self.num_enemies
             + len(self.own_features)
         )
         self.state_size = (len(self.own_features) + 2) * self.num_agents
         self.observation_spaces = {
             i: Box(low=0.0, high=1.0, shape=(self.obs_size,)) for i in self.agents
         }
-        self.num_actions = self.num_agents_per_team + self.num_movement_actions
+        self.num_ally_actions = self.num_enemies + self.num_movement_actions
+        self.num_enemy_actions = self.num_allies + self.num_movement_actions
         self.action_spaces = {
-            i: Discrete(num_categories=self.num_actions) for i in self.agents
+            agent: Discrete(
+                num_categories=self.num_ally_actions
+                if i < self.num_allies
+                else self.num_enemy_actions
+            )
+            for i, agent in enumerate(self.agents)
         }
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Environment-specific reset."""
         key, team_0_key, team_1_key = jax.random.split(key, num=3)
-        team_0_start = jnp.stack([jnp.array([8.0, 16.0])] * self.num_agents_per_team)
+        team_0_start = jnp.stack([jnp.array([8.0, 16.0])] * self.num_allies)
         team_0_start_noise = jax.random.uniform(
-            team_0_key, shape=(self.num_agents_per_team, 2), minval=-2, maxval=2
+            team_0_key, shape=(self.num_allies, 2), minval=-2, maxval=2
         )
         team_0_start = team_0_start + team_0_start_noise
-        team_1_start = jnp.stack([jnp.array([24.0, 16.0])] * self.num_agents_per_team)
+        team_1_start = jnp.stack([jnp.array([24.0, 16.0])] * self.num_enemies)
         team_1_start_noise = jax.random.uniform(
-            team_1_key, shape=(self.num_agents_per_team, 2), minval=-2, maxval=2
+            team_1_key, shape=(self.num_enemies, 2), minval=-2, maxval=2
         )
         team_1_start = team_1_start + team_1_start_noise
         unit_positions = jnp.concatenate([team_0_start, team_1_start])
         unit_teams = jnp.zeros((self.num_agents,))
-        unit_teams = unit_teams.at[self.num_agents_per_team :].set(1)
+        unit_teams = unit_teams.at[self.num_allies :].set(1)
         unit_weapon_cooldowns = jnp.zeros((self.num_agents,))
         # default behaviour spawn all marines
         unit_types = (
@@ -250,23 +274,27 @@ class MiniSMAC(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=(0,))
     def compute_reward(self, state, health_before, health_after):
+        @partial(jax.jit, static_argnums=(0,))
         def compute_team_reward(team_idx):
             # compute how much the enemy team health has decreased
             other_team_idx = jnp.logical_not(team_idx).astype(jnp.uint32)
-            other_team_start_idx = jnp.array([0, self.num_agents_per_team])[
-                other_team_idx
-            ]
-            team_start_idx = jnp.array([0, self.num_agents_per_team])[team_idx]
+            other_team_start_idx = jnp.array([0, self.num_allies])[other_team_idx]
+            team_start_idx = jnp.array([0, self.num_allies])[team_idx]
+
+            team_size = self.num_allies if team_idx == 0 else self.num_enemies
+
+            enemy_team_size = self.num_enemies if team_idx == 0 else self.num_allies
+
             enemy_health_decrease = jnp.sum(
                 jax.lax.dynamic_slice_in_dim(
                     (health_after - health_before)
                     / self.unit_type_health[state.unit_types],
                     other_team_start_idx,
-                    self.num_agents_per_team,
+                    enemy_team_size,
                 )
             )
             enemy_health_decrease_reward = (
-                jnp.abs(enemy_health_decrease) / self.num_agents_per_team
+                jnp.abs(enemy_health_decrease) / enemy_team_size
             )
             enemy_health_decrease_reward = jax.lax.select(
                 self.use_self_play_reward, 0.0, enemy_health_decrease_reward
@@ -274,14 +302,14 @@ class MiniSMAC(MultiAgentEnv):
             won_battle = jnp.all(
                 jnp.logical_not(
                     jax.lax.dynamic_slice_in_dim(
-                        state.unit_alive, other_team_start_idx, self.num_agents_per_team
+                        state.unit_alive, other_team_start_idx, enemy_team_size
                     )
                 )
             )
             lost_battle = jnp.all(
                 jnp.logical_not(
                     jax.lax.dynamic_slice_in_dim(
-                        state.unit_alive, team_start_idx, self.num_agents_per_team
+                        state.unit_alive, team_start_idx, team_size
                     )
                 )
             )
@@ -304,20 +332,16 @@ class MiniSMAC(MultiAgentEnv):
             return enemy_health_decrease_reward + won_battle_bonus + lost_battle_bonus
 
         # agents still get reward when they are dead to allow for noble sacrifice
-        team_rewards = jax.vmap(compute_team_reward)(jnp.arange(2))
+        team_rewards = [compute_team_reward(i) for i in range(2)]
         return {
-            agent: team_rewards[self.agent_ids[agent] // self.num_agents_per_team]
+            agent: team_rewards[int(self.agent_ids[agent] >= self.num_allies)]
             for agent in self.agents
         }
 
     @partial(jax.jit, static_argnums=(0,))
     def is_terminal(self, state):
-        all_dead = jnp.all(
-            jnp.logical_not(state.unit_alive[: self.num_agents_per_team])
-        )
-        all_enemy_dead = jnp.all(
-            jnp.logical_not(state.unit_alive[self.num_agents_per_team :])
-        )
+        all_dead = jnp.all(jnp.logical_not(state.unit_alive[: self.num_allies]))
+        all_enemy_dead = jnp.all(jnp.logical_not(state.unit_alive[self.num_allies :]))
         over_time_limit = state.time >= self.max_steps
         return all_dead | all_enemy_dead | over_time_limit
 
@@ -329,10 +353,13 @@ class MiniSMAC(MultiAgentEnv):
         return state.replace(unit_alive=unit_alive)
 
     def _kill_agents_touching_walls(self, state: State):
-        units_touching_walls = jnp.logical_or(jnp.any(state.unit_positions <= 0.0, axis=-1), jnp.any(
-            state.unit_positions >= jnp.array([self.map_width, self.map_height]),
-            axis=-1,
-        ))
+        units_touching_walls = jnp.logical_or(
+            jnp.any(state.unit_positions <= 0.0, axis=-1),
+            jnp.any(
+                state.unit_positions >= jnp.array([self.map_width, self.map_height]),
+                axis=-1,
+            ),
+        )
         unit_health = jnp.where(units_touching_walls, 0.0, state.unit_health)
         unit_health = jax.lax.select(
             self.walls_cause_death, unit_health, state.unit_health
@@ -372,7 +399,8 @@ class MiniSMAC(MultiAgentEnv):
             # degrees anticlockwise to compute the movement.
             pos = state.unit_positions[idx]
             vec = jax.lax.cond(
-                action > self.num_movement_actions - 1,
+                # action is an attack action OR stop (action 4)
+                action >= self.num_movement_actions - 1,
                 lambda: jnp.zeros((2,)),
                 lambda: jnp.array(
                     [
@@ -406,11 +434,9 @@ class MiniSMAC(MultiAgentEnv):
             # reverse order because that is the order they are
             # observed in
             attacked_idx = jax.lax.cond(
-                idx < self.num_agents_per_team,
-                lambda: action + self.num_agents_per_team - self.num_movement_actions,
-                lambda: self.num_agents_per_team
-                - 1
-                - (action - self.num_movement_actions),
+                idx < self.num_allies,
+                lambda: action + self.num_allies - self.num_movement_actions,
+                lambda: self.num_allies - 1 - (action - self.num_movement_actions),
             )
             attack_valid = (
                 (
@@ -513,20 +539,19 @@ class MiniSMAC(MultiAgentEnv):
             # j here means 'the jth unit that is not i'
             # The observation is such that allies are always first
             # so for units in the second team we count in reverse.
-            team_i_idx = (i >= self.num_agents_per_team).astype(jnp.int32)
+            team_i_idx = (i >= self.num_allies).astype(jnp.int32)
             j = jax.lax.cond(
-                i < self.num_agents_per_team,
+                i < self.num_allies,
                 lambda: j,
                 lambda: self.num_agents - j - 1,
             )
-            offset = jax.lax.cond(i < self.num_agents_per_team, lambda: 1, lambda: -1)
+            offset = jax.lax.cond(i < self.num_allies, lambda: 1, lambda: -1)
             j_idx = jax.lax.cond(
-                ((j < i) & (i < self.num_agents_per_team))
-                | ((j > i) & (i >= self.num_agents_per_team)),
+                ((j < i) & (i < self.num_allies)) | ((j > i) & (i >= self.num_allies)),
                 lambda: j,
                 lambda: j + offset,
             )
-            team_j_idx = (j_idx >= self.num_agents_per_team).astype(jnp.int32)
+            team_j_idx = (j_idx >= self.num_allies).astype(jnp.int32)
             empty_features = jnp.zeros(shape=(len(self.unit_features),))
             features = empty_features.at[0].set(
                 state.unit_health[j_idx]
@@ -578,6 +603,49 @@ class MiniSMAC(MultiAgentEnv):
         obs = jnp.concatenate([other_unit_obs, own_unit_obs], axis=-1)
         return {agent: obs[self.agent_ids[agent]] for agent in self.agents}
 
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
+        @partial(jax.jit, static_argnums=(1,))
+        def get_individual_avail_actions(i, team):
+            num_actions = {0: self.num_ally_actions, 1: self.num_enemy_actions}[team]
+            is_alive = state.unit_alive[i]
+            mask = jnp.zeros((num_actions,), dtype=jnp.uint8)
+            # always can take the stop action
+            mask = mask.at[self.num_movement_actions - 1].set(1)
+            mask = mask.at[: self.num_movement_actions - 1].set(
+                jax.lax.select(
+                    is_alive,
+                    jnp.ones((self.num_movement_actions - 1,), dtype=jnp.uint8),
+                    jnp.zeros((self.num_movement_actions - 1,), dtype=jnp.uint8),
+                )
+            )
+            shootable_mask = (
+                jnp.linalg.norm(state.unit_positions - state.unit_positions[i], axis=-1)
+                < self.unit_type_attack_ranges[state.unit_types[i]]
+            ) & state.unit_alive
+            shootable_mask = shootable_mask if team == 0 else shootable_mask[::-1]
+            shootable_mask = (
+                shootable_mask[self.num_allies :]
+                if team == 0
+                else shootable_mask[self.num_enemies :]
+            )
+            shootable_mask = jax.lax.select(is_alive, shootable_mask, jnp.zeros_like(shootable_mask))
+            mask = mask.at[self.num_movement_actions :].set(shootable_mask)
+            return mask
+
+        ally_avail_actions_masks = jax.vmap(
+            get_individual_avail_actions, in_axes=(0, None)
+        )(jnp.arange(self.num_allies), 0)
+        enemy_avail_actions_masks = jax.vmap(
+            get_individual_avail_actions, in_axes=(0, None)
+        )(jnp.arange(self.num_allies, self.num_agents), 1)
+        return {
+            agent: ally_avail_actions_masks[i]
+            if i < self.num_allies
+            else enemy_avail_actions_masks[i - self.num_allies]
+            for i, agent in enumerate(self.agents)
+        }
+
     def init_render(
         self,
         ax,
@@ -593,11 +661,9 @@ class MiniSMAC(MultiAgentEnv):
         # work out which agents are being shot
         def agent_being_shot(shooter_idx, action):
             attacked_idx = jax.lax.cond(
-                shooter_idx < self.num_agents_per_team,
-                lambda: action + self.num_agents_per_team - self.num_movement_actions,
-                lambda: self.num_agents_per_team
-                - 1
-                - (action - self.num_movement_actions),
+                shooter_idx < self.num_allies,
+                lambda: action + self.num_allies - self.num_movement_actions,
+                lambda: self.num_allies - 1 - (action - self.num_movement_actions),
             )
             return attacked_idx
 
@@ -623,9 +689,9 @@ class MiniSMAC(MultiAgentEnv):
         ax.set_xlim([0.0, self.map_width])
         ax.set_ylim([0.0, self.map_height])
         ax.set_title(f"Step {env_step}")
-        for i in range(self.num_agents_per_team):
+        for i in range(self.num_allies):
             if state.unit_alive[i]:
-                color = "blue" if i not in attacked_agents else "red"
+                color = "blue" if i not in attacked_agents else "cornflowerblue"
                 c = Circle(
                     state.unit_positions[i],
                     self.unit_type_radiuses[state.unit_types[i]],
@@ -643,9 +709,10 @@ class MiniSMAC(MultiAgentEnv):
                     fontsize="xx-small",
                     color="white",
                 )
-            if state.unit_alive[i + self.num_agents_per_team]:
-                color = "green" if i not in attacked_agents else "red"
-                idx = i + self.num_agents_per_team
+        for i in range(self.num_enemies):
+            idx = i + self.num_allies
+            if state.unit_alive[idx]:
+                color = "green" if idx not in attacked_agents else "limegreen"
                 c = Circle(
                     state.unit_positions[idx],
                     self.unit_type_radiuses[state.unit_types[idx]],

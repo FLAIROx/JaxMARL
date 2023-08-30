@@ -34,9 +34,13 @@ def create_heuristic_policy(
         unit_type = jnp.nonzero(obs[-env.unit_type_bits :], size=1, fill_value=None)[0][
             0
         ]
+        teams = {0: env.num_allies, 1: env.num_enemies}
+        team_size = teams[team]
+        other_team_size = teams[1 - team]
+        total_units = env.num_allies + env.num_enemies
         attack_range = env.unit_type_attack_ranges[unit_type]
-        first_enemy_idx = (env.num_agents_per_team - 1) * num_unit_features
-        own_feats_idx = (env.num_agents_per_team * 2 - 1) * num_unit_features
+        first_enemy_idx = (team_size - 1) * num_unit_features
+        own_feats_idx = (total_units - 1) * num_unit_features
 
         def scaled_position_to_map(position, x_scale, y_scale):
             return position * jnp.array([x_scale, y_scale])
@@ -46,7 +50,7 @@ def create_heuristic_policy(
             env.map_width,
             env.map_height,
         )
-        enemy_positions = jnp.zeros((env.num_agents_per_team, 2))
+        enemy_positions = jnp.zeros((other_team_size, 2))
         enemy_positions = enemy_positions.at[:, 0].set(
             obs[first_enemy_idx + 1 : own_feats_idx : num_unit_features],
         )
@@ -58,6 +62,7 @@ def create_heuristic_policy(
             env.unit_type_sight_ranges[unit_type],
             env.unit_type_sight_ranges[unit_type],
         )
+
         # visible if health is > 0. Otherwise out of range or dead
         visible_enemy_mask = obs[first_enemy_idx:own_feats_idx:num_unit_features] > 0
         shootable_enemy_mask = (
@@ -67,7 +72,7 @@ def create_heuristic_policy(
         key, key_attack = jax.random.split(key)
         random_attack_action = jax.random.choice(
             key_attack,
-            jnp.arange(num_move_actions, env.num_agents_per_team + num_move_actions),
+            jnp.arange(num_move_actions, other_team_size + num_move_actions),
             p=(shootable_enemy_mask / jnp.sum(shootable_enemy_mask)),
         )
         enemy_dist = jnp.linalg.norm(enemy_positions, axis=-1)
@@ -79,7 +84,7 @@ def create_heuristic_policy(
         closest_attack_action = jnp.argmin(enemy_dist)
         closest_attack_action += num_move_actions
         attack_action = jax.lax.select(
-            attack_mode == "random", closest_attack_action, random_attack_action
+            attack_mode == "random", random_attack_action, closest_attack_action
         )
         # compute the correct movement action.
         random_enemy_target = jax.random.choice(
