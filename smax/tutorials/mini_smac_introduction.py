@@ -27,7 +27,7 @@ from typing import Sequence
 
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
-max_steps = 20
+max_steps = 10
 key = jax.random.PRNGKey(1)
 key, key_r, key_a, key_p = jax.random.split(key, 4)
 

@@ -63,10 +63,6 @@ def register_scenario(map_name, scenario):
     MAP_NAME_TO_SCENARIO[map_name] = scenario
 
 
-# TODO Features to add:
-# -- Different team sizes for allies and enemies
-# -- Zerg Health Regeneration
-# -- Protoss Shields
 class MiniSMAC(MultiAgentEnv):
     def __init__(
         self,
@@ -107,7 +103,7 @@ class MiniSMAC(MultiAgentEnv):
         self.walls_cause_death = walls_cause_death
         self.unit_type_names = unit_type_names
         self.unit_type_shorthands = unit_type_shorthands
-        self.num_movement_actions = 4
+        self.num_movement_actions = 5 # 5 cardinal directions + stop
         self.world_steps_per_env_step = world_steps_per_env_step
         self.map_width = map_width
         self.map_height = map_height
@@ -372,7 +368,8 @@ class MiniSMAC(MultiAgentEnv):
             # degrees anticlockwise to compute the movement.
             pos = state.unit_positions[idx]
             vec = jax.lax.cond(
-                action > self.num_movement_actions - 1,
+                # action is an attack action OR stop (action 4)
+                action >= self.num_movement_actions - 1,
                 lambda: jnp.zeros((2,)),
                 lambda: jnp.array(
                     [
