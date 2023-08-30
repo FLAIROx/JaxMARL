@@ -1,9 +1,22 @@
 import jax.numpy as jnp
 import jax
 import chex
+from functools import partial
 
 
-def create_heuristic_policy(env, team: int, shoot: bool = True):
+def create_heuristic_policy(
+    env, team: int, shoot: bool = True, attack_mode: str = "closest"
+):
+    """
+    Args:
+        env (_type_): the MiniSMAC environment to operate in
+        team (int): 0 for allies, 1 for enemies
+        shoot (bool, optional): Whether or not the agents should shoot. Defaults to True.
+        attack_mode (bool, optional):  How the agents should choose targets.
+         Options are 'closest' or 'random'. Defaults to 'closest'.
+
+    Returns: a heuristic policy to micromanage SC2 units.
+    """
     num_unit_features = len(env.unit_features)
     num_move_actions = env.num_movement_actions
 
@@ -12,11 +25,15 @@ def create_heuristic_policy(env, team: int, shoot: bool = True):
         Follows the following scheme:
             -- If you can attack:
                 -- Find all the enemies that are in range
-                -- Attack one at random
+                -- Attack one either at random or the closest, depending
+                   on the attack mode
             -- If you can't attack:
-                -- Go to just past the middle of the enemy's half
+                -- Go to just past the middle of the enemy's half, or
+                   follow a random enemy you can see.
         """
-        unit_type = jnp.nonzero(obs[-env.unit_type_bits:], size=1, fill_value=None)[0][0]
+        unit_type = jnp.nonzero(obs[-env.unit_type_bits :], size=1, fill_value=None)[0][
+            0
+        ]
         attack_range = env.unit_type_attack_ranges[unit_type]
         first_enemy_idx = (env.num_agents_per_team - 1) * num_unit_features
         own_feats_idx = (env.num_agents_per_team * 2 - 1) * num_unit_features
@@ -48,10 +65,21 @@ def create_heuristic_policy(env, team: int, shoot: bool = True):
         ) & visible_enemy_mask
         can_shoot = jnp.any(shootable_enemy_mask)
         key, key_attack = jax.random.split(key)
-        attack_action = jax.random.choice(
+        random_attack_action = jax.random.choice(
             key_attack,
             jnp.arange(num_move_actions, env.num_agents_per_team + num_move_actions),
             p=(shootable_enemy_mask / jnp.sum(shootable_enemy_mask)),
+        )
+        enemy_dist = jnp.linalg.norm(enemy_positions, axis=-1)
+        enemy_dist = jnp.where(
+            shootable_enemy_mask,
+            enemy_dist,
+            jnp.linalg.norm(jnp.array([env.map_width, env.map_height])),
+        )
+        closest_attack_action = jnp.argmin(enemy_dist)
+        closest_attack_action += num_move_actions
+        attack_action = jax.lax.select(
+            attack_mode == "random", closest_attack_action, random_attack_action
         )
         # compute the correct movement action.
         random_enemy_target = jax.random.choice(

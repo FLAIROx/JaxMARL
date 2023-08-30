@@ -50,7 +50,7 @@ MAP_NAME_TO_SCENARIO = {
         * 2,
         dtype=jnp.uint8,
     ),
-    "8m": jnp.zeros((8,), dtype=jnp.uint8),
+    "8m": jnp.zeros((16,), dtype=jnp.uint8),
 }
 
 

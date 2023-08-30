@@ -27,7 +27,7 @@ from typing import Sequence
 
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
-max_steps = 30
+max_steps = 20
 key = jax.random.PRNGKey(1)
 key, key_r, key_a, key_p = jax.random.split(key, 4)
 
@@ -66,6 +66,7 @@ with jax.disable_jit(False):
     env = make(
         "HeuristicEnemyMiniSMAC",
         enemy_shoots=True,
+        attack_mode="closest",
         scenario=scenario,
         num_agents_per_team=3,
         use_self_play_reward=False,
@@ -87,7 +88,7 @@ with jax.disable_jit(False):
     }
     print("example action dict", actions)
 
-    policy = create_heuristic_policy(env, 0, shoot=True)
+    policy = create_heuristic_policy(env, 0, shoot=True, attack_mode="random")
     state_seq = []
     returns = {a: 0 for a in env.agents}
     for i in range(max_steps):

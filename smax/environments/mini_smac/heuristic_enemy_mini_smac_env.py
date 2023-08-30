@@ -65,13 +65,14 @@ class EnemyMiniSMAC(MultiAgentEnv):
 
 
 class HeuristicEnemyMiniSMAC(EnemyMiniSMAC):
-    def __init__(self, enemy_shoots=True, **env_kwargs):
+    def __init__(self, enemy_shoots=True, attack_mode="closest", **env_kwargs):
         super().__init__(**env_kwargs)
         self.enemy_shoots = enemy_shoots
+        self.attack_mode = attack_mode
 
     def get_enemy_actions(self, key, enemy_obs):
         heuristic_policy = create_heuristic_policy(
-            self._env, 1, shoot=self.enemy_shoots
+            self._env, 1, shoot=self.enemy_shoots, attack_mode=self.attack_mode
         )
         heuristic_action_key = jax.random.split(key, num=self.num_agents_per_team)
         enemy_actions = jax.vmap(heuristic_policy)(heuristic_action_key, enemy_obs)
