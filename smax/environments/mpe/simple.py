@@ -18,9 +18,6 @@ from functools import partial
 import matplotlib.pyplot as plt
 import matplotlib
 
-print("matplotlib backend", matplotlib.get_backend())
-
-
 @struct.dataclass
 class State:
     """Basic MPE State"""
@@ -494,49 +491,10 @@ class SimpleMPE(MultiAgentEnv):
         m = x < 1.0
         mr = (x - 0.9) * 10
         br = jnp.min(jnp.array([jnp.exp(2 * x - 2), 10]))
-        return jax.lax.select(m, mr, br) * ~w
-
-    ### === PLOTTING === ###
-    def update_render(self, im, state: State):
-        ax = im.axes
-        return self.init_render(ax, state)
-
-    def init_render(self, ax, state: State):
-        """ 
-        TODO:
-        add step counter
-        add comm viz
-        """
-        
-        from matplotlib.patches import Circle
-        import matplotlib.pyplot as plt
-        import numpy as np
-        from matplotlib.backends.backend_agg import FigureCanvasAgg
-
-        # from PIL import Image
-        ax_lim = 2
-        ax.clear()
-        ax.set_xlim([-ax_lim, ax_lim])
-        ax.set_ylim([-ax_lim, ax_lim])
-        for i in range(self.num_entities):
-            c = Circle(
-                state.p_pos[i], self.rad[i], color=onp.array(self.colour[i]) / 255
-            )
-            ax.add_patch(c)
-
-
-        fig = ax.get_figure()
-        canvas = FigureCanvasAgg(fig)
-        canvas.draw()
-        buf = canvas.buffer_rgba()
-        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
-        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
-
-        return ax.imshow(rgb_array)
+        return jax.lax.select(m, mr, br) * ~w   
 
 
 if __name__ == "__main__":
-    # from smax.viz.visualizer import Visualizer
     from smax.environments.mpe import MPEVisualizer
 
     num_agents = 3
