@@ -17,7 +17,6 @@ The implementation closely follows the original Pymarl: https://github.com/oxwhi
 
 import jax
 import jax.numpy as jnp
-import jax.experimental.checkify as checkify
 import numpy as np
 
 import optax
@@ -26,76 +25,9 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 
-from smax import make
-from .utils import RolloutManager
-from .buffers import uniform_replay
-from .buffers.uniform import UniformReplayBufferState
+from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 
-from typing import NamedTuple
 from functools import partial
-
-
-
-class Transition(NamedTuple):
-    obs: dict
-    actions: dict
-    rewards: dict
-    dones: dict
-
-class UniformBuffer:
-    # Uniform Buffer replay buffer aggregating transitions from parallel envs
-    # based on dejax: https://github.com/hr0nix/dejax/tree/main
-    def __init__(self, parallel_envs:int=10, batch_size:int=32, max_size:int=5000):
-        self.batch_size = batch_size
-        self.buffer = uniform_replay(max_size=max_size)
-        self.parallel_envs = parallel_envs
-        self.sample = checkify.checkify(self.sample)
-        
-    def reset(self, transition_sample: Transition) -> UniformReplayBufferState:
-        zero_transition = jax.tree_util.tree_map(jnp.zeros_like, transition_sample)
-        return self.buffer.init_fn(zero_transition)
-    
-    @partial(jax.jit, static_argnums=0)
-    def add(self, buffer_state: UniformReplayBufferState, transition: Transition) -> UniformReplayBufferState:
-        def add_to_buffer(i, buffer_state):
-            # assumes the transition is coming from jax.lax so the batch is on dimension 1
-            return self.buffer.add_fn(buffer_state, jax.tree_util.tree_map(lambda x: x[:, i], transition))
-        # need to use for and not vmap because you can't add multiple transitions on the same buffer in parallel
-        return jax.lax.fori_loop(0, self.parallel_envs, add_to_buffer, buffer_state)
-    
-    @partial(jax.jit, static_argnums=0)
-    def sample(self, buffer_state: UniformReplayBufferState, key: chex.PRNGKey) -> Transition:
-        return self.buffer.sample_fn(buffer_state, key, self.batch_size)
-
-class EpsilonGreedy:
-
-    def __init__(self, start_e: float, end_e: float, duration: int):
-        self.start_e  = start_e
-        self.end_e    = end_e
-        self.duration = duration
-        self.slope    = (end_e - start_e) / duration
-        
-    @partial(jax.jit, static_argnums=0)
-    def get_epsilon(self, t: int):
-        e = self.slope*t + self.start_e
-        return jnp.clip(e, self.end_e)
-    
-    @partial(jax.jit, static_argnums=0)
-    def choose_actions(self, q_vals: dict, t: int, rng: chex.PRNGKey):
-        
-        def explore(q, eps, key):
-            key_a, key_e   = jax.random.split(key, 2) # a key for sampling random actions and one for picking
-            greedy_actions = jnp.argmax(q, axis=-1) # get the greedy actions 
-            random_actions = jax.random.randint(key_a, shape=greedy_actions.shape, minval=0, maxval=q.shape[-1]) # sample random actions
-            pick_random    = jax.random.uniform(key_e, greedy_actions.shape)<eps # pick which actions should be random
-            chosed_actions = jnp.where(pick_random, random_actions, greedy_actions)
-            return chosed_actions
-        
-        eps = self.get_epsilon(t)
-        keys = dict(zip(q_vals.keys(), jax.random.split(rng, len(q_vals)))) # get a key for each agent
-        choosed_actions = jax.tree_map(lambda q, k: explore(q, eps, k), q_vals, keys)
-        return choosed_actions
-
 
 class ScannedRNN(nn.Module):
 
@@ -168,10 +100,8 @@ class AgentRNN(nn.Module):
 
 
 
-def make_train(config):
+def make_train(config, env):
 
-    env = make(config['ENV_NAME'], num_agents=config["NUM_AGENTS"])
-    config["NUM_STEPS"] = config.get("NUM_STEPS", env.max_steps)
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
@@ -180,7 +110,7 @@ def make_train(config):
 
         # INIT ENV
         rng, _rng = jax.random.split(rng)
-        batched_env = RolloutManager(env, batch_size=config["NUM_ENVS"])
+        batched_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
         init_obs, env_state = batched_env.batch_reset(_rng)
         init_dones = {agent:jnp.zeros((config["NUM_ENVS"]), dtype=bool) for agent in env.agents+['__all__']}
 
@@ -201,10 +131,10 @@ def make_train(config):
         buffer_state = buffer.reset(sample_traj_unbatched)
 
         # INIT NETWORK
-        agent = AgentRNN(action_dim=env.action_space('agent_0').n, hidden_dim=config['AGENT_HIDDEN_DIM'])
+        agent = AgentRNN(action_dim=batched_env.max_action_space, hidden_dim=config['AGENT_HIDDEN_DIM'])
         rng, _rng = jax.random.split(rng)
         init_x = (
-            jnp.zeros((1, 1, *env.observation_space('agent_0').shape)), # (time_step, batch_size, obs_size)
+            jnp.zeros((1, 1, batched_env.obs_size)), # (time_step, batch_size, obs_size)
             jnp.zeros((1, 1)) # (time_step, batch size)
         )
         init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], 1) # (batch_size, hidden_dim)
@@ -245,14 +175,15 @@ def make_train(config):
 
                 # SELECT ACTION
                 # add a dummy time_step dimension to the agent input
-                obs_   = jax.tree_map(lambda x: x[np.newaxis, :], last_obs)
+                obs_   = {a:last_obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
+                obs_   = jax.tree_map(lambda x: x[np.newaxis, :], obs_)
                 dones_ = jax.tree_map(lambda x: x[np.newaxis, :], last_dones)
                 # get the q_values from the agent netwoek
                 hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
-                # remove the dummy time_step dimension
-                q_vals = jax.tree_map(lambda x: x.squeeze(0), q_vals)
+                # remove the dummy time_step dimension and index qs by the valid actions of each agent 
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, batched_env.valid_actions)
                 # explore with epsilon greedy_exploration
-                actions = explorer.choose_actions(q_vals, t, key_a)
+                actions = explorer.choose_actions(valid_q_vals, t, key_a)
 
                 # STEP ENV
                 obs, env_state, rewards, dones, infos = batched_env.batch_step(key_s, env_state, actions)
@@ -298,8 +229,9 @@ def make_train(config):
 
             def _loss_fn(params, target_agent_params, init_hs, learn_traj):
 
-                _, q_vals = agent.homogeneous_pass(params, init_hs, learn_traj.obs, learn_traj.dones)
-                _, target_q_vals = agent.homogeneous_pass(target_agent_params, init_hs, learn_traj.obs, learn_traj.dones)
+                obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
+                _, q_vals = agent.homogeneous_pass(params, init_hs, obs_, learn_traj.dones)
+                _, target_q_vals = agent.homogeneous_pass(target_agent_params, init_hs, obs_, learn_traj.dones)
 
                 # get the q_vals of the taken actions (with exploration) for each agent
                 chosen_action_qvals = jax.tree_map(
@@ -309,10 +241,11 @@ def make_train(config):
                 )
 
                 # get the target for each agent (assumes every agent has a reward)
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, batched_env.valid_actions)
                 targets = jax.tree_map(
                     compute_target,
                     target_q_vals,
-                    q_vals,
+                    valid_q_vals,
                     {agent:learn_traj.rewards[agent] for agent in env.agents}, # rewards and agents could contain additional keys
                     {agent:learn_traj.dones[agent] for agent in env.agents}
                 )
@@ -397,9 +330,13 @@ def make_train(config):
 
 
 if __name__ == "__main__":
+    from smax import make
+    import time
+    env_name = "MPE_simple_spread_v3"
+    env = make(env_name)
     config = {
-        "NUM_ENVS":1,
-        "NUM_AGENTS":3,
+        "NUM_ENVS":8,
+        "NUM_STEPS": env.max_steps,
         "BUFFER_SIZE":5000,
         "BUFFER_BATCH_SIZE":32,
         "TOTAL_TIMESTEPS":2e+6,
@@ -410,16 +347,28 @@ if __name__ == "__main__":
         "AGENT_HIDDEN_DIM": 64,
         "MAX_GRAD_NORM": 10,
         "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.0005,
+        "LR": 0.005,
         "GAMMA": 0.99,
-        "ENV_NAME": "MPE_simple_spread_v2",
         "DEBUG": False,
     }
 
-    rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config))
-
-    import time
+    b = 32 # number of concurrent trainings
+    rng = jax.random.PRNGKey(42)
+    rngs = jax.random.split(rng, b)
+    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
     t0 = time.time()
-    out = train_jit(rng)
-    print(f"time: {time.time() - t0:.2f} s")
+    outs = jax.block_until_ready(train_vjit(rngs))
+    t1 = time.time() - t0
+    print(f"time: {t1:.2f} s")
+
+    from matplotlib import pyplot as plt
+    def rolling_average_plot(x, y, window_size=50, label=''):
+        y = jnp.mean(jnp.reshape(y, (-1, window_size)), axis=1)
+        x = x[::window_size]
+        plt.plot(x, y, label=label)
+
+    rolling_average_plot(outs['metrics']['timesteps'][0], outs['metrics']['rewards']['__all__'].mean(axis=0))
+    plt.xlabel("Timesteps")
+    plt.ylabel("Team Returns")
+    plt.title(f"{env_name} returns (mean of {b} seeds)")
+    plt.show()
