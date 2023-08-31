@@ -16,10 +16,12 @@ class EnemyMiniSMAC(MultiAgentEnv):
     def __init__(self, **env_kwargs):
         self._env = MiniSMAC(**env_kwargs)
         # only one team
-        self.num_agents = self._env.num_agents_per_team
-        self.num_agents_per_team = self._env.num_agents_per_team
+        self.num_agents = self._env.num_allies
+        self.num_enemies = self._env.num_enemies
+        # want to provide a consistent API between this and MiniSMAC
+        self.num_allies = self._env.num_allies
         self.agents = [f"ally_{i}" for i in range(self.num_agents)]
-        self.enemy_agents = [f"enemy_{i}" for i in range(self.num_agents)]
+        self.enemy_agents = [f"enemy_{i}" for i in range(self.num_enemies)]
         self.all_agents = self.agents + self.enemy_agents
         self.observation_spaces = {
             i: self._env.observation_spaces[i] for i in self.agents
@@ -69,15 +71,15 @@ class HeuristicEnemyMiniSMAC(EnemyMiniSMAC):
         super().__init__(**env_kwargs)
         self.enemy_shoots = enemy_shoots
         self.attack_mode = attack_mode
-
-    def get_enemy_actions(self, key, enemy_obs):
-        heuristic_policy = create_heuristic_policy(
+        self.heuristic_policy = create_heuristic_policy(
             self._env, 1, shoot=self.enemy_shoots, attack_mode=self.attack_mode
         )
-        heuristic_action_key = jax.random.split(key, num=self.num_agents_per_team)
-        enemy_actions = jax.vmap(heuristic_policy)(heuristic_action_key, enemy_obs)
+
+    def get_enemy_actions(self, key, enemy_obs):
+        heuristic_action_key = jax.random.split(key, num=self.num_enemies)
+        enemy_actions = jax.vmap(self.heuristic_policy)(heuristic_action_key, enemy_obs)
         enemy_actions = {
-            agent: enemy_actions[self._env.agent_ids[agent] % self.num_agents_per_team]
+            agent: enemy_actions[self._env.agent_ids[agent] - self.num_agents]
             for agent in self.enemy_agents
         }
         return enemy_actions
@@ -93,7 +95,7 @@ class LearnedPolicyEnemyMiniSMAC(EnemyMiniSMAC):
         pi, _ = self.policy.apply(self.params, enemy_obs)
         enemy_actions = pi.sample(seed=key)
         enemy_actions = {
-            agent: enemy_actions[self._env.agent_ids[agent] % self.num_agents_per_team]
+            agent: enemy_actions[self._env.agent_ids[agent] - self.num_agents]
             for agent in self.enemy_agents
         }
         enemy_actions = {k: v.squeeze() for k, v in enemy_actions.items()}
