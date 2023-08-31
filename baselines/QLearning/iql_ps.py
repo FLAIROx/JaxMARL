@@ -8,9 +8,8 @@ Notice:
 - Loss is the 1-step TD error.
 - Adam optimizer is used instead (not RMSPROP as in pymarl).
 - The environment is reset at the end of each episode.
-- Assumes all agents are homogeneous (same observation-action spaces).
 - Assumes every agent has an independent reward.
-- At the moment, agents_ids and last_action features are not included in the agents' observations.
+- At the moment, last_action features are not included in the agents' observations.
 
 The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
 """

@@ -8,9 +8,8 @@ Notice:
 - Loss is the 1-step TD error.
 - Adam optimizer is used instead of RMSPROP.
 - The environment is reset at the end of each episode.
-- Assumes all agents are homogeneous (same observation-action spaces).
-- Uses a Centralized Training Wrapper (CTRolloutManager) to get the global reward (rewards["__all__"]) which is used to compute the targets.
-- At the moment, agents_ids and last_action features are not included in the agents' observations.
+- Trained with a team reward (reward['__all__'])
+- At the moment, last_actions are not included in the agents' observations.
 
 The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
 """

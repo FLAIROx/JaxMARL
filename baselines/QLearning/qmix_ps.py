@@ -1,9 +1,17 @@
 """
-[WIP]
+End-to-End JAX Implementation of QMix with Parameters Sharing.
 
-**The current QMix implementation is facing an issue with an exploding loss-gradient problem, at least in Spread. 
-Despite my attempts to address it by incorporating a substantial L2 regularization, increasing the learning batch size, 
-and meticulously initializing the network, the problem persists across numerous seeds.**
+Notice:
+- Agents are controlled by a single RNN (parameters sharing).
+- Experience replay is a simple buffer with uniform sampling.
+- Uses Double Q-Learning with a target agent network and a target mixer network (hard-updated).
+- Loss is the 1-step TD error.
+- Adam optimizer is used instead of RMSPROP.
+- The environment is reset at the end of each episode.
+- Trained with a team reward (reward['__all__'])
+- At the moment, last_actions are not included in the agents' observations.
+
+The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
 """
 
 import jax
