@@ -131,7 +131,7 @@ class HanabiGame(MultiAgentEnv):
 
         return legal_moves
 
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
 
         def _gen_cards(aidx, unused):
             color, rank = shuffled_pairs[aidx]
@@ -242,9 +242,10 @@ class HanabiGame(MultiAgentEnv):
         done = self.terminal(state)
         dones = {agent: done for agent in self.agents}
         dones["__all__"] = done
+        dones = jnp.repeat(done, self.num_agents)
 
         rewards = {agent: reward for agent in self.agents}
-        rewards["__all__"] = reward
+        # rewards["__all__"] = reward
 
         info = {}
 
