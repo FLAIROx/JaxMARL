@@ -62,7 +62,7 @@ def create_heuristic_policy(
             env.unit_type_sight_ranges[unit_type],
             env.unit_type_sight_ranges[unit_type],
         )
-        
+
         # visible if health is > 0. Otherwise out of range or dead
         visible_enemy_mask = obs[first_enemy_idx:own_feats_idx:num_unit_features] > 0
         shootable_enemy_mask = (

@@ -58,6 +58,11 @@ class EnemyMiniSMAC(MultiAgentEnv):
 
         return obs, state, rewards, dones, infos
 
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: State):
+        avail_actions = self._env.get_avail_actions(state)
+        return {agent: avail_actions[agent] for agent in self.agents}
+
     def get_all_unit_obs(self, state: State):
         return self._env.get_obs(state)
 

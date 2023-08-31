@@ -70,7 +70,11 @@ MAP_NAME_TO_SCENARIO = {
         9,
     ),
     "3s_vs_5z": (jnp.array([2, 2, 2, 3, 3, 3, 3, 3], dtype=jnp.uint8), 3, 5),
-    "6h_vs_8z": (jnp.array([5, 5, 5, 5, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3], dtype=jnp.uint8), 6, 8),
+    "6h_vs_8z": (
+        jnp.array([5, 5, 5, 5, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3], dtype=jnp.uint8),
+        6,
+        8,
+    ),
 }
 
 
@@ -598,6 +602,49 @@ class MiniSMAC(MultiAgentEnv):
         own_unit_obs = get_all_self_features(jnp.arange(self.num_agents))
         obs = jnp.concatenate([other_unit_obs, own_unit_obs], axis=-1)
         return {agent: obs[self.agent_ids[agent]] for agent in self.agents}
+
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
+        @partial(jax.jit, static_argnums=(1,))
+        def get_individual_avail_actions(i, team):
+            num_actions = {0: self.num_ally_actions, 1: self.num_enemy_actions}[team]
+            is_alive = state.unit_alive[i]
+            mask = jnp.zeros((num_actions,), dtype=jnp.uint8)
+            # always can take the stop action
+            mask = mask.at[self.num_movement_actions - 1].set(1)
+            mask = mask.at[: self.num_movement_actions - 1].set(
+                jax.lax.select(
+                    is_alive,
+                    jnp.ones((self.num_movement_actions - 1,), dtype=jnp.uint8),
+                    jnp.zeros((self.num_movement_actions - 1,), dtype=jnp.uint8),
+                )
+            )
+            shootable_mask = (
+                jnp.linalg.norm(state.unit_positions - state.unit_positions[i], axis=-1)
+                < self.unit_type_attack_ranges[state.unit_types[i]]
+            ) & state.unit_alive
+            shootable_mask = shootable_mask if team == 0 else shootable_mask[::-1]
+            shootable_mask = (
+                shootable_mask[self.num_allies :]
+                if team == 0
+                else shootable_mask[self.num_enemies :]
+            )
+            shootable_mask = jax.lax.select(is_alive, shootable_mask, jnp.zeros_like(shootable_mask))
+            mask = mask.at[self.num_movement_actions :].set(shootable_mask)
+            return mask
+
+        ally_avail_actions_masks = jax.vmap(
+            get_individual_avail_actions, in_axes=(0, None)
+        )(jnp.arange(self.num_allies), 0)
+        enemy_avail_actions_masks = jax.vmap(
+            get_individual_avail_actions, in_axes=(0, None)
+        )(jnp.arange(self.num_allies, self.num_agents), 1)
+        return {
+            agent: ally_avail_actions_masks[i]
+            if i < self.num_allies
+            else enemy_avail_actions_masks[i - self.num_allies]
+            for i, agent in enumerate(self.agents)
+        }
 
     def init_render(
         self,
