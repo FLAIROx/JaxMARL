@@ -21,14 +21,18 @@ As our implementation closely follows the PettingZoo code, please refer to their
 Following the PettingZoo implementation, we allow for both discrete or continuous action spaces in all MPE envrionments. The environments use discrete actions by default.
 
 ## Visulisation
-We animate a collected set of state sequences.
+Check the example `mpe_introduction.py` file in the tutorials folder for an introduction to our implementation of the MPE environments, including an example visualisation. We animate the environment after the state transitions have been collected as follows:
+
 ```python
+from smax import make
 from smax.environments.mpe import MPEVisualizer
 
-state_seq = [state_t0, state_t1, ...]  # collected state sequences
+env = make("MPE_simple_v3")
 
+# state_seq is a list of the jax env states passed to the step function
+# i.e. [state_t0, state_t1, ...]
 viz = MPEVisualizer(env, state_seq)
-viz.animate('animation.gif')
+viz.animate(view=True)  # can also save the animiation as a .gif
 ```
 
 ## Citation
@@ -43,8 +47,4 @@ The environments were orginally described in the following work:
 ```
 
 ## ToDos:
-[] improve viz code
-
-[] viz for communication
-
-[] improve tests using a heuristic policy
+* improve tests using a heuristic policy

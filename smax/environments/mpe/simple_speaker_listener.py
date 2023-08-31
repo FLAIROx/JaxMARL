@@ -10,10 +10,7 @@ SPEAKER = "speaker_0"
 LISTENER = "listener_0"
 AGENT_NAMES = [SPEAKER, LISTENER]
 
-COLOUR_1 = jnp.array([0.65, 0.15, 0.15])  # BUG
-COLOUR_2 = jnp.array([0.15, 0.65, 0.15])
-COLOUR_3 = jnp.array([0.15, 0.15, 0.65])
-
+OBS_COLOURS = [(166, 38, 38), (38, 166, 38), (38, 38, 166)]
 
 class SimpleSpeakerListenerMPE(SimpleMPE):
     def __init__(
@@ -57,7 +54,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         colour = (
             [ADVERSARY_COLOUR]
             + [AGENT_COLOUR]
-            + list(jnp.concatenate([COLOUR_1, COLOUR_2, COLOUR_3]))
+            + OBS_COLOURS
         )
 
         # Parameters

@@ -8,11 +8,7 @@ from smax.environments.mpe.default_params import *
 from gymnax.environments.spaces import Box, Discrete
 
 # Obstacle Colours
-COLOUR_1 = jnp.array([[0.75, 0.25, 0.25]])
-COLOUR_2 = jnp.array([[0.25, 0.75, 0.25]])
-COLOUR_3 = jnp.array([[0.25, 0.25, 0.75]])
-OBS_COLOUR = jnp.concatenate([COLOUR_1, COLOUR_2, COLOUR_3])
-
+OBS_COLOUR = [(191, 64, 64), (64, 191, 64), (64, 64, 191)]
 
 class SimpleReferenceMPE(SimpleMPE):
     def __init__(
@@ -44,7 +40,7 @@ class SimpleReferenceMPE(SimpleMPE):
             raise NotImplementedError("Action type not implemented")
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (21,)) for i in agents}
-        colour = [AGENT_COLOUR] * num_agents + list(OBS_COLOUR)
+        colour = [AGENT_COLOUR] * num_agents + OBS_COLOUR
 
         silent = jnp.full((num_agents), 0)
         collide = jnp.full((num_entites), False)
@@ -106,11 +102,13 @@ class SimpleReferenceMPE(SimpleMPE):
 
         def _agent(aidx):
             other_idx = (aidx + 1) % 2
+            colour = jnp.full((3,), 0.25)
+            colour = colour.at[state.goal[other_idx]].set(0.75)
             return jnp.concatenate(
                 [
                     state.p_vel[aidx].flatten(),  # 2
                     landmark_pos[aidx].flatten(),  # 3, 2
-                    OBS_COLOUR[state.goal[other_idx]].flatten(),  # 3
+                    colour.flatten(),  # 3
                     state.c[other_idx].flatten(),  # 10
                 ]
             )

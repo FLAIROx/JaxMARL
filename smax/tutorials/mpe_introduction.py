@@ -24,7 +24,7 @@ key = jax.random.PRNGKey(0)
 key, key_r, key_a = jax.random.split(key, 3)
 
 # Instantiate environment
-env = make('MPE_simple_v3')
+env = make('MPE_simple_reference_v3')
 obs, state = env.reset(key_r)
 print('list of agents in environment', env.agents)
 
