@@ -101,7 +101,7 @@ def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
                           ("MPE_simple_push_v3", CONTINUOUS_ACT),
                           ("MPE_simple_spread_v3", DISCRETE_ACT),
                           ("MPE_simple_spread_v3", CONTINUOUS_ACT),])
-def test_step(zoo_env_name, action_type=DISCRETE_ACT):
+def test_step(zoo_env_name, action_type):
     print(f'-- Testing {zoo_env_name} --')
     key = jax.random.PRNGKey(0)
     
