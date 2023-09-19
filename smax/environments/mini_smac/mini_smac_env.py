@@ -2,11 +2,16 @@ import jax.numpy as jnp
 import jax
 from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.spaces import Box, Discrete
+from smax.environments.mini_smac.distributions import (
+    SurroundAndReflectPositionDistribution,
+    UniformUnitTypeDistribution,
+)
 import chex
 from typing import Tuple, Dict, Optional
 from flax.struct import dataclass
 from enum import IntEnum
 from functools import partial
+import io
 
 
 @dataclass
@@ -32,12 +37,23 @@ class WorldDelta:
     health_diff: float
 
 
+@dataclass
+class Scenario:
+    unit_types: chex.Array
+    num_allies: int
+    num_enemies: int
+    smacv2_position_generation: bool
+    smacv2_unit_type_generation: bool
+
+
 MAP_NAME_TO_SCENARIO = {
-    # name: (unit_types, n_allies, n_enemies)
-    "3m": (jnp.zeros((6,), dtype=jnp.uint8), 3, 3),
-    "2s3z": (jnp.array([2, 2, 3, 3, 3] * 2, dtype=jnp.uint8), 5, 5),
-    "25m": (jnp.zeros((50,), dtype=jnp.uint8), 25, 25),
-    "3s5z": (
+    # name: (unit_types, n_allies, n_enemies, SMACv2 position generation, SMACv2 unit generation)
+    "3m": Scenario(jnp.zeros((6,), dtype=jnp.uint8), 3, 3, False, False),
+    "2s3z": Scenario(
+        jnp.array([2, 2, 3, 3, 3] * 2, dtype=jnp.uint8), 5, 5, False, False
+    ),
+    "25m": Scenario(jnp.zeros((50,), dtype=jnp.uint8), 25, 25, False, False),
+    "3s5z": Scenario(
         jnp.array(
             [
                 2,
@@ -54,12 +70,14 @@ MAP_NAME_TO_SCENARIO = {
         ),
         8,
         8,
+        False,
+        False,
     ),
-    "8m": (jnp.zeros((16,), dtype=jnp.uint8), 8, 8),
-    "5m_vs_6m": (jnp.zeros((11,), dtype=jnp.uint8), 5, 6),
-    "10m_vs_11m": (jnp.zeros((21,), dtype=jnp.uint8), 10, 11),
-    "27m_vs_30m": (jnp.zeros((57,), dtype=jnp.uint8), 27, 30),
-    "3s5z_vs_3s6z": (
+    "8m": Scenario(jnp.zeros((16,), dtype=jnp.uint8), 8, 8, False, False),
+    "5m_vs_6m": Scenario(jnp.zeros((11,), dtype=jnp.uint8), 5, 6, False, False),
+    "10m_vs_11m": Scenario(jnp.zeros((21,), dtype=jnp.uint8), 10, 11, False, False),
+    "27m_vs_30m": Scenario(jnp.zeros((57,), dtype=jnp.uint8), 27, 30, False, False),
+    "3s5z_vs_3s6z": Scenario(
         jnp.concatenate(
             [
                 jnp.array([2, 2, 2, 3, 3, 3, 3, 3], dtype=jnp.uint8),
@@ -68,13 +86,22 @@ MAP_NAME_TO_SCENARIO = {
         ),
         8,
         9,
+        False,
+        False,
     ),
-    "3s_vs_5z": (jnp.array([2, 2, 2, 3, 3, 3, 3, 3], dtype=jnp.uint8), 3, 5),
-    "6h_vs_8z": (
+    "3s_vs_5z": Scenario(
+        jnp.array([2, 2, 2, 3, 3, 3, 3, 3], dtype=jnp.uint8), 3, 5, False, False
+    ),
+    "6h_vs_8z": Scenario(
         jnp.array([5, 5, 5, 5, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3], dtype=jnp.uint8),
         6,
         8,
+        False,
+        False,
     ),
+    "smacv2_5_units": Scenario(jnp.zeros((10,), dtype=jnp.uint8), 5, 5, True, True),
+    "smacv2_10_units": Scenario(jnp.zeros((20,), dtype=jnp.uint8), 10, 10, True, True),
+    "smacv2_20_units": Scenario(jnp.zeros((40,), dtype=jnp.uint8), 20, 20, True, True),
 }
 
 
@@ -118,9 +145,11 @@ class MiniSMAC(MultiAgentEnv):
         won_battle_bonus=1.0,
         walls_cause_death=True,
         max_steps=100,
+        smacv2_position_generation=False,
+        smacv2_unit_type_generation=False,
     ) -> None:
-        self.num_allies = num_allies if scenario is None else scenario[1]
-        self.num_enemies = num_enemies if scenario is None else scenario[2]
+        self.num_allies = num_allies if scenario is None else scenario.num_allies
+        self.num_enemies = num_enemies if scenario is None else scenario.num_enemies
         self.num_agents = self.num_allies + self.num_enemies
         self.walls_cause_death = walls_cause_death
         self.unit_type_names = unit_type_names
@@ -129,7 +158,7 @@ class MiniSMAC(MultiAgentEnv):
         self.world_steps_per_env_step = world_steps_per_env_step
         self.map_width = map_width
         self.map_height = map_height
-        self.scenario = scenario if scenario is None else scenario[0]
+        self.scenario = scenario if scenario is None else scenario.unit_types
         self.use_self_play_reward = use_self_play_reward
         self.time_per_step = time_per_step
         self.unit_type_velocities = unit_type_velocities
@@ -143,6 +172,26 @@ class MiniSMAC(MultiAgentEnv):
         self.max_steps = max_steps
         self.won_battle_bonus = won_battle_bonus
         self.see_enemy_actions = see_enemy_actions
+        self.smacv2_unit_type_generation = (
+            smacv2_unit_type_generation
+            if scenario is None
+            else scenario.smacv2_unit_type_generation
+        )
+        self.smacv2_position_generation = (
+            smacv2_position_generation
+            if scenario is None
+            else scenario.smacv2_position_generation
+        )
+        self.position_generator = SurroundAndReflectPositionDistribution(
+            self.num_allies, self.num_enemies, self.map_width, self.map_height
+        )
+        self.unit_type_generator = UniformUnitTypeDistribution(
+            self.num_allies,
+            self.num_enemies,
+            self.map_width,
+            self.map_height,
+            len(self.unit_type_names),
+        )
         self.agents = [f"ally_{i}" for i in range(self.num_allies)] + [
             f"enemy_{i}" for i in range(self.num_enemies)
         ]
@@ -196,6 +245,11 @@ class MiniSMAC(MultiAgentEnv):
         )
         team_1_start = team_1_start + team_1_start_noise
         unit_positions = jnp.concatenate([team_0_start, team_1_start])
+        key, pos_key = jax.random.split(key)
+        generated_unit_positions = self.position_generator.generate(pos_key)
+        unit_positions = jax.lax.select(
+            self.smacv2_position_generation, generated_unit_positions, unit_positions
+        )
         unit_teams = jnp.zeros((self.num_agents,))
         unit_teams = unit_teams.at[self.num_allies :].set(1)
         unit_weapon_cooldowns = jnp.zeros((self.num_agents,))
@@ -204,6 +258,11 @@ class MiniSMAC(MultiAgentEnv):
             jnp.zeros((self.num_agents,), dtype=jnp.uint8)
             if self.scenario is None
             else self.scenario
+        )
+        key, unit_type_key = jax.random.split(key)
+        generated_unit_types = self.unit_type_generator.generate(unit_type_key)
+        unit_types = jax.lax.select(
+            self.smacv2_unit_type_generation, generated_unit_types, unit_types
         )
         unit_health = self.unit_type_health[unit_types]
         state = State(
@@ -629,7 +688,9 @@ class MiniSMAC(MultiAgentEnv):
                 if team == 0
                 else shootable_mask[self.num_enemies :]
             )
-            shootable_mask = jax.lax.select(is_alive, shootable_mask, jnp.zeros_like(shootable_mask))
+            shootable_mask = jax.lax.select(
+                is_alive, shootable_mask, jnp.zeros_like(shootable_mask)
+            )
             mask = mask.at[self.num_movement_actions :].set(shootable_mask)
             return mask
 
@@ -646,6 +707,21 @@ class MiniSMAC(MultiAgentEnv):
             for i, agent in enumerate(self.agents)
         }
 
+    def expand_state_seq(self, state_seq):
+        expanded_state_seq = []
+        for key, state, actions in state_seq:
+            agents = self.agents
+            for _ in range(self.world_steps_per_env_step):
+                expanded_state_seq.append((key, state, actions))
+                world_actions = jnp.array([actions[i] for i in agents])
+                key, step_key = jax.random.split(key)
+                state = self._world_step(step_key, state, world_actions)
+                state = self._kill_agents_touching_walls(state)
+                state = self._update_dead_agents(state)
+                state = self._push_units_away(state)
+            state = state.replace(terminal=self.is_terminal(state))
+        return expanded_state_seq
+
     def init_render(
         self,
         ax,
@@ -654,6 +730,7 @@ class MiniSMAC(MultiAgentEnv):
         env_step: int,
     ):
         from matplotlib.patches import Circle, Rectangle
+        import matplotlib.pyplot as plt
         import numpy as np
 
         _, state, actions = state
@@ -746,14 +823,14 @@ class MiniSMAC(MultiAgentEnv):
             r = Rectangle(bullet_pos, 0.5, 0.5, color="gray")
             ax.add_patch(r)
 
-        canvas = ax.figure.canvas
-        canvas.draw()
+        with io.BytesIO() as buff:
+            ax.figure.savefig(buff, format="raw")
+            buff.seek(0)
+            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
+        w, h = ax.figure.canvas.get_width_height()
+        im = data.reshape((w, h, -1))
 
-        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
-        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
-        im = ax.imshow(rgb_array)
-
-        return im
+        return ax.imshow(im)
 
     def update_render(
         self,

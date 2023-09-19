@@ -6,7 +6,6 @@ import matplotlib.animation as animation
 from typing import Optional
 
 from smax.environments.multi_agent_env import MultiAgentEnv
-from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
 from smax.environments.mini_smac.heuristic_enemy_mini_smac_env import (
     EnemyMiniSMAC,
 )
@@ -76,31 +75,7 @@ class MiniSMACVisualizer(Visualizer):
     def expand_state_seq(self):
         """Because the minismac environment ticks faster than the states received
         we need to expand the states to visualise them"""
-        expanded_state_seq = []
-        for i, (key, state, actions) in enumerate(self.state_seq):
-            if self.heuristic_enemy:
-                agents = self.env.all_agents
-                # There is a split in the step function of MultiAgentEnv
-                # We call split here so that the action key is the same.
-                key, _ = jax.random.split(key)
-                key, key_action = jax.random.split(key)
-                obs = self.env.get_all_unit_obs(state)
-                obs = jnp.array([obs[agent] for agent in self.env.enemy_agents])
-                enemy_actions = self.env.get_enemy_actions(key_action, obs)
-                actions = {k: v.squeeze() for k, v in actions.items()}
-                actions = {**enemy_actions, **actions}
-            else:
-                agents = self.env.agents
-            for _ in range(self.env.world_steps_per_env_step):
-                expanded_state_seq.append((key, state, actions))
-                world_actions = jnp.array([actions[i] for i in agents])
-                key, step_key = jax.random.split(key)
-                state = self.env._world_step(step_key, state, world_actions)
-                state = self.env._kill_agents_touching_walls(state)
-                state = self.env._update_dead_agents(state)
-                state = self.env._push_units_away(state)
-            state = state.replace(terminal=self.env.is_terminal(state))
-        self.state_seq = expanded_state_seq
+        self.state_seq = self.env.expand_state_seq(self.state_seq)
         self.have_expanded = True
 
     def animate(self, save_fname: Optional[str] = None, view: bool = True):
