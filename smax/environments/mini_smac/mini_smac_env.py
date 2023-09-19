@@ -2,12 +2,16 @@ import jax.numpy as jnp
 import jax
 from smax.environments.multi_agent_env import MultiAgentEnv
 from smax.environments.spaces import Box, Discrete
+from smax.environments.mini_smac.distributions import (
+    SurroundAndReflectPositionDistribution,
+    UniformUnitTypeDistribution,
+)
 import chex
 from typing import Tuple, Dict, Optional
 from flax.struct import dataclass
 from enum import IntEnum
 from functools import partial
-
+import io
 
 @dataclass
 class State:
@@ -118,6 +122,8 @@ class MiniSMAC(MultiAgentEnv):
         won_battle_bonus=1.0,
         walls_cause_death=True,
         max_steps=100,
+        smacv2_position_generation=False,
+        smacv2_unit_type_generation=False,
     ) -> None:
         self.num_allies = num_allies if scenario is None else scenario[1]
         self.num_enemies = num_enemies if scenario is None else scenario[2]
@@ -143,6 +149,14 @@ class MiniSMAC(MultiAgentEnv):
         self.max_steps = max_steps
         self.won_battle_bonus = won_battle_bonus
         self.see_enemy_actions = see_enemy_actions
+        self.smacv2_unit_type_generation = smacv2_unit_type_generation
+        self.smacv2_position_generation = smacv2_position_generation
+        self.position_generator = SurroundAndReflectPositionDistribution(
+            self.num_allies, self.num_enemies, self.map_width, self.map_height
+        )
+        self.unit_type_generator = UniformUnitTypeDistribution(
+            self.num_allies, self.num_enemies, self.map_width, self.map_height, len(self.unit_type_names)
+        )
         self.agents = [f"ally_{i}" for i in range(self.num_allies)] + [
             f"enemy_{i}" for i in range(self.num_enemies)
         ]
@@ -196,6 +210,9 @@ class MiniSMAC(MultiAgentEnv):
         )
         team_1_start = team_1_start + team_1_start_noise
         unit_positions = jnp.concatenate([team_0_start, team_1_start])
+        key, pos_key = jax.random.split(key)
+        generated_unit_positions = self.position_generator.generate(pos_key)
+        unit_positions = jax.lax.select(self.smacv2_position_generation, generated_unit_positions, unit_positions)
         unit_teams = jnp.zeros((self.num_agents,))
         unit_teams = unit_teams.at[self.num_allies :].set(1)
         unit_weapon_cooldowns = jnp.zeros((self.num_agents,))
@@ -205,6 +222,9 @@ class MiniSMAC(MultiAgentEnv):
             if self.scenario is None
             else self.scenario
         )
+        key, unit_type_key = jax.random.split(key)
+        generated_unit_types = self.unit_type_generator.generate(unit_type_key)
+        unit_types = jax.lax.select(self.smacv2_unit_type_generation, generated_unit_types, unit_types)
         unit_health = self.unit_type_health[unit_types]
         state = State(
             unit_positions=unit_positions,
@@ -629,7 +649,9 @@ class MiniSMAC(MultiAgentEnv):
                 if team == 0
                 else shootable_mask[self.num_enemies :]
             )
-            shootable_mask = jax.lax.select(is_alive, shootable_mask, jnp.zeros_like(shootable_mask))
+            shootable_mask = jax.lax.select(
+                is_alive, shootable_mask, jnp.zeros_like(shootable_mask)
+            )
             mask = mask.at[self.num_movement_actions :].set(shootable_mask)
             return mask
 
@@ -646,6 +668,22 @@ class MiniSMAC(MultiAgentEnv):
             for i, agent in enumerate(self.agents)
         }
 
+    def expand_state_seq(self, state_seq):
+
+        expanded_state_seq = []
+        for key, state, actions in state_seq:
+            agents = self.agents
+            for _ in range(self.world_steps_per_env_step):
+                expanded_state_seq.append((key, state, actions))
+                world_actions = jnp.array([actions[i] for i in agents])
+                key, step_key = jax.random.split(key)
+                state = self._world_step(step_key, state, world_actions)
+                state = self._kill_agents_touching_walls(state)
+                state = self._update_dead_agents(state)
+                state = self._push_units_away(state)
+            state = state.replace(terminal=self.is_terminal(state))
+        return expanded_state_seq
+
     def init_render(
         self,
         ax,
@@ -654,6 +692,7 @@ class MiniSMAC(MultiAgentEnv):
         env_step: int,
     ):
         from matplotlib.patches import Circle, Rectangle
+        import matplotlib.pyplot as plt
         import numpy as np
 
         _, state, actions = state
@@ -746,14 +785,14 @@ class MiniSMAC(MultiAgentEnv):
             r = Rectangle(bullet_pos, 0.5, 0.5, color="gray")
             ax.add_patch(r)
 
-        canvas = ax.figure.canvas
-        canvas.draw()
+        with io.BytesIO() as buff:
+            ax.figure.savefig(buff, format="raw")
+            buff.seek(0)
+            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
+        w, h = ax.figure.canvas.get_width_height()
+        im = data.reshape((w, h, -1))
 
-        rgb_array = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
-        rgb_array = rgb_array.reshape(canvas.get_width_height()[::-1] + (3,))
-        im = ax.imshow(rgb_array)
-
-        return im
+        return ax.imshow(im)
 
     def update_render(
         self,

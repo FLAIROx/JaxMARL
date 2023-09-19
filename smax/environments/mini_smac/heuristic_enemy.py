@@ -1,7 +1,19 @@
 import jax.numpy as jnp
 import jax
+from flax.struct import dataclass
 import chex
 from functools import partial
+
+
+@dataclass
+class HeuristicPolicyState:
+    default_target: chex.Array  # the place we are headed for
+    last_attacked_enemy: int  # needed to remember where we attacked last
+
+    def __eq__(self, other):
+        return jnp.all(other.default_target == self.default_target) & (
+            other.last_attacked_enemy == self.last_attacked_enemy
+        )
 
 
 def create_heuristic_policy(
@@ -20,7 +32,9 @@ def create_heuristic_policy(
     num_unit_features = len(env.unit_features)
     num_move_actions = env.num_movement_actions
 
-    def get_heuristic_action(key: jax.random.PRNGKey, obs: chex.Array):
+    def get_heuristic_action(
+        key: jax.random.PRNGKey, state: HeuristicPolicyState, obs: chex.Array
+    ):
         """Generate a heuristic action based on an observation.
         Follows the following scheme:
             -- If you can attack:
@@ -34,6 +48,8 @@ def create_heuristic_policy(
         unit_type = jnp.nonzero(obs[-env.unit_type_bits :], size=1, fill_value=None)[0][
             0
         ]
+        initial_state = get_heuristic_policy_initial_state()
+        is_initial_state = initial_state == state
         teams = {0: env.num_allies, 1: env.num_enemies}
         team_size = teams[team]
         other_team_size = teams[1 - team]
@@ -83,8 +99,21 @@ def create_heuristic_policy(
         )
         closest_attack_action = jnp.argmin(enemy_dist)
         closest_attack_action += num_move_actions
-        attack_action = jax.lax.select(
+        new_attack_action = jax.lax.select(
             attack_mode == "random", random_attack_action, closest_attack_action
+        )
+        # Want to keep attacking the same enemy until it is dead.
+        attack_action = jax.lax.select(
+            (state.last_attacked_enemy != -1)
+            & shootable_enemy_mask[state.last_attacked_enemy],
+            state.last_attacked_enemy + num_move_actions,
+            new_attack_action,
+        )
+        attacked_idx = attack_action - num_move_actions
+        state = state.replace(
+            last_attacked_enemy=jax.lax.select(
+                shootable_enemy_mask[attacked_idx], attacked_idx, -1
+            )
         )
         # compute the correct movement action.
         random_enemy_target = jax.random.choice(
@@ -93,19 +122,36 @@ def create_heuristic_policy(
             p=(visible_enemy_mask / jnp.sum(visible_enemy_mask)),
         )
         can_see = jnp.any(visible_enemy_mask)
-        team_0_target = jax.lax.cond(
-            can_see, lambda: random_enemy_target, lambda: jnp.array([28.0, 16.0])
+
+        # Rotate the current position 180 degrees about the centre of the map
+        # to get the default target.
+        # This means that in surrounded and reflect scenarios we will always
+        # pass through the centre, and therefore are likely to get involved
+        # in the action. From there the behaviour of chasing enemies should
+        # take over to produce sensible behaviour.
+        centre = jnp.array([env.map_width / 2, env.map_height / 2])
+        default_target = jax.lax.select(
+            is_initial_state,
+            jnp.array([[-1, 0], [0, -1]]) @ (own_position - centre) + centre,
+            state.default_target,
         )
-        team_1_target = jax.lax.cond(
-            can_see, lambda: random_enemy_target, lambda: jnp.array([4.0, 16.0])
+        state = state.replace(default_target=default_target)
+        target = jax.lax.cond(
+            can_see, lambda: random_enemy_target, lambda: state.default_target
         )
-        target = jax.lax.cond(team == 0, lambda: team_0_target, lambda: team_1_target)
         vector_to_target = target - own_position
         action_vectors = jnp.array([[0, 1], [1, 0], [0, -1], [-1, 0]])
         similarity = jnp.dot(action_vectors, vector_to_target)
         move_action = jnp.argmax(similarity)
-        return jax.lax.cond(
-            can_shoot & shoot, lambda: attack_action, lambda: move_action
+        return (
+            jax.lax.cond(can_shoot & shoot, lambda: attack_action, lambda: move_action),
+            state,
         )
 
     return get_heuristic_action
+
+
+def get_heuristic_policy_initial_state():
+    return HeuristicPolicyState(
+        default_target=jnp.array([0.0, 0.0]), last_attacked_enemy=-1
+    )
