@@ -2,15 +2,16 @@
 End-to-End JAX Implementation of QMix with Parameters Sharing.
 
 Notice:
-- Agents are controlled by a single RNN (parameters sharing).
+- Agents are controlled by a single RNN architecture.
+- The parameters are kept separated for each agent via vmapping.
 - Works also with non-homogenous agents (different obs/action spaces).
 - Experience replay is a simple buffer with uniform sampling.
-- Uses Double Q-Learning with a target agent network and a target mixer network (hard-updated).
+- Uses Double Q-Learning with a target agent network (hard-updated).
 - Loss is the 1-step TD error.
-- Adam optimizer is used instead of RMSPROP.
+- Adam optimizer is used instead (not RMSPROP as in pymarl).
 - The environment is reset at the end of each episode.
-- Trained with a team reward (reward['__all__'])
-- At the moment, last_actions are not included in the agents' observations.
+- Assumes every agent has an independent reward.
+- At the moment, last_action features are not included in the agents' observations.
 
 The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
 """
@@ -81,21 +82,20 @@ class AgentRNN(nn.Module):
     @partial(jax.jit, static_argnums=0)
     def homogeneous_pass(self, params, hidden_state, obs, dones):
         """
-        - concatenate agents and parallel envs to process them in one batch
-        - assumes all agents are homogenous (same obs and action shapes)
+        - homogeneous pass vmapped in respect to the agents parameters (i.e., no parameter sharing)
+        - assumes all agents are homogenous (same obs and action shapes) or uniformed
         - assumes the first dimension is the time step
         - assumes the other dimensions except the last one can be considered as batches
         - returns a dictionary of q_vals indexed by the agent names
         """
         agents, flatten_agents_obs = zip(*obs.items())
-        original_shape = flatten_agents_obs[0].shape # assumes obs shape is the same for all agents
         batched_input = (
-            jnp.concatenate(flatten_agents_obs, axis=1), # (time_step, n_agents*n_envs, obs_size)
-            jnp.concatenate([dones[agent] for agent in agents], axis=1), # ensure to not pass other keys (like __all__)
+            jnp.stack(flatten_agents_obs, axis=0), # (n_agents, time_step, n_envs, obs_size)
+            jnp.stack([dones[agent] for agent in agents], axis=0), # ensure to not pass other keys (like __all__)
         )
-        hidden_state, q_vals = self.apply(params, hidden_state, batched_input)
-        q_vals = q_vals.reshape(original_shape[0], len(agents), *original_shape[1:-1], -1) # (time_steps, n_agents, n_envs, action_dim)
-        q_vals = {a:q_vals[:,i] for i,a in enumerate(agents)}
+        # computes the q_vals with the params of each agent separately by vmapping
+        hidden_state, q_vals = jax.vmap(self.apply, in_axes=0)(params, hidden_state, batched_input)
+        q_vals = {a:q_vals[i] for i,a in enumerate(agents)}
         return hidden_state, q_vals
     
 
@@ -183,11 +183,12 @@ def make_train(config, env):
         agent = AgentRNN(action_dim=wrapped_env.max_action_space, hidden_dim=config['AGENT_HIDDEN_DIM'])
         rng, _rng = jax.random.split(rng)
         init_x = (
-            jnp.zeros((1, 1, wrapped_env.obs_size)), # (time_step, batch_size, obs_size)
-            jnp.zeros((1, 1)) # (time_step, batch size)
+            jnp.zeros((len(env.agents), 1, 1, wrapped_env.obs_size)), # (time_step, batch_size, obs_size)
+            jnp.zeros((len(env.agents), 1, 1)) # (time_step, batch size)
         )
-        init_hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], 1) # (batch_size, hidden_dim)
-        agent_params = agent.init(_rng, init_hstate, init_x)
+        init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents),  1) # (n_agents, batch_size, hidden_dim)
+        rngs = jax.random.split(_rng, len(env.agents)) # a random init for each agent
+        agent_params = jax.vmap(agent.init, in_axes=(0, 0, 0))(rngs, init_hs, init_x)
 
         # init mixer
         rng, _rng = jax.random.split(rng)
@@ -255,7 +256,7 @@ def make_train(config, env):
 
             # prepare the step state and collect the episode trajectory
             rng, _rng = jax.random.split(rng)
-            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_ENVS"])
+            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["NUM_ENVS"])
 
             step_state = (
                 train_state.params['agent'],
@@ -328,7 +329,7 @@ def make_train(config, env):
             rng, _rng = jax.random.split(rng)
             _, learn_traj = buffer.sample(buffer_state, _rng) # (batch_size, max_time_steps, ...)
             learn_traj = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), learn_traj) # (max_time_steps, batch_size, ...)
-            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"]) 
+            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["BUFFER_BATCH_SIZE"]) 
 
             # compute loss and optimize grad
             grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)

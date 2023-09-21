@@ -10,8 +10,22 @@ from smax.environments.multi_agent_env import MultiAgentEnv
 from .buffers import uniform_replay
 from .buffers.uniform import UniformReplayBufferState
 
-from typing import NamedTuple
+from typing import NamedTuple, List
 from functools import partial
+
+from safetensors.flax import save_file, load_file
+from flax.traverse_util import flatten_dict, unflatten_dict
+import typing
+import os 
+
+def save_params(params: typing.Dict, filename: typing.Union[str, os.PathLike]) -> None:
+    flattened_dict = flatten_dict(params, sep=',')
+    save_file(flattened_dict, filename)
+
+def load_params(filename: typing.Union[str, os.PathLike]) -> typing.Dict:
+    flattened_dict = load_file(filename)
+    return unflatten_dict(flattened_dict, sep=',')
+
 
 def get_space_dim(space):
     if isinstance(space, (DiscreteGymnax, Discrete)):
@@ -36,26 +50,32 @@ class CTRolloutManager:
     - global_reward is the sum of all agents' rewards.
     """
 
-    def __init__(self, env: MultiAgentEnv, batch_size:int):
+    def __init__(self, env: MultiAgentEnv, batch_size:int, training_agents:List=None):
         self.env = env
         self.batch_size = batch_size
 
+        self.agents = env.agents
+
+        # the agents to train could differ from the total trainable agents in the env (f.i. if using pretrained agents)
+        # it's important to know it in order to compute properly the default global rewards and state
+        self.training_agents = self.agents if training_agents is None else training_agents    
+
         # TOREMOVE: this is because overcooked doesn't follow other envs conventions
         if len(env.observation_spaces) == 0:
-            env.observation_spaces = {agent:env.observation_space() for agent in env.agents}
+            env.observation_spaces = {agent:env.observation_space() for agent in self.agents}
         if len(env.action_spaces) == 0:
-            env.action_spaces = {agent:env.action_space() for agent in env.agents}
+            env.action_spaces = {agent:env.action_space() for agent in self.agents}
         
         # batched action sampling
-        self.batch_samplers = {agent: jax.jit(jax.vmap(env.action_space(agent).sample, in_axes=0)) for agent in self.env.agents}
+        self.batch_samplers = {agent: jax.jit(jax.vmap(env.action_space(agent).sample, in_axes=0)) for agent in self.agents}
 
         # assumes the observations are flattened vectors
         self.max_obs_length = max(list(map(lambda x: get_space_dim(x), env.observation_spaces.values())))
         self.max_action_space = max(list(map(lambda x: get_space_dim(x), env.action_spaces.values())))
-        self.obs_size = self.max_obs_length + len(env.agents)
+        self.obs_size = self.max_obs_length + len(self.agents)
 
         # agents ids
-        self.agents_one_hot = {a:oh for a, oh in zip(env.agents, jnp.eye(len(env.agents)))}
+        self.agents_one_hot = {a:oh for a, oh in zip(self.agents, jnp.eye(len(self.agents)))}
         # valid actions
         self.valid_actions = {a:jnp.arange(u.n) for a, u in env.action_spaces.items()}
 
@@ -90,11 +110,11 @@ class CTRolloutManager:
 
     @partial(jax.jit, static_argnums=0)
     def global_state(self, obs, state):
-        return jnp.concatenate(list(obs.values()), axis=-1)
+        return jnp.concatenate([obs[agent] for agent in self.training_agents], axis=-1)
     
     @partial(jax.jit, static_argnums=0)
     def global_reward(self, reward):
-        return jnp.stack(list(reward.values())).sum(axis=0) 
+        return jnp.stack([reward[agent] for agent in self.training_agents]).sum(axis=0) 
     
     def batch_sample(self, key, agent):
         return self.batch_samplers[agent](jax.random.split(key, self.batch_size))

@@ -109,8 +109,8 @@ def make_train(config, env):
 
         # INIT ENV
         rng, _rng = jax.random.split(rng)
-        batched_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
-        init_obs, env_state = batched_env.batch_reset(_rng)
+        wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
+        init_obs, env_state = wrapped_env.batch_reset(_rng)
         init_dones = {agent:jnp.zeros((config["NUM_ENVS"]), dtype=bool) for agent in env.agents+['__all__']}
 
         # INIT BUFFER
@@ -118,8 +118,8 @@ def make_train(config, env):
         def _env_sample_step(env_state, unused):
             rng, key_a, key_s = jax.random.split(jax.random.PRNGKey(0), 3) # use a dummy rng here
             key_a = jax.random.split(key_a, env.num_agents)
-            actions = {agent: batched_env.batch_sample(key_a[i], agent) for i, agent in enumerate(env.agents)}
-            obs, env_state, rewards, dones, infos = batched_env.batch_step(key_s, env_state, actions)
+            actions = {agent: wrapped_env.batch_sample(key_a[i], agent) for i, agent in enumerate(env.agents)}
+            obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
             transition = Transition(obs, actions, rewards, dones)
             return env_state, transition
         _, sample_traj = jax.lax.scan(
@@ -130,10 +130,10 @@ def make_train(config, env):
         buffer_state = buffer.reset(sample_traj_unbatched)
 
         # INIT NETWORK
-        agent = AgentRNN(action_dim=batched_env.max_action_space, hidden_dim=config['AGENT_HIDDEN_DIM'])
+        agent = AgentRNN(action_dim=wrapped_env.max_action_space, hidden_dim=config['AGENT_HIDDEN_DIM'])
         rng, _rng = jax.random.split(rng)
         init_x = (
-            jnp.zeros((1, 1, batched_env.obs_size)), # (time_step, batch_size, obs_size)
+            jnp.zeros((1, 1, wrapped_env.obs_size)), # (time_step, batch_size, obs_size)
             jnp.zeros((1, 1)) # (time_step, batch size)
         )
         init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], 1) # (batch_size, hidden_dim)
@@ -180,12 +180,12 @@ def make_train(config, env):
                 # get the q_values from the agent netwoek
                 hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
                 # remove the dummy time_step dimension and index qs by the valid actions of each agent 
-                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, batched_env.valid_actions)
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, wrapped_env.valid_actions)
                 # explore with epsilon greedy_exploration
                 actions = explorer.choose_actions(valid_q_vals, t, key_a)
 
                 # STEP ENV
-                obs, env_state, rewards, dones, infos = batched_env.batch_step(key_s, env_state, actions)
+                obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
                 transition = Transition(last_obs, actions, rewards, dones)
 
                 step_state = (params, env_state, obs, dones, hstate, rng, t+1)
@@ -240,7 +240,7 @@ def make_train(config, env):
                 )
 
                 # get the target for each agent (assumes every agent has a reward)
-                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, batched_env.valid_actions)
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
                 targets = jax.tree_map(
                     compute_target,
                     target_q_vals,
@@ -272,7 +272,7 @@ def make_train(config, env):
             # UPDATE THE VARIABLES AND RETURN
             # reset the environment
             rng, _rng = jax.random.split(rng)
-            init_obs, env_state = batched_env.batch_reset(_rng)
+            init_obs, env_state = wrapped_env.batch_reset(_rng)
             init_dones = {agent:jnp.zeros((config["NUM_ENVS"]), dtype=bool) for agent in env.agents+['__all__']}
 
             # update the states

@@ -1,18 +1,10 @@
 """
-End-to-End JAX Implementation of QMix with Parameters Sharing.
+End-to-End JAX Implementation of QMix with Parameters Sharing and possibility to control some agents with pretrained networks.
 
 Notice:
-- Agents are controlled by a single RNN (parameters sharing).
-- Works also with non-homogenous agents (different obs/action spaces).
-- Experience replay is a simple buffer with uniform sampling.
-- Uses Double Q-Learning with a target agent network and a target mixer network (hard-updated).
-- Loss is the 1-step TD error.
-- Adam optimizer is used instead of RMSPROP.
-- The environment is reset at the end of each episode.
-- Trained with a team reward (reward['__all__'])
-- At the moment, last_actions are not included in the agents' observations.
+- The pretrained network is assumed to follow the same schema of the agent network to train (i.e., AgentRNN below).
+- The pretrained agents are frozen, i.e. they don't improve their policy during training.
 
-The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
 """
 
 import jax
@@ -144,11 +136,14 @@ class MixingNetwork(nn.Module):
         return q_tot.squeeze() # (time_steps, batch_size)
 
 
-def make_train(config, env):
+def make_train(config, env, pretrained_agents:dict):
 
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
+
+    # get the list of the trainable agents names
+    agents = [agent for agent in env.agents if agent not in pretrained_agents]
 
     def linear_schedule(count):
         frac = 1.0 - (count / config["NUM_UPDATES"])
@@ -158,18 +153,19 @@ def make_train(config, env):
 
         # INIT ENV
         rng, _rng = jax.random.split(rng)
-        wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
+        wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"], training_agents=agents)
+        valid_actions = {k:v for k, v in wrapped_env.valid_actions.items() if k in agents}
         init_obs, env_state = wrapped_env.batch_reset(_rng)
         init_dones = {agent:jnp.zeros((config["NUM_ENVS"]), dtype=bool) for agent in env.agents+['__all__']}
 
         # INIT BUFFER
         # to initalize the buffer is necessary to sample a trajectory to know its strucutre
         def _env_sample_step(env_state, unused):
-            rng, key_a, key_s = jax.random.split(jax.random.PRNGKey(0), 3) # use a dummy rng here
-            key_a = jax.random.split(key_a, env.num_agents)
-            actions = {agent: wrapped_env.batch_sample(key_a[i], agent) for i, agent in enumerate(env.agents)}
-            obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
-            transition = Transition(obs, actions, rewards, dones)
+            trainable_actions = {agent: wrapped_env.batch_sample(jax.random.PRNGKey(0), agent) for agent in agents}
+            pretrained_actions = {agent: wrapped_env.batch_sample(jax.random.PRNGKey(0), agent) for agent in pretrained_agents}
+            actions = {**trainable_actions, **pretrained_actions}
+            obs, env_state, rewards, dones, infos = wrapped_env.batch_step(jax.random.PRNGKey(0), env_state, actions)
+            transition = Transition(obs, trainable_actions, rewards, dones)
             return env_state, transition
         _, sample_traj = jax.lax.scan(
             _env_sample_step, env_state, None, config["NUM_STEPS"]
@@ -191,7 +187,7 @@ def make_train(config, env):
 
         # init mixer
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros((len(env.agents), 1, 1))
+        init_x = jnp.zeros((len(agents), 1, 1))
         state_size = sample_traj.obs['__all__'].shape[-1]  # get the state shape from the buffer
         init_state = jnp.zeros((1, 1, state_size))
         mixer = MixingNetwork(config['MIXER_EMBEDDING_DIM'], config["MIXER_HYPERNET_HIDDEN_DIM"])
@@ -228,34 +224,43 @@ def make_train(config, env):
             # EPISODE STEP
             def _env_step(step_state, unused):
 
-                params, env_state, last_obs, last_dones, hstate, rng, t = step_state
+                params, env_state, last_obs, last_dones, hstate, hstate_pretrained, rng, t = step_state
 
                 # prepare rngs for actions and step
                 rng, key_a, key_s = jax.random.split(rng, 3)
 
                 # SELECT ACTION
                 # add a dummy time_step dimension to the agent input
-                obs_   = {a:last_obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
-                obs_   = jax.tree_map(lambda x: x[np.newaxis, :], obs_)
                 dones_ = jax.tree_map(lambda x: x[np.newaxis, :], last_dones)
-                # get the q_values from the agent netwoek
+                timed_obs = jax.tree_map(lambda x: x[np.newaxis, :], last_obs)
+                
+                # get the q_values from the agent network
+                obs_   = {a:timed_obs[a] for a in agents} # ensure to pass only the trainable agents to the network
                 hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
                 # remove the dummy time_step dimension and index qs by the valid actions of each agent 
-                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, wrapped_env.valid_actions)
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, valid_actions)
                 # explore with epsilon greedy_exploration
-                actions = explorer.choose_actions(valid_q_vals, t, key_a)
+                trainable_actions = explorer.choose_actions(valid_q_vals, t, key_a)
 
+                # add the greedy actions for the pretrained agents (this code could be improved)
+                outs  = {a:agent.apply(pretrained_agents[a], hstate_pretrained[i], (timed_obs[a], dones_[a])) for i, a in enumerate(pretrained_agents)}
+                q_vals = {k:o[1] for k, o in outs.items()}
+                hstate_pretrained = jnp.stack([o[0] for o in outs.values()], axis=0)
+                pretrained_actions = jax.tree_util.tree_map(lambda q: jnp.argmax(q.squeeze(0), axis=-1), q_vals)
+                actions = {**trainable_actions, **pretrained_actions}
+                                                
                 # STEP ENV
                 obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
-                transition = Transition(last_obs, actions, rewards, dones)
+                transition = Transition(last_obs, trainable_actions, rewards, dones)
 
-                step_state = (params, env_state, obs, dones, hstate, rng, t+1)
+                step_state = (params, env_state, obs, dones, hstate, hstate_pretrained, rng, t+1)
                 return step_state, transition
 
 
             # prepare the step state and collect the episode trajectory
             rng, _rng = jax.random.split(rng)
-            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_ENVS"])
+            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(agents)*config["NUM_ENVS"])
+            hstate_pretrained = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(pretrained_agents), config["NUM_ENVS"])
 
             step_state = (
                 train_state.params['agent'],
@@ -263,6 +268,7 @@ def make_train(config, env):
                 init_obs,
                 init_dones,
                 hstate, 
+                hstate_pretrained,
                 _rng,
                 time_state['timesteps'] # t is needed to compute epsilon
             )
@@ -282,7 +288,7 @@ def make_train(config, env):
 
             def _loss_fn(params, target_network_params, init_hstate, learn_traj):
 
-                obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
+                obs_ = {a:learn_traj.obs[a] for a in agents} # ensure to not pass the global state (obs["__all__"]) to the network
                 _, q_vals = agent.homogeneous_pass(params['agent'], init_hstate, obs_, learn_traj.dones)
                 _, target_q_vals = agent.homogeneous_pass(target_network_params['agent'], init_hstate, obs_, learn_traj.dones)
 
@@ -294,7 +300,7 @@ def make_train(config, env):
                 )
 
                 # get the target q value of the greedy actions for each agent
-                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, valid_actions)
                 target_max_qvals = jax.tree_map(
                     lambda t_q, q: q_of_action(t_q, jnp.argmax(q, axis=-1))[1:], # avoid first timestep
                     target_q_vals,
@@ -328,7 +334,7 @@ def make_train(config, env):
             rng, _rng = jax.random.split(rng)
             _, learn_traj = buffer.sample(buffer_state, _rng) # (batch_size, max_time_steps, ...)
             learn_traj = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), learn_traj) # (max_time_steps, batch_size, ...)
-            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"]) 
+            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(agents)*config["BUFFER_BATCH_SIZE"]) 
 
             # compute loss and optimize grad
             grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)
@@ -395,15 +401,18 @@ def make_train(config, env):
     return train
 
 
-if __name__ == "__main__":
-
-    from smax import make
+def example():
+    import os
     import time
-    env_name = "MPE_simple_spread_v3"
+    from smax import make
+    from matplotlib import pyplot as plt
+    from .utils import load_params
+
+    env_name = "MPE_simple_tag_v3"
     env = make(env_name)
+
     config = {
         "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
         "BUFFER_SIZE":5000,
         "BUFFER_BATCH_SIZE":32,
         "TOTAL_TIMESTEPS":2e6,
@@ -422,16 +431,21 @@ if __name__ == "__main__":
         "DEBUG": False,
     }
 
-    b = 32 # number of concurrent trainings
+    # load the pretrained agents
+    load_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pretrained', env_name)
+    pretrained_params = load_params(f'{load_dir}/iql_ns.safetensors')
+    pretrained_agents = ['agent_0'] # in simple tag, agents names are ['adversary_0', 'adversary_1', 'adversary_2', 'agent_0'] and agent_0 is the pray
+    pretrained_agents = {a:pretrained_params[a] for a in pretrained_agents}
+
+    b = 4 # number of concurrent trainings
     rng = jax.random.PRNGKey(42)
     rngs = jax.random.split(rng, b)
-    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
+    train_vjit = jax.jit(jax.vmap(make_train(config, env, pretrained_agents)))
     t0 = time.time()
     outs = jax.block_until_ready(train_vjit(rngs))
     t1 = time.time() - t0
     print(f"time: {t1:.2f} s")
 
-    from matplotlib import pyplot as plt
     def rolling_average_plot(x, y, window_size=50, label=''):
         y = jnp.mean(jnp.reshape(y, (-1, window_size)), axis=1)
         x = x[::window_size]
@@ -441,4 +455,9 @@ if __name__ == "__main__":
     plt.xlabel("Timesteps")
     plt.ylabel("Team Returns")
     plt.title(f"{env_name} returns (mean of {b} seeds)")
+    plt.savefig(f"{env_name}_pretrained_qmix_ps.png")
     plt.show()
+
+
+if __name__ == "__main__":
+    example()
