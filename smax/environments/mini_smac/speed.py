@@ -11,13 +11,16 @@ from smax import make
 from smax.environments.mini_smac import map_name_to_scenario
 import time
 
+
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
     return x.reshape((num_actors, -1))
 
+
 def unbatchify(x: dict, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
+
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -56,6 +59,7 @@ class ActorCritic(nn.Module):
 
         return pi, jnp.squeeze(critic, axis=-1)
 
+
 def make_benchmark(config):
     scenario = map_name_to_scenario(config["MAP_NAME"])
     env = make(config["ENV_NAME"], scenario=scenario, **config["ENV_KWARGS"])
@@ -63,8 +67,8 @@ def make_benchmark(config):
     network = ActorCritic(
         env.action_space(env.agents[0]).n, activation=config["ACTIVATION"]
     )
-    def benchmark(rng):
 
+    def benchmark(rng):
         def init_runner_state(rng):
             # INIT NETWORK
             network = ActorCritic(
@@ -79,7 +83,7 @@ def make_benchmark(config):
             obsv, env_state = jax.vmap(env.reset)(reset_rng)
 
             return (params, env_state, obsv, rng)
-    
+
         def env_step(runner_state, unused):
             params, env_state, last_obs, rng = runner_state
 
@@ -88,20 +92,38 @@ def make_benchmark(config):
 
             obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
 
-            pi, _ = network.apply(params, obs_batch)
-            # transform using the available actions
-            avail_actions = jax.vmap(env.get_avail_actions)(env_state)
-            avail_actions = jax.lax.stop_gradient(
-                batchify(avail_actions, env.agents, config["NUM_ACTORS"])
-            )
-            probs = jnp.where(avail_actions, pi.probs, 1e-10)
-            probs = probs / probs.sum(axis=-1)[:, None]
-            pi = distrax.Categorical(probs=probs)
+            if config["ACTION_SELECTION"] == "nn":
+                pi, _ = network.apply(params, obs_batch)
+                # transform using the available actions
+                avail_actions = jax.vmap(env.get_avail_actions)(env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
+                probs = jnp.where(avail_actions, pi.probs, 1e-10)
+                probs = probs / probs.sum(axis=-1)[:, None]
+                pi = distrax.Categorical(probs=probs)
 
-            action = pi.sample(seed=_rng)
-            env_act = unbatchify(
-                action, env.agents, config["NUM_ENVS"], env.num_agents
-            )
+                action = pi.sample(seed=_rng)
+            elif config["ACTION_SELECTION"] == "random":
+                avail_actions = jax.vmap(env.get_avail_actions)(env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
+                avail_actions = avail_actions.reshape(
+                    config["NUM_ENVS"], env.num_agents, -1
+                )
+                logits = jnp.log(
+                    jnp.ones((avail_actions.shape[-1],))
+                    / jnp.sum(jnp.ones((avail_actions.shape[-1],)))
+                )
+                action = jax.random.categorical(
+                    _rng, logits=logits, shape=avail_actions.shape[:-1]
+                )
+                action = action.reshape(config["NUM_ACTORS"], -1)
+            else:
+                raise ValueError("ACTION_SELECTION must be 'random' or 'nn'")
+
+            env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
             env_act = {k: v.squeeze() for k, v in env_act.items()}
 
             # STEP ENV
@@ -113,13 +135,14 @@ def make_benchmark(config):
             info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
             runner_state = (params, env_state, obsv, rng)
             return runner_state, None
+
         rng, init_rng = jax.random.split(rng)
-        runner_state = init_runner_state(init_rng) 
-        runner_state = jax.lax.scan(
-            env_step, runner_state, None, config["NUM_STEPS"]
-        )
+        runner_state = init_runner_state(init_rng)
+        runner_state = jax.lax.scan(env_step, runner_state, None, config["NUM_STEPS"])
         return runner_state
+
     return benchmark
+
 
 def main():
     config = {
@@ -131,6 +154,7 @@ def main():
         "ENV_NAME": "HeuristicEnemyMiniSMAC",
         "NUM_SEEDS": 1,
         "SEED": 0,
+        "ACTION_SELECTION": "random"
     }
     benchmark_fn = jax.jit(make_benchmark(config))
     rng = jax.random.PRNGKey(config["SEED"])
@@ -146,5 +170,6 @@ def main():
     print(f"Total Steps: {num_steps}")
     print(f"SPS: {num_steps / total_time}")
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
