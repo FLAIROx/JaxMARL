@@ -11,7 +11,7 @@ rng = jax.random.PRNGKey(0)
 rng, key_reset, key_act, key_step = jax.random.split(rng, 4)
 
 # Initialise environment.
-env = make('simple_world_comm_v3')
+env = make('MPE_simple_world_comm_v3')
 
 # Reset the environment.
 obs, state = env.reset(key_reset)
