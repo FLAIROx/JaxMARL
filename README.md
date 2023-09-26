@@ -7,8 +7,8 @@ Welcome to the work-in-progress Scalable MARL in Jax (SMAX) library. We build he
 import jax
 from smax import make
 
-rng = jax.random.PRNGKey(0)
-rng, key_reset, key_act, key_step = jax.random.split(rng, 4)
+key = jax.random.PRNGKey(0)
+key, key_reset, key_act, key_step = jax.random.split(rng, 4)
 
 # Initialise environment.
 env = make('MPE_simple_world_comm_v3')
@@ -21,7 +21,7 @@ key_act = jax.random.split(key_a, env.num_agents)
 actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enumerate(env.agents)}
 
 # Perform the step transition.
-n_obs, n_state, reward, done, infos = env.step(key_step, state, action)
+n_obs, n_state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
 ## Installation
