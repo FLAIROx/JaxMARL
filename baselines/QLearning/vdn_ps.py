@@ -110,6 +110,7 @@ def make_train(config, env):
         # INIT ENV
         rng, _rng = jax.random.split(rng)
         wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
+        test_env = CTRolloutManager(env, batch_size=config["NUM_TEST_EPISODES"]) # batched env for testing (has different batch size)
         init_obs, env_state = wrapped_env.batch_reset(_rng)
         init_dones = {agent:jnp.zeros((config["NUM_ENVS"]), dtype=bool) for agent in env.agents+['__all__']}
 
@@ -161,7 +162,7 @@ def make_train(config, env):
         # TRAINING LOOP
         def _update_step(runner_state, unused):
 
-            train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, rng = runner_state
+            train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng = runner_state
 
 
             # EPISODE STEP
@@ -285,6 +286,15 @@ def make_train(config, env):
                 operand=None
             )
 
+            # update the greedy rewards
+            rng, _rng = jax.random.split(rng)
+            test_metrics = jax.lax.cond(
+                time_state['updates'] % (config["TEST_INTERVAL"] // config["NUM_STEPS"] // config["NUM_ENVS"]) == 0,
+                lambda _: get_greedy_metrics(_rng, train_state.params),
+                lambda _: test_metrics,
+                operand=None
+            )
+
             # update the returning metrics
             metrics = {
                 'timesteps': time_state['timesteps']*config['NUM_ENVS'],
@@ -292,6 +302,7 @@ def make_train(config, env):
                 'loss': loss,
                 'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards) # sum of timesteps, mean of envs
             }
+            metrics.update(test_metrics) # add the test metrics dictionary
 
             if config.get("DEBUG"):
 
@@ -307,9 +318,56 @@ def make_train(config, env):
 
                 jax.debug.callback(callback, metrics)
 
-            runner_state = (train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, rng)
+            runner_state = (
+                train_state,
+                target_agent_params,
+                env_state,
+                buffer_state,
+                time_state,
+                init_obs,
+                init_dones,
+                test_metrics,
+                rng
+            )
 
             return runner_state, metrics
+
+        def get_greedy_metrics(rng, params):
+            """Help function to test greedy policy during training"""
+            def _greedy_env_step(step_state, unused):
+                params, env_state, last_obs, last_dones, hstate, rng = step_state
+                rng, key_s = jax.random.split(rng)
+                obs_   = {a:last_obs[a] for a in env.agents}
+                obs_   = jax.tree_map(lambda x: x[np.newaxis, :], obs_)
+                dones_ = jax.tree_map(lambda x: x[np.newaxis, :], last_dones)
+                hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
+                actions = jax.tree_util.tree_map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, wrapped_env.valid_actions)
+                obs, env_state, rewards, dones, infos = test_env.batch_step(key_s, env_state, actions)
+                step_state = (params, env_state, obs, dones, hstate, rng)
+                return step_state, rewards
+            rng, _rng = jax.random.split(rng)
+            init_obs, env_state = test_env.batch_reset(_rng)
+            init_dones = {agent:jnp.zeros((config["NUM_TEST_EPISODES"]), dtype=bool) for agent in env.agents+['__all__']}
+            rng, _rng = jax.random.split(rng)
+            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_TEST_EPISODES"])
+            step_state = (
+                params,
+                env_state,
+                init_obs,
+                init_dones,
+                hstate, 
+                _rng,
+            )
+            step_state, rewards = jax.lax.scan(
+                _greedy_env_step, step_state, None, config["NUM_STEPS"]
+            )
+            metrics = {
+                'test_rewards': jax.tree_map(lambda x: jnp.sum(x, axis=0), rewards) # sum the episode rewards across timesteps (but keep seperate for envs)
+            }
+            return metrics
+
+        rng, _rng = jax.random.split(rng)
+        test_metrics = get_greedy_metrics(_rng, train_state.params) # initial greedy metrics
         
         # train
         time_state = {
@@ -317,7 +375,17 @@ def make_train(config, env):
             'updates':  jnp.array(0)
         }
         rng, _rng = jax.random.split(rng)
-        runner_state = (train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, _rng)
+        runner_state = (
+            train_state,
+            target_agent_params,
+            env_state,
+            buffer_state,
+            time_state,
+            init_obs,
+            init_dones,
+            test_metrics,
+            _rng
+        )
         runner_state, metrics = jax.lax.scan(
             _update_step, runner_state, None, config["NUM_UPDATES"]
         )
@@ -337,7 +405,7 @@ if __name__ == "__main__":
         "NUM_STEPS": env.max_steps,
         "BUFFER_SIZE":5000,
         "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e+6,
+        "TOTAL_TIMESTEPS":2e6+5e4,
         "AGENT_HIDDEN_DIM":64,
         "EPSILON_START": 1.0,
         "EPSILON_FINISH": 0.05,
@@ -348,6 +416,8 @@ if __name__ == "__main__":
         "LR": 0.005,
         "GAMMA": 0.99,
         "DEBUG": False,
+        "NUM_TEST_EPISODES":32,
+        "TEST_INTERVAL": 5e4
     }
 
     b = 32 # number of concurrent trainings
