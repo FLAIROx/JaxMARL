@@ -152,7 +152,7 @@ class UniformUnitTypeDistribution(Distribution):
                     enemy_key,
                     jnp.log(jnp.ones((self.n_unit_types)) / self.n_unit_types),
                     shape=(self.n_enemies - self.n_allies,),
-                )
+                ).astype(jnp.uint8)
             ),
         )
-        return jnp.concatenate([ally_unit_types, enemy_unit_types])
+        return jnp.concatenate([ally_unit_types, enemy_unit_types], dtype=jnp.uint8)
