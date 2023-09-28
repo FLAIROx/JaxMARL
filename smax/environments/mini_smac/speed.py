@@ -156,13 +156,11 @@ def main():
         "SEED": 0,
         "ACTION_SELECTION": "random"
     }
-    benchmark_fn = jax.jit(make_benchmark(config))
+    benchmark_fn = make_benchmark(config)
     rng = jax.random.PRNGKey(config["SEED"])
-    rng, _rng = jax.random.split(rng)
-    _rng = jax.random.split(_rng, num=config["NUM_SEEDS"])
-    benchmark_vmap = jax.vmap(benchmark_fn)
+    benchmark_jit = jax.jit(benchmark_fn).lower(rng).compile()
     before = time.perf_counter_ns()
-    runner_state = benchmark_vmap(_rng)
+    runner_state = jax.block_until_ready(benchmark_jit(rng))
     after = time.perf_counter_ns()
     num_steps = config["NUM_ENVS"] * config["NUM_STEPS"]
     total_time = (after - before) / 1e9
