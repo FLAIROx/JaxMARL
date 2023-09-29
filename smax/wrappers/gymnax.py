@@ -22,7 +22,7 @@ class GymnaxToSMAX(object):
     def step(self, key, state, actions, params=None):
         keys = jax.random.split(key, num=self.num_agents)
         actions = jnp.stack([actions[agent] for agent in self.agents])
-        obs, state, reward, done, info = self.step_fn(keys, state, actions.squeeze(), params)
+        obs, state, reward, done, info = self.step_fn(keys, state, actions.squeeze(axis=-1), params)
         obs = {agent: obs[i] for i, agent in enumerate(self.agents)}
         reward = {agent: reward.mean() for agent in self.agents}
         smax_dones = {agent: done[i] for i, agent in enumerate(self.agents)}
