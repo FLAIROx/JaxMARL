@@ -110,8 +110,8 @@ class LogWrapper(SMAXWrapper):
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action
         )
-        # ep_done = done["__all__"]
-        ep_done = jnp.all(done)
+        ep_done = done["__all__"]
+        # ep_done = jnp.all(done)
         # new_episode_return = state.episode_returns + self._batchify_floats(reward)
         new_episode_return = state.episode_returns + reward
         new_episode_length = state.episode_lengths + 1
