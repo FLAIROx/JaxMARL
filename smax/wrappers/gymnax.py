@@ -1,16 +1,18 @@
 import jax
+import jax.numpy as jnp
 from functools import partial
 import gymnax
 
 class GymnaxToSMAX(object):
     
-    num_agents = 1
-    agent = "agent"
-    agents = [agent]
     
-    def __init__(self, env_name: str, env_kwargs: dict = {}):
-        self.env_name = env_name 
+    def __init__(self, env_name: str, num_agents: int = 1, env_kwargs: dict = {}):
+        self.env_name = env_name
+        self.num_agents = num_agents
+        self.agents = [f"agent_{i}" for i in range(self.num_agents)]
         self._env, self.env_params = gymnax.make(env_name, **env_kwargs)
+        self.step_fn = jax.vmap(self._env.step, in_axes=(0, 0, 0, None))
+        self.reset_fn = jax.vmap(self._env.reset, in_axes=(0, None))
         
     @property
     def default_params(self):
@@ -18,19 +20,26 @@ class GymnaxToSMAX(object):
         
     @partial(jax.jit, static_argnums=(0,))
     def step(self, key, state, actions, params=None):
-        print('act', actions[self.agent])
-        obs, state, reward, done, info = self._env.step(key, state, actions[self.agent].squeeze(), params)
-        obs = {self.agent: obs}
-        reward = {self.agent: reward}
-        done = {self.agent: done, "__all__": done}
-        return obs, state, reward, done, info
+        keys = jax.random.split(key, num=self.num_agents)
+        actions = jnp.stack([actions[agent] for agent in self.agents])
+        obs, state, reward, done, info = self.step_fn(keys, state, actions.squeeze(), params)
+        obs = {agent: obs[i] for i, agent in enumerate(self.agents)}
+        reward = {agent: reward.mean() for agent in self.agents}
+        smax_dones = {agent: done[i] for i, agent in enumerate(self.agents)}
+        smax_dones["__all__"] = jnp.all(done)
+        return obs, state, reward, smax_dones, info
     
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key, params=None):
-        obs, state = self._env.reset(key, params)
-        obs = {self.agent: obs}
+        keys = jax.random.split(key, num=self.num_agents)
+        obs, state = self.reset_fn(keys, params)
+        obs = {agent: obs[i] for i, agent in enumerate(self.agents)}
         return obs, state
-        
+
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state):
+        return {agent: jnp.ones((self.action_space(agent).n,)) for agent in self.agents}
+
     def observation_space(self, agent: str):
         return self._env.observation_space(self.env_params)
     
