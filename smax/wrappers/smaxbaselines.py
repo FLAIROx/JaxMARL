@@ -22,8 +22,8 @@ class SMAXWrapper(object):
     #     x = jnp.stack([x[a] for a in self._env.agents])
     #     return x.reshape((self._env.num_agents, -1))
     
-    # def _batchify_floats(self, x: dict):
-    #     return jnp.stack([x[a] for a in self._env.agents])
+    def _batchify_floats(self, x: dict):
+        return jnp.stack([x[a] for a in self._env.agents])
 
 
 class ArrayInterfaceWrapper(SMAXWrapper):
@@ -112,8 +112,8 @@ class LogWrapper(SMAXWrapper):
         )
         ep_done = done["__all__"]
         # ep_done = jnp.all(done)
-        # new_episode_return = state.episode_returns + self._batchify_floats(reward)
-        new_episode_return = state.episode_returns + reward
+        new_episode_return = state.episode_returns + self._batchify_floats(reward)
+        # new_episode_return = state.episode_returns + reward
         new_episode_length = state.episode_lengths + 1
         state = LogEnvState(
             env_state=env_state,
