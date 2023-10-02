@@ -19,22 +19,22 @@ def get_no_jax_time(parallel_envs, num_agents, max_steps):
 
 def get_jax_time(parallel_envs, num_agents, max_steps):
     env = make("switch_riddle", num_agents=num_agents)
-    batched_env = RolloutManager(env, batch_size=parallel_envs)
+    wrapped_env = RolloutManager(env, batch_size=parallel_envs)
     key = jax.random.PRNGKey(0)
 
     # run once to make sure to compile
     key, key_r, key_a, key_s = jax.random.split(key, 4)
-    _, state = batched_env.batch_reset(key_r)
+    _, state = wrapped_env.batch_reset(key_r)
     key_a = jax.random.split(key_a, env.num_agents)
     actions = {
-        agent: batched_env.batch_sample(key_a[i], agent)
+        agent: wrapped_env.batch_sample(key_a[i], agent)
         for i, agent in enumerate(env.agents)
     }
-    _, state, _, _, _ = batched_env.batch_step(key_s, state, actions)
+    _, state, _, _, _ = wrapped_env.batch_step(key_s, state, actions)
 
     # run
     key, key_r = jax.random.split(key)
-    _, state = batched_env.batch_reset(key_r)
+    _, state = wrapped_env.batch_reset(key_r)
 
     t0 = time.time()
     for i in range(max_steps):
@@ -45,7 +45,7 @@ def get_jax_time(parallel_envs, num_agents, max_steps):
             _,
             _,
             _,
-        ) = batched_env.batch_step(key_s, state, actions)
+        ) = wrapped_env.batch_step(key_s, state, actions)
 
     return time.time() - t0
 
