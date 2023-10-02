@@ -162,7 +162,7 @@ def main():
         "MAP_NAME": "50m",
         "ENV_KWARGS": {
             "map_width": 32,
-            "map_width": 32,
+            "map_height": 32,
         },
         "ENV_NAME": "HeuristicEnemyMiniSMAC",
         "NUM_SEEDS": 1,
