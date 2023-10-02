@@ -160,7 +160,10 @@ def main():
         "NUM_ENVS": 4,
         "ACTIVATION": "relu",
         "MAP_NAME": "50m",
-        "ENV_KWARGS": {},
+        "ENV_KWARGS": {
+            "map_width": 32,
+            "map_width": 32,
+        },
         "ENV_NAME": "HeuristicEnemyMiniSMAC",
         "NUM_SEEDS": 1,
         "SEED": 0,
