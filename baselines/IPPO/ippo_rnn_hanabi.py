@@ -20,7 +20,6 @@ from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
 # from smax.wrappers.smaxbaselines import LogWrapper
 from smax.wrappers.smaxbaselines import LogWrapper
 # from smax.wrappers.gymnax import GymnaxToSMAX
-from utils import batchify, unbatchify
 from smax.environments.hanabi import HanabiGame
 import wandb
 import functools
@@ -103,6 +102,16 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
     avail_actions: jnp.ndarray
+
+
+def batchify(x: dict, agent_list, num_actors):
+    x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
+    x = x.reshape((num_actors, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}
 
 
 def make_train(config):
