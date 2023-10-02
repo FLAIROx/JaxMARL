@@ -22,53 +22,9 @@ class SMAXWrapper(object):
     #     x = jnp.stack([x[a] for a in self._env.agents])
     #     return x.reshape((self._env.num_agents, -1))
     
-    # def _batchify_floats(self, x: dict):
-    #     return jnp.stack([x[a] for a in self._env.agents])
+    def _batchify_floats(self, x: dict):
+        return jnp.stack([x[a] for a in self._env.agents])
 
-
-class ArrayInterfaceWrapper(SMAXWrapper):
-    """ Convert outputs from dicts to arrays, indexed by agent.
-    Only works for domains with where agent observations & actions are all the same size.
-    NOTE: old name - HomogenousBatch
-    """
-    def __init__(self, env: MultiAgentEnv):
-        super().__init__(env)
-        self.num_agents = self._env.num_agents
-    
-    @partial(jax.jit, static_argnums=(0,))
-    def reset(
-        self, key: chex.PRNGKey
-    ) -> Tuple[chex.Array, State]:
-        obs, state = self._env.reset(key)
-        obs = jnp.stack([obs[a] for a in self._env.agents])
-        obs = jnp.reshape(obs, (self._env.num_agents, -1))
-        return obs, state
-        
-    @partial(jax.jit, static_argnums=(0,))
-    def step(
-        self,
-        key,
-        state,
-        actions,
-    ):
-        actions = {a: actions[i] for i, a in enumerate(self._env.agents)}
-        obs, state, reward, done, info = self._env.step(key, state, actions)
-        obs = jnp.stack([obs[a] for a in self._env.agents])
-        obs = jnp.reshape(obs, (self._env.num_agents, -1))
-        reward = jnp.stack([reward[a] for a in self._env.agents])
-        reward = jnp.reshape(reward, (self._env.num_agents,))
-        done = jnp.stack([done[a] for a in self._env.agents])
-        done = jnp.reshape(done, (self._env.num_agents,))
-        return obs, state, reward, done, info
-    
-    def observation_space(self, agent: int = 0):
-        agent_name = self._env.agents[agent]
-        return self._env.observation_space(agent_name)
-    
-    def action_space(self, agent: int = 0):
-        agent_name = self._env.agents[agent]
-        return self._env.action_space(agent_name)
-        
 
 @struct.dataclass
 class LogEnvState:
@@ -110,10 +66,8 @@ class LogWrapper(SMAXWrapper):
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action
         )
-        # ep_done = done["__all__"]
-        ep_done = jnp.all(done)
-        # new_episode_return = state.episode_returns + self._batchify_floats(reward)
-        new_episode_return = state.episode_returns + reward
+        ep_done = done["__all__"]
+        new_episode_return = state.episode_returns + self._batchify_floats(reward)
         new_episode_length = state.episode_lengths + 1
         state = LogEnvState(
             env_state=env_state,

@@ -20,7 +20,10 @@ import flax.linen as nn
 import distrax
 from smax import make
 from smax.environments.mini_smac import map_name_to_scenario
-from smax.environments.mini_smac.heuristic_enemy import create_heuristic_policy
+from smax.environments.mini_smac.heuristic_enemy import (
+    create_heuristic_policy,
+    get_heuristic_policy_initial_state,
+)
 from smax.viz.visualizer import Visualizer, MiniSMACVisualizer
 import os
 from typing import Sequence
@@ -28,7 +31,7 @@ from typing import Sequence
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
 max_steps = 30
-key = jax.random.PRNGKey(1)
+key = jax.random.PRNGKey(2)
 key, key_r, key_a, key_p = jax.random.split(key, 4)
 
 
@@ -62,15 +65,18 @@ def init_policy(env, rng):
 
 # Instantiate environment
 with jax.disable_jit(False):
-    scenario = map_name_to_scenario("3m")
+    # scenario = map_name_to_scenario("5m_vs_6m")
     env = make(
-        "HeuristicEnemyMiniSMAC",
-        enemy_shoots=True,
-        scenario=scenario,
-        num_agents_per_team=3,
+        "MiniSMAC",
+        # attack_mode="random",
+        # scenario=scenario,
         use_self_play_reward=False,
         walls_cause_death=True,
         see_enemy_actions=False,
+        num_allies=3,
+        num_enemies=5,
+        smacv2_position_generation=True,
+        smacv2_unit_type_generation=True,
     )
     # env = make("MiniSMAC")
     # params = init_policy(env, key_p)
@@ -87,25 +93,34 @@ with jax.disable_jit(False):
     }
     print("example action dict", actions)
 
-    policy = create_heuristic_policy(env, 0, shoot=True)
+    policy_states = {
+        agent: get_heuristic_policy_initial_state() for agent in env.agents
+    }
+    policy = create_heuristic_policy(env, 0, shoot=True, attack_mode="closest")
+    enemy_policy = create_heuristic_policy(env, 1, shoot=True, attack_mode="closest")
     state_seq = []
     returns = {a: 0 for a in env.agents}
     for i in range(max_steps):
         # Iterate random keys and sample actions
         key, key_s, key_seq = jax.random.split(key, 3)
         key_a = jax.random.split(key_seq, env.num_agents)
-        actions = {
-            agent: policy(key_a[i], obs[agent]) for i, agent in enumerate(env.agents)
-        }
+        actions = {}
+        for i, agent in enumerate(env.agents):
+            p = policy if i < env.num_allies else enemy_policy
+            action, policy_state = p(key_a[i], policy_states[agent], obs[agent])
+            policy_states[agent] = policy_state
+            actions[agent] = action
+
         # actions = {agent: jnp.array(1) for agent in env.agents}
         # actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
         state_seq.append((key_s, state, actions))
         # Step environment
+        avail_actions = env.get_avail_actions(state)
         obs, state, rewards, dones, infos = env.step(key_s, state, actions)
+        print(f"Actions: {actions}")
         returns = {a: returns[a] + rewards[a] for a in env.agents}
         if dones["__all__"]:
             print(f"Returns: {returns}")
-
 print(f"Returns: {returns}")
 viz = MiniSMACVisualizer(env, state_seq)
 
