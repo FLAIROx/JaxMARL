@@ -413,7 +413,7 @@ def make_train(config, env):
                 actions = jax.tree_util.tree_map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, wrapped_env.valid_actions)
                 obs, env_state, rewards, dones, infos = test_env.batch_step(key_s, env_state, actions)
                 step_state = (params, env_state, obs, dones, hstate, rng)
-                return step_state, rewards
+                return step_state, (rewards, dones)
             rng, _rng = jax.random.split(rng)
             init_obs, env_state = test_env.batch_reset(_rng)
             init_dones = {agent:jnp.zeros((config["NUM_TEST_EPISODES"]), dtype=bool) for agent in env.agents+['__all__']}
@@ -427,11 +427,18 @@ def make_train(config, env):
                 hstate, 
                 _rng,
             )
-            step_state, rewards = jax.lax.scan(
+            step_state, rews_dones = jax.lax.scan(
                 _greedy_env_step, step_state, None, config["NUM_STEPS"]
             )
+            # compute the episode returns of the first episode that is done for each parallel env
+            def first_episode_returns(rewards, dones):
+                first_done = jax.lax.select(jnp.argmax(dones)==0., dones.size, jnp.argmax(dones))
+                first_episode_mask = jnp.where(jnp.arange(dones.size) <= first_done, True, False)
+                return jnp.where(first_episode_mask, rewards, 0.).sum()
+            all_dones = rews_dones[1]['__all__']
+            returns = jax.tree_map(lambda r: jax.vmap(first_episode_returns, in_axes=1)(r, all_dones), rews_dones[0])
             metrics = {
-                'test_rewards': jax.tree_map(lambda x: jnp.sum(x, axis=0), rewards) # sum the episode rewards across timesteps (but keep seperate for envs)
+                'test_returns': returns # episode returns
             }
             return metrics
 

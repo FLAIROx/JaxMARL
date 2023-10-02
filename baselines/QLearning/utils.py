@@ -78,6 +78,7 @@ class CTRolloutManager:
         self.agents_one_hot = {a:oh for a, oh in zip(self.agents, jnp.eye(len(self.agents)))}
         # valid actions
         self.valid_actions = {a:jnp.arange(u.n) for a, u in env.action_spaces.items()}
+        self.valid_actions_oh ={a:jnp.concatenate((jnp.ones(u.n), jnp.zeros(self.max_action_space - u.n))) for a, u in env.action_spaces.items()}
 
         # custom global state for specific envs
         if 'smac' in env.name.lower():
