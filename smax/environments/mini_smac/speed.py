@@ -8,7 +8,7 @@ import numpy as np
 import optax
 import distrax
 from smax import make
-from smax.environments.mini_smac import map_name_to_scenario
+from smax.environments.mini_smac import map_name_to_scenario, Scenario
 import time
 
 
@@ -20,6 +20,13 @@ def batchify(x: dict, agent_list, num_actors):
 def unbatchify(x: dict, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
+
+EXTRA_SCENARIOS = {
+    "5m": Scenario(jnp.zeros((10,), dtype=jnp.uint8), num_allies=5, num_enemies=5, smacv2_position_generation=False, smacv2_unit_type_generation=False),
+    "50m": Scenario(jnp.zeros((100,), dtype=jnp.uint8), num_allies=50, num_enemies=50, smacv2_position_generation=False, smacv2_unit_type_generation=False),
+    "500m": Scenario(jnp.zeros((1000,), dtype=jnp.uint8), num_allies=500, num_enemies=500, smacv2_position_generation=False, smacv2_unit_type_generation=False),
+    "5000m": Scenario(jnp.zeros((10000,), dtype=jnp.uint8), num_allies=5000, num_enemies=5000, smacv2_position_generation=False, smacv2_unit_type_generation=False)
+}
 
 
 class ActorCritic(nn.Module):
@@ -61,7 +68,10 @@ class ActorCritic(nn.Module):
 
 
 def make_benchmark(config):
-    scenario = map_name_to_scenario(config["MAP_NAME"])
+    if config["MAP_NAME"] in EXTRA_SCENARIOS:
+        scenario = EXTRA_SCENARIOS[config["MAP_NAME"]]
+    else:
+        scenario = map_name_to_scenario(config["MAP_NAME"])
     env = make(config["ENV_NAME"], scenario=scenario, **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     network = ActorCritic(
@@ -149,7 +159,7 @@ def main():
         "NUM_STEPS": 128,
         "NUM_ENVS": 4,
         "ACTIVATION": "relu",
-        "MAP_NAME": "3m",
+        "MAP_NAME": "50m",
         "ENV_KWARGS": {},
         "ENV_NAME": "HeuristicEnemyMiniSMAC",
         "NUM_SEEDS": 1,
