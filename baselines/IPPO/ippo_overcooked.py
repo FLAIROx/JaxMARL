@@ -19,7 +19,6 @@ from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
 from smax.wrappers.gymnax import GymnaxToSMAX
-from utils import batchify, unbatchify
 from smax.environments.overcooked import overcooked_layouts
 from smax.viz.overcooked_visualizer import OvercookedVisualizer
 
@@ -113,6 +112,15 @@ def get_rollout(train_state, config):
 
     return state_seq
 
+def batchify(x: dict, agent_list, num_actors):
+    x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
+    x = x.reshape((num_actors, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}
+
 def make_train(config):
     env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
@@ -125,7 +133,6 @@ def make_train(config):
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
     
-    #env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
     env = LogWrapper(env)
     
     def linear_schedule(count):
