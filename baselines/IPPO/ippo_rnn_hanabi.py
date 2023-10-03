@@ -44,14 +44,15 @@ class ScannedRNN(nn.Module):
             self.initialize_carry(ins.shape[0], ins.shape[1]),
             rnn_state,
         )
-        new_rnn_state, y = nn.GRUCell()(rnn_state, ins)
+        new_rnn_state, y = nn.GRUCell(features=ins.shape[1])(rnn_state, ins)
         return new_rnn_state, y
 
     @staticmethod
     def initialize_carry(batch_size, hidden_size):
         # Use a dummy key since the default state init fn is just zeros.
-        return nn.GRUCell.initialize_carry(
-            jax.random.PRNGKey(0), (batch_size,), hidden_size
+        cell = nn.GRUCell(features=ins.shape[1])
+        return cell.initialize_carry(
+            jax.random.PRNGKey(0), (batch_size, hidden_size)
         )
 
 
