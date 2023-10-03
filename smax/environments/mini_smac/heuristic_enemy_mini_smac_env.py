@@ -94,6 +94,9 @@ class EnemyMiniSMAC(MultiAgentEnv):
         obs = self.get_all_unit_obs(state)
         return {agent: obs[agent] for agent in self.agents}
 
+    def get_world_state(self, state: State):
+        return self._env.get_world_state(state.state)
+
     def is_terminal(self, state: State):
         return self._env.is_terminal(state.state)
 
