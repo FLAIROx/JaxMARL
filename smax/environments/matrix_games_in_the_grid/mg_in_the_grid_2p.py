@@ -1,6 +1,6 @@
 from enum import IntEnum
 import math
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, Dict
 
 import chex
 import jax
@@ -188,7 +188,7 @@ class InTheGrid_2p(MultiAgentEnv):
     """
 
     # used for caching
-    tile_cache: dict[tuple[Any, ...], Any] = {}
+    tile_cache: Dict[Tuple[Any, ...], Any] = {}
 
     def __init__(
         self,
@@ -751,15 +751,17 @@ class InTheGrid_2p(MultiAgentEnv):
             inner_t = state_nxt.inner_t
             outer_t = state_nxt.outer_t
             reset_inner = inner_t == num_inner_steps
+            done = {}
+            done["__all__"] = reset_inner = inner_t == num_inner_steps
 
             # if inner episode is done, return start state for next game
-            state_re = _reset_state(key)
-            state_re = state_re.replace(outer_t=outer_t + 1)
-            state = jax.tree_map(
-                lambda x, y: jax.lax.select(reset_inner, x, y),
-                state_re,
-                state_nxt,
-            )
+            # state_re = _reset_state(key)
+            # state_re = state_re.replace(outer_t=outer_t + 1)
+            # state = jax.tree_map(
+            #     lambda x, y: jax.lax.select(reset_inner, x, y),
+            #     state_re,
+            #     state_nxt,
+            # )
 
             obs = _get_obs(state)
             blue_reward = jnp.where(reset_inner, 0, blue_reward)
@@ -768,7 +770,7 @@ class InTheGrid_2p(MultiAgentEnv):
                 obs,
                 state,
                 (red_reward, blue_reward),
-                reset_inner,
+                done,
                 {"discount": jnp.zeros((), dtype=jnp.int8)},
             )
 
@@ -915,7 +917,7 @@ class InTheGrid_2p(MultiAgentEnv):
         return len(Actions)
 
     def action_space(
-        self
+        self, agent_id: Union[int, None] = None
     ) -> spaces.Discrete:
         """Action space of the environment."""
         return spaces.Discrete(len(Actions))

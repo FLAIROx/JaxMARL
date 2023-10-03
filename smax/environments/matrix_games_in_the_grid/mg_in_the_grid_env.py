@@ -348,7 +348,7 @@ class InTheGrid(MultiAgentEnv):
             agent_orientations = state.agent_positions[:, 2]
 
             zaps = actions == Actions.interact
-            print(zaps, 'zaps')
+            # print(zaps, 'zaps')
             def get_target(agent_pos, grid):
                 target = jnp.clip(
                     agent_pos + STEP[agent_pos[2]], 0, GRID_SIZE - 1
@@ -652,7 +652,7 @@ class InTheGrid(MultiAgentEnv):
             mask = jnp.eye(n, dtype=bool)
             row_selector = ~mask
             collision_matrix = jnp.where(row_selector, collisions, collisions[0])[:, 1:]
-            print(collision_matrix, 'collision matrix')
+            # print(collision_matrix, 'collision matrix')
             # print(new_agent_positions, 'new agent positions')
             # print(state.agent_positions, 'old agent positions')
 
@@ -687,7 +687,7 @@ class InTheGrid(MultiAgentEnv):
             # utm_transposed = upper_triangle_matrix.T + 1 % 2
             
             takes_square_matrix = upper_triangle_matrix + lower_triangle_matrix.T
-            print(takes_square_matrix, 'takes square matrix')
+            # print(takes_square_matrix, 'takes square matrix')
             # print(takes_square_matrix, 'takes square matrix 1')
 
             n = takes_square_matrix.shape[0]
@@ -720,7 +720,7 @@ class InTheGrid(MultiAgentEnv):
                 pos_new,
                 )
                 return new_pos
-            print(takes_square_matrix, 'takes square matrix 2')
+            # print(takes_square_matrix, 'takes square matrix 2')
             vmap_update_rand_pos = jax.vmap(jax.vmap(update_rand_pos, (None, None, 0, None, 0, 0), 0), (0, 0, 0, 0, 0, 0), 0)
             updated_position = vmap_update_rand_pos(state.agent_positions, updated_position_coll, collision_matrix, moves, move_matrix, takes_square_matrix)
             updated_position = vmap_process_positions(updated_position, state.agent_positions, updated_position_coll)
