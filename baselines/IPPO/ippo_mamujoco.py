@@ -14,7 +14,7 @@ from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
 import smax
-from smax.wrappers.smaxbaselines import LogWrapper, ArrayInterfaceWrapper
+from smax.wrappers.smaxbaselines import LogWrapper
 import matplotlib.pyplot as plt
 
 class ActorCritic(nn.Module):
@@ -64,6 +64,14 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
+def batchify(x: dict, agent_list, num_actors):
+    x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
+    x = x.reshape((num_actors, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}
+
 def make_train(config):
     env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
@@ -75,7 +83,6 @@ def make_train(config):
     )
     
     #env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
-    env = ArrayInterfaceWrapper(env)
     env = LogWrapper(env, replace_info=True)
     
     def linear_schedule(count):
@@ -85,9 +92,10 @@ def make_train(config):
     def train(rng):
 
         # INIT NETWORK
-        network = ActorCritic(env.action_space().shape[0], activation=config["ACTIVATION"])
+        # TODO doesn't work for non-homogenous agents
+        network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros(env.observation_space().shape)
+        init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -107,35 +115,39 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
-        
+
+
+
         # TRAIN LOOP
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, rng = runner_state
 
+                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
                 
-                pi, value = network.apply(train_state.params, last_obs)
+                pi, value = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
+                env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
 
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
-                    rng_step, env_state, action,
+                    rng_step, env_state, env_act,
                 )
 
-                # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 transition = Transition(
-                    done,
+                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
                     action,
                     value,
-                    reward,
+                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
                     log_prob,
-                    last_obs,
+                    obs_batch,
                     info,
                 )
                 runner_state = (train_state, env_state, obsv, rng)
@@ -147,7 +159,8 @@ def make_train(config):
             
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, rng = runner_state
-            _, last_val = network.apply(train_state.params, last_obs)
+            last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+            _, last_val = network.apply(train_state.params, last_obs_batch)
 
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
@@ -234,7 +247,7 @@ def make_train(config):
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
                 batch = jax.tree_util.tree_map(
-                    lambda x: x.reshape((batch_size,) + x.shape[3:]), batch
+                    lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
                 shuffled_batch = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
