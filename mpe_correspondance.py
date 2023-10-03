@@ -1,8 +1,12 @@
 """
-Test transfer learning between the two environments. 
+Test policy transfer between our MPE implementation and PettingZoo's. 
 
-Initiliase from petting zoo, copy state into JAX initial state. Take actions 
-with JAX policy. compare accumulated reward.
+Methodology:
+    1. Initilaise JAX internal state from the output of PettingZoo's `reset` method.
+    2. Rollout both implementations distinctly
+    3. Compare accumulated reward
+    4. Repeat for multiple rollouts
+
 """
 
 import jax
@@ -11,7 +15,8 @@ from jax import numpy as jnp
 from smax import make
 from baselines.QLearning.utils import load_params, get_space_dim
 from baselines.QLearning.iql_ps import AgentRNN, ScannedRNN
-from pettingzoo.mpe import simple_speaker_listener_v4
+from pettingzoo.mpe import simple_speaker_listener_v4, simple_spread_v3
+import tqdm
 
 
 def np_state_to_jax(env_zoo, env_jax):
@@ -38,7 +43,7 @@ def np_state_to_jax(env_zoo, env_jax):
         #print('zoo landmark pos', landmark.state.p_pos)
         
     state = {
-        "p_pos": p_pos,
+        "p_pos": jnp.array(p_pos),
         "p_vel": p_vel,
         "c": c,
         "step": env_zoo.aec_env.env.steps,
@@ -68,17 +73,12 @@ key = jax.random.PRNGKey(42)
 key, key_r = jax.random.split(key)
 
 env_name = "MPE_simple_speaker_listener_v4"
+env_name = "MPE_simple_spread_v3"
 env_jax = make(env_name)
 env_jax.reset(key_r)
 
 env_zoo = simple_speaker_listener_v4.parallel_env()
-obs_zoo = env_zoo.reset()
-
-state = np_state_to_jax(env_zoo, env_jax)
-
-obs_jax = env_jax.get_obs(state)
-print(obs_jax)
-print(obs_zoo)
+env_zoo = simple_spread_v3.parallel_env()
 
 
 
@@ -129,35 +129,67 @@ def obs_to_act(obs, dones):
         
     return actions 
 
-'''# reset
+num_ep = 1000
 
-dones = {agent:jnp.zeros(1, dtype=bool) for agent in env.agents+['__all__']}
-obs, state = env.reset(key)
+ra = env_jax.agents[0]
 
-# prepare inputs
-obs = jax.tree_util.tree_map(_preprocess_obs, obs, agents_one_hot)
+rew_tally = np.empty((num_ep, 2))
 
-# add a dummy temporal dimension
-obs_   = jax.tree_map(lambda x: x[np.newaxis, np.newaxis, :], obs) # add also a dummy batch dim to obs
-dones_ = jax.tree_map(lambda x: x[np.newaxis, :], dones)
+for e in tqdm.tqdm(range(num_ep)):
 
-# pass in one with homogeneous pass
-hstate = ScannedRNN.initialize_carry(agent_hidden_dim, len(env.agents))
-hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
+    obs_zoo, _ = env_zoo.reset()
 
-# get actions from q vals
-valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, valid_actions)
-actions = jax.tree_util.tree_map(lambda q: jnp.argmax(q, axis=-1).squeeze(0), valid_q_vals)
-'''
+    state = np_state_to_jax(env_zoo, env_jax)
 
-# zoo cycle
-done_zoo = {agent:jnp.zeros(1, dtype=bool) for agent in env_jax.agents+['__all__']}
+    obs_jax = env_jax.get_obs(state)
+    #print(obs_jax)
+    #print(obs_zoo)
 
-for _ in range(10):
+    done_zoo = {agent: True for agent in env_jax.agents}
 
-    acts = obs_to_act(obs_zoo, done_zoo)
-    obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(acts)
+    rew_tallys_zoo = {agent: 0 for agent in env_jax.agents}
+    ## ZOO CYCLE
 
+    for j in range(25):
+        #print('-- zoo iteration ', j)
+        #print('obs', obs_zoo)
+        
+        done_zoo = {a: jnp.array([i]) for a, i in done_zoo.items()}
+        done_zoo["__all__"] = jnp.all(jnp.array([done_zoo[a] for a in done_zoo.keys()]))[None]
+        #print('done', done_zoo)
+        acts = obs_to_act(obs_zoo, done_zoo)
+        acts = {a:int(i) for a, i in acts.items()}
+        #print('acts', acts)
+        obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(acts)
+        #print('done', done_zoo, 'rew', rew_zoo)
+        rew_tallys_zoo = {a: r + rew_zoo[a] for a, r in rew_tallys_zoo.items()}
+
+
+
+    ## JAX CYCLE
+    done_jax = {agent:jnp.ones(1, dtype=bool) for agent in env_jax.agents+['__all__']}
+    rew_tallys_jax = {agent: 0 for agent in env_jax.agents}
+
+    for j in range(25):
+        #print('-- jax iter ', j)
+        key, key_s = jax.random.split(key)
+        #print('done jax', done_jax)
+        #print('obs jax', obs_jax)
+        acts = obs_to_act(obs_jax, done_jax)
+        #print('acts', acts)
+        obs_jax, state, rew_jax, done_jax, _ = env_jax.step(key_s, state, acts)
+        done_jax = jax.tree_map(lambda x: x[None], done_jax)
+
+        rew_tallys_jax = {a: r + rew_jax[a] for a, r in rew_tallys_jax.items()}
+
+    #print('reward tally zoo', rew_tallys_zoo)
+    #print('reward tally jax', rew_tallys_jax)   
+
+    rew_tally[e] = np.array([rew_tallys_zoo[ra], rew_tallys_jax[ra]])
+
+print('rew_tally', rew_tally)
+r = np.allclose(rew_tally[:, 0], rew_tally[:, 1], 0, 1e-3)
+print('correspondance? ', r)
 #obs, state, rewards, dones, info = env.step(key, state, actions)
 
 #print(rewards)
