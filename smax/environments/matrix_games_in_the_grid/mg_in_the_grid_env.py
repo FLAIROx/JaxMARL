@@ -210,7 +210,7 @@ class InTheGrid(MultiAgentEnv):
         freeze_penalty=5,
     ):
 
-        super().__init__(num_agents=2)
+        super().__init__(num_agents=num_agents)
 
         def _get_obs_point(x: int, y: int, dir: int) -> jnp.ndarray:
             x, y = x + PADDING, y + PADDING
