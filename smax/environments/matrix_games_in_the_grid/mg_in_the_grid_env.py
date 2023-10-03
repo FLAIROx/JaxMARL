@@ -211,6 +211,7 @@ class InTheGrid(MultiAgentEnv):
     ):
 
         super().__init__(num_agents=num_agents)
+        self.agents = list(range(num_agents))
 
         def _get_obs_point(x: int, y: int, dir: int) -> jnp.ndarray:
             x, y = x + PADDING, y + PADDING
@@ -581,6 +582,7 @@ class InTheGrid(MultiAgentEnv):
         ):
 
             """Step the environment."""
+            actions = jnp.array([actions[i] for i in self.agents])
             original_agent_pos = state.agent_positions
             # print(original_agent_pos, 'original agent pos')
             # freeze check

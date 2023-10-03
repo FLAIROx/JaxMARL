@@ -86,7 +86,7 @@ def make(env_id: str, **env_kwargs):
         env = HanabiGame(**env_kwargs)
 
     # 7. Overcooked
-    elif env_id == "Overcooked":
+    elif env_id == "overcooked":
         env = Overcooked(**env_kwargs)
 
     return env
@@ -113,5 +113,5 @@ registered_envs = [
     "mg_in_the_grid",
     "mg_in_the_grid_2p",
     "hanabi",
-    "Overcooked",
+    "overcooked",
 ]
