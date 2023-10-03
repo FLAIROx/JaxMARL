@@ -113,8 +113,8 @@ class SMAXLogWrapper(SMAXWrapper):
             jnp.zeros((self._env.num_agents,)),
             jnp.zeros((self._env.num_agents,)),
             jnp.zeros((self._env.num_agents,)),
-            won_episodes=0,
-            total_episodes=0,
+            won_episodes=jnp.zeros((self._env.num_agents,)),
+            total_episodes=jnp.zeros((self._env.num_agents,)),
         )
         return obs, state
 
@@ -140,7 +140,7 @@ class SMAXLogWrapper(SMAXWrapper):
             + new_episode_return * ep_done,
             returned_episode_lengths=state.returned_episode_lengths * (1 - ep_done)
             + new_episode_length * ep_done,
-            won_episodes=state.won_episodes + (batch_reward[0] >= 1.0).astype(jnp.int32),
+            won_episodes=state.won_episodes + (batch_reward >= 1.0).astype(jnp.int32),
             total_episodes=state.total_episodes + (ep_done).astype(jnp.int32),
         )
         if self.replace_info:
