@@ -299,14 +299,12 @@ if __name__ == "__main__":
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
         "ACTIVATION": "tanh",
-        # "ENV_NAME": "ant_4x2", # Q: Do the versions correspond to internal or external?
         "ENV_NAME": "MPE_simple_facmac_v1",
-        "ENV_KWARGS": {},
+        "ENV_KWARGS": {"score_function": "min"},
         "ANNEAL_LR": True,
     }
 
     rng = jax.random.PRNGKey(30)
-    #train_jit = jax.jit(make_train(config))
-    train_jit = make_train(config)
+    train_jit = jax.jit(make_train(config))
     out = train_jit(rng)
     import pdb; pdb.set_trace()

@@ -9,6 +9,10 @@ from .mpe import (
     SimplePushMPE,
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
+    SimpleFacmacMPE,
+    SimpleFacmacMPE3a,
+    SimpleFacmacMPE6a,
+    SimpleFacmacMPE9a
 )
 from .mini_smac import MiniSMAC, HeuristicEnemyMiniSMAC, LearnedPolicyEnemyMiniSMAC
 from .switch_riddle import SwitchRiddle
