@@ -12,7 +12,7 @@ from .mappings import _agent_action_mapping, _agent_observation_mapping
 # TODO: move homogenisation to a separate wrapper
 
 
-class MAMujocoEnv(MultiAgentEnv):
+class MABraxEnv(MultiAgentEnv):
     def __init__(
         self,
         env_name: str,
@@ -23,7 +23,7 @@ class MAMujocoEnv(MultiAgentEnv):
         backend: str = "positional",
         **kwargs
     ):
-        """Multi-Agent MuJoCo environment.
+        """Multi-Agent Brax environment.
 
         Args:
             env_name: Name of the environment to be used.
@@ -198,26 +198,26 @@ class MAMujocoEnv(MultiAgentEnv):
         return self.env.sys
 
 
-class Ant(MAMujocoEnv):
+class Ant(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("ant_4x2", **kwargs)
 
 
-class HalfCheetah(MAMujocoEnv):
+class HalfCheetah(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("halfcheetah_6x1", **kwargs)
 
 
-class Hopper(MAMujocoEnv):
+class Hopper(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("hopper_3x1", **kwargs)
 
 
-class Humanoid(MAMujocoEnv):
+class Humanoid(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("humanoid_9|8", **kwargs)
 
 
-class Walker2d(MAMujocoEnv):
+class Walker2d(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("walker2d_2x3", **kwargs)
