@@ -64,7 +64,11 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 def batchify(x: dict, agent_list, num_actors):
-    x = jnp.stack([x[a] for a in agent_list])
+    max_dim = max([x[a].shape[-1] for a in agent_list])
+    def pad(z, length):
+        return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + [length - z.shape[-1]])], -1)
+
+    x = jnp.stack([x[a] if x[a].shape[-1] == max_dim else pad(x[a]) for a in agent_list])
     return x.reshape((num_actors, -1))
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):

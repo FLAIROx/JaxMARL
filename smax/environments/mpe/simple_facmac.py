@@ -317,7 +317,6 @@ class SimpleFacmacMPE(SimpleMPE):
                     state.p_pos[aidx].flatten(),  # 2
                     landmark_pos[aidx].flatten(),  # 5, 2
                     other_pos[aidx].flatten(),  # 5, 2
-                    jnp.zeros_like(other_vel[aidx, -1:].flatten())  # 2 - ensure same dimensionality for all agents!
                 ]
             )
 
