@@ -7,4 +7,5 @@ from .simple_crypto import SimpleCryptoMPE
 from .simple_speaker_listener import SimpleSpeakerListenerMPE
 from .simple_adversary import SimpleAdversaryMPE
 from .simple_reference import SimpleReferenceMPE
+from .simple_facmac import SimpleFacmacMPE, SimpleFacmacMPE3a, SimpleFacmacMPE6a, SimpleFacmacMPE9a
 from .mpe_visualizer import MPEVisualizer
