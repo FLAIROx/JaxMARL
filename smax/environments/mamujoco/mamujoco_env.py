@@ -20,6 +20,7 @@ class MAMujocoEnv(MultiAgentEnv):
         action_repeat: int = 1,
         auto_reset: bool = True,
         homogenisation_method: Optional[Literal["max", "concat"]] = None,
+        backend: str = "positional",
         **kwargs
     ):
         """Multi-Agent MuJoCo environment.
@@ -43,7 +44,7 @@ class MAMujocoEnv(MultiAgentEnv):
         """
         base_env_name = env_name.split("_")[0]
         env = envs.create(
-            base_env_name, episode_length, action_repeat, auto_reset, **kwargs
+            base_env_name, episode_length, action_repeat, auto_reset, backend=backend, **kwargs
         )
         self.env = env
         self.episode_length = episode_length

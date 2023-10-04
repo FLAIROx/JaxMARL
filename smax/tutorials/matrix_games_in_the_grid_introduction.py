@@ -76,7 +76,7 @@ int_action = {
 }
 
 key_int = {"w": 2, "a": 0, "s": 4, "d": 1, " ": 4}
-env.step = jax.jit(env.step)
+env.step_env = jax.jit(env.step_env)
 
 for t in range(num_outer_steps * num_inner_steps):
     rng, *rngs = jax.random.split(rng, num_agents+1)
@@ -93,7 +93,7 @@ for t in range(num_outer_steps * num_inner_steps):
     print([action.item() for action in actions], 'actions')
     print("###################")
 
-    obs, state, reward, done, info = env.step(
+    obs, state, reward, done, info = env.step_env(
         rng, old_state, [a*action for a in actions]
     )
     # print(state.agent_inventories, 'agent inventories')
