@@ -298,7 +298,7 @@ if __name__ == "__main__":
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
         "ACTIVATION": "tanh",
-        "ENV_NAME": "MPE_simple_spread_v3", # Q: Do the versions correspond to internal or external?
+        "ENV_NAME": "MPE_simple_spread_v3", # Q: Do the versions correspond to internal or external? A: External, they match PettingZoo
         "ENV_KWARGS": {},
         "ANNEAL_LR": True,
     }
