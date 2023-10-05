@@ -49,8 +49,9 @@ class EnemyMiniSMAC(MultiAgentEnv):
         key, reset_key = jax.random.split(key)
         obs, state = self._env.reset(reset_key)
         enemy_policy_state = self.get_enemy_policy_initial_state(key)
-        obs = {agent: obs[agent] for agent in self.agents}
-        return obs, State(state=state, enemy_policy_state=enemy_policy_state)
+        new_obs = {agent: obs[agent] for agent in self.agents}
+        new_obs["world_state"] = obs["world_state"]
+        return new_obs, State(state=state, enemy_policy_state=enemy_policy_state)
 
     def get_enemy_actions(self, key, enemy_policy_state, enemy_obs):
         raise NotImplementedError
@@ -73,14 +74,15 @@ class EnemyMiniSMAC(MultiAgentEnv):
         obs, smax_state, rewards, dones, infos = self._env.step_env(
             key, smax_state, actions
         )
-        obs = {agent: obs[agent] for agent in self.agents}
+        new_obs = {agent: obs[agent] for agent in self.agents}
+        new_obs["world_state"] = obs["world_state"]
         rewards = {agent: rewards[agent] for agent in self.agents}
         all_done = dones["__all__"]
         dones = {agent: dones[agent] for agent in self.agents}
         dones["__all__"] = all_done
 
         state = state.replace(enemy_policy_state=enemy_policy_state, state=smax_state)
-        return obs, state, rewards, dones, infos
+        return new_obs, state, rewards, dones, infos
 
     @partial(jax.jit, static_argnums=(0,))
     def get_avail_actions(self, state: State):
