@@ -309,7 +309,7 @@ if __name__ == "__main__":
         "DEVICE": 1,
         "DISABLE_JIT": False,
         "ENTITY": "amacrutherford",
-        "PROJECT": "smax-mabrax",
+        "PROJECT": "smax-switch-riddle",
         "WANDB_MODE": "online",
     }
     wandb.init(

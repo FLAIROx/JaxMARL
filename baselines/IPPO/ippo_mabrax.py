@@ -290,7 +290,7 @@ if __name__ == "__main__":
         "LR": 1e-3,
         "NUM_ENVS": 64,
         "NUM_STEPS": 300,
-        "TOTAL_TIMESTEPS": 3e8,
+        "TOTAL_TIMESTEPS": 1e7,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 4,
         "GAMMA": 0.99,
@@ -324,8 +324,10 @@ if __name__ == "__main__":
         train_jit = jax.jit(make_train(config),  device=jax.devices()[config["DEVICE"]])
         out = train_jit(rng)
     
-    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].shape[0])
-    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"]], axis=1)
+    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].squeeze().shape[0])
+    print('updates x', updates_x.shape)
+    print('metrics shape', out["metrics"]["returned_episode_returns"].shape)
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(-1).squeeze()], axis=1)
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
     wandb.log({
         "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
