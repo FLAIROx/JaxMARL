@@ -75,7 +75,7 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "LearnedPolicyEnemyMiniSMAC":
         env = LearnedPolicyEnemyMiniSMAC(**env_kwargs)
 
-    # 4. Mujoco
+    # 4. MABrax
     elif env_id == "ant_4x2":
         env = Ant(**env_kwargs)
     elif env_id == "halfcheetah_6x1":
