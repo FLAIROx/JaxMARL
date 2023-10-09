@@ -52,12 +52,12 @@ class SwitchRiddle(MultiAgentEnv):
     @partial(jax.jit, static_argnums=[0])
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
         state = State(
-            bulb_state=self.initial_bulb_state,
+            bulb_state=jnp.array(self.initial_bulb_state),
             agent_in_room=jax.random.randint(
                 key, shape=(), minval=0, maxval=self.num_agents
             ),
             has_been=jnp.full(self.num_agents, 0),
-            done=False,
+            done=jnp.array(False),
             step=0,
         )
 
@@ -83,7 +83,7 @@ class SwitchRiddle(MultiAgentEnv):
             agent_action == self.game_actions["SWITCH_LIGHT"],
             ~state.bulb_state,  # change the state of the light
             state.bulb_state,  # do nothing
-        )
+        ).squeeze()
 
         # get the reward if agent spoke
         reward = jnp.where(
@@ -94,12 +94,12 @@ class SwitchRiddle(MultiAgentEnv):
                 self.reward_all_die,  # negative reward if agent spoke and not all agents have been in room
             ),
             0.0,  # no reward if agent didn't speak
-        )
+        ).squeeze()
 
         # done if an agent spoke or maximum step reached
         done = jnp.logical_or(
             agent_action == self.game_actions["TELL"], state.step + 1 >= self.max_steps
-        )
+        ).squeeze()
 
         # update the environment internal state
         state = State(
@@ -125,14 +125,18 @@ class SwitchRiddle(MultiAgentEnv):
         @partial(jax.vmap, in_axes=[0, None])
         def _observation(aidx: int, state: State) -> jnp.ndarray:
             """Return observation for agent i."""
-            agent_in_room = state.agent_in_room == aidx
+            #print('state agent in room', state.agent_in_room)
+            agent_in_room = (state.agent_in_room == aidx)
+            #print('agent in room', agent_in_room)
             bulb_state = jnp.logical_and(
                 agent_in_room, # only the current agent in the room can see the bulb state
                 state.bulb_state
-            ) 
+            ).squeeze()
+            #print('agent shape', agent_in_room.shape, 'bulb state', bulb_state.shape)
             return jnp.array([agent_in_room, bulb_state]).astype(int)
 
         obs = _observation(self.agent_range, state)
+        #print('obs', obs.shape)
         return {a: obs[i] for i, a in enumerate(self.agents)}
 
     def render(self, state: State):
@@ -183,4 +187,5 @@ def example():
 
 
 if __name__ == "__main__":
-    example()
+    with jax.disable_jit():
+        example()
