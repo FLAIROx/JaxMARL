@@ -7,3 +7,10 @@ __pycache__/
 *.DS_Store
 .vscode/
 docker/*
+*.pickle
+results/
+docs/
+tmp/
+*-checkpoint.py
+wandb/*
+outputs/*
