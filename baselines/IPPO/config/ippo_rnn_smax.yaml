@@ -1,0 +1,25 @@
+"LR": 4e-3
+"NUM_ENVS": 64
+"NUM_STEPS": 128
+"TOTAL_TIMESTEPS": 1e7
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 2
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.04
+"SCALE_CLIP_EPS": False
+"ENT_COEF": 0.00
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+"ENV_NAME": "HeuristicEnemyMiniSMAC"
+"MAP_NAME": "2s3z"
+"SEED": 30
+"ENV_KWARGS": 
+  "see_enemy_actions": True
+  "walls_cause_death": True
+  "attack_mode": "closest"
+
+"ANNEAL_LR": True
+"ENTITY": "benellis3"
+"PROJECT": "smax-rnn"
