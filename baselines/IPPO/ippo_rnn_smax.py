@@ -129,7 +129,11 @@ def make_train(config):
     config["MINIBATCH_SIZE"] = (
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
-    config["CLIP_EPS"] = config["CLIP_EPS"] / env.num_agents if config["SCALE_CLIP_EPS"] else config["CLIP_EPS"] 
+    config["CLIP_EPS"] = (
+        config["CLIP_EPS"] / env.num_agents
+        if config["SCALE_CLIP_EPS"]
+        else config["CLIP_EPS"]
+    )
 
     # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
     env = SMAXLogWrapper(env)
@@ -181,6 +185,7 @@ def make_train(config):
         def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
             runner_state, update_steps = update_runner_state
+
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, last_done, hstate, rng = runner_state
 
@@ -390,17 +395,31 @@ def make_train(config):
             )
             train_state = update_state[0]
             metric = traj_batch.info
+            metric = jax.tree_map(
+                lambda x: x.reshape(
+                    (config["NUM_STEPS"], config["NUM_ENVS"], env.num_agents)
+                ),
+                traj_batch.info,
+            )
             rng = update_state[-1]
 
             def callback(metric):
                 wandb.log(
                     {
-                        "returns": metric["returned_episode_returns"],
-                        "env_step": metric["update_steps"] * config["NUM_ENVS"] * config["NUM_STEPS"],
+                        # the metrics have an agent dimension, but this is identical
+                        # for all agents so index into the 0th item of that dimension.
+                        "returns": metric["returned_episode_returns"][:, :, 0][
+                            metric["returned_episode"][:, :, 0]
+                        ].mean(),
+                        "win_rate": metric["returned_won_episode"][:, :, 0][
+                            metric["returned_episode"][:, :, 0]
+                        ].mean(),
+                        "env_step": metric["update_steps"]
+                        * config["NUM_ENVS"]
+                        * config["NUM_STEPS"],
                     }
                 )
 
-            metric = {k: v.mean() for k, v in metric.items()}
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric)
             update_steps = update_steps + 1
@@ -419,7 +438,7 @@ def make_train(config):
         runner_state, metric = jax.lax.scan(
             _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
-        return {"runner_state": runner_state, "metrics": metric}
+        return {"runner_state": runner_state}
 
     return train
 
@@ -436,29 +455,6 @@ def main(config):
     rng = jax.random.PRNGKey(config["SEED"])
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
     out = train_jit(rng)
-    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].shape[0])
-    returns_table = jnp.stack(
-        [updates_x, out["metrics"]["returned_episode_returns"]], axis=1
-    )
-    returns_table = wandb.Table(
-        data=returns_table.tolist(), columns=["updates", "returns"]
-    )
-    win_rate_table = jnp.stack([updates_x, out["metrics"]["win_rate"]], axis=1)
-    win_rate_table = wandb.Table(
-        data=win_rate_table.tolist(), columns=["updates", "win_rate"]
-    )
-    wandb.log(
-        {
-            "returns_plot": wandb.plot.line(
-                returns_table, "updates", "returns", title="returns_vs_updates"
-            ),
-            "win_rate_plot": wandb.plot.line(
-                win_rate_table, "updates", "win_rate", title="win_rate_vs_updates"
-            ),
-            "win_rate": out["metrics"]["win_rate"].mean(),
-            "returns": out["metrics"]["returned_episode_returns"].mean(),
-        }
-    )
 
 
 if __name__ == "__main__":
