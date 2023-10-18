@@ -21,6 +21,8 @@ from smax.wrappers.smaxbaselines import LogWrapper
 from smax.wrappers.gymnax import GymnaxToSMAX
 from smax.environments.overcooked import overcooked_layouts
 from smax.viz.overcooked_visualizer import OvercookedVisualizer
+import hydra
+from omegaconf import OmegaConf
 
 import matplotlib.pyplot as plt
 
@@ -338,25 +340,11 @@ def make_train(config):
     return train
 
 
-if __name__ == "__main__":
-    config = {
-        "LR": 2.5e-4,
-        "NUM_ENVS": 16,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e6,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "Overcooked",
-        "ENV_KWARGS": {"layout" : overcooked_layouts["cramped_room"]},
-        "ANNEAL_LR": True,
-    }
+
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_overcooked")
+def main(config):
+    config = OmegaConf.to_container(config) 
+    config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
     rng = jax.random.PRNGKey(30)
     with jax.disable_jit(False):
         train_jit = jax.jit(make_train(config))
@@ -374,3 +362,6 @@ if __name__ == "__main__":
     viz = OvercookedVisualizer()
     # agent_view_size is hardcoded as it determines the padding around the layout.
     viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
+
+if __name__ == "__main__":
+    main()

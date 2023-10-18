@@ -16,7 +16,8 @@ import distrax
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
 import matplotlib.pyplot as plt
-
+import hydra
+from omegaconf import OmegaConf
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -291,26 +292,9 @@ def make_train(config):
 
     return train
 
-
-if __name__ == "__main__":
-    config = {
-        "LR": 2.5e-4,
-        "NUM_ENVS": 2048,
-        "NUM_STEPS": 10,
-        "TOTAL_TIMESTEPS": 2e7,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "MPE_simple_facmac_v1",
-        "ENV_KWARGS": {"score_function": "min"},
-        "ANNEAL_LR": True,
-    }
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_mpe_facmac")
+def main(config):
+    config = OmegaConf.to_container(config)
 
     rng = jax.random.PRNGKey(30)
     train_jit = jax.jit(make_train(config))
@@ -318,3 +302,7 @@ if __name__ == "__main__":
     import pdb;
 
     pdb.set_trace()
+
+
+if __name__ == "__main__":
+    main()

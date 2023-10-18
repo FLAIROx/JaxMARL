@@ -17,6 +17,8 @@ import distrax
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
 import matplotlib.pyplot as plt
+import hydra
+from omegaconf import OmegaConf
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -285,31 +287,10 @@ def make_train(config):
 
     return train
 
-if __name__ == "__main__":
-    config = {
-        "LR": 1e-3,
-        "NUM_ENVS": 64,
-        "NUM_STEPS": 300,
-        "TOTAL_TIMESTEPS": 1e7,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 2e-6,
-        "VF_COEF": 4.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "SEED": 30,
-        "ENV_NAME": "ant_4x2", # Q: Do the versions correspond to internal or external?
-        "ENV_KWARGS": {},
-        "ANNEAL_LR": True,
-        "DEVICE": 0,
-        "DISABLE_JIT": False,
-        "ENTITY": "amacrutherford",
-        "PROJECT": "smax-mabrax",
-        "WANDB_MODE": "online",
-    }
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_mabrax")
+def main(config):
+
+    config = OmegaConf.to_container(config)
 
     wandb.init(
         entity=config["ENTITY"],
@@ -334,11 +315,14 @@ if __name__ == "__main__":
         "returns": out["metrics"]["returned_episode_returns"].mean()
     })
     
-    '''mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
-    x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
-    plt.plot(x, mean_returns)
-    plt.xlabel("Timestep")
-    plt.ylabel("Return")
-    plt.savefig(f'mabrax_ippo_ret.png')'''
+    # mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
+    # x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
+    # plt.plot(x, mean_returns)
+    # plt.xlabel("Timestep")
+    # plt.ylabel("Return")
+    # plt.savefig(f'mabrax_ippo_ret.png')'''
     
-    #import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
+
+if __name__ == "__main__":
+    main()

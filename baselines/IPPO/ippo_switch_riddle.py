@@ -17,6 +17,9 @@ import distrax
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
 import matplotlib.pyplot as plt
+import hydra
+from omegaconf import OmegaConf
+
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -284,34 +287,11 @@ def make_train(config):
 
     return train
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    
-    config = {
-        "LR": 2.5e-4,
-        "NUM_ENVS": 64,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 1e6,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "relu",
-        "SEED": 30,
-        "ENV_NAME": "switch_riddle",
-        "ENV_KWARGS": {},
-        "ANNEAL_LR": True,
-        "DISABLE_JIT": False,
-        "DEVICE": 1,
-        "DISABLE_JIT": False,
-        "ENTITY": "amacrutherford",
-        "PROJECT": "smax-switch-riddle",
-        "WANDB_MODE": "online",
-    }
+
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_switch_riddle")
+def main(config): 
+
+    config = OmegaConf.to_container(config) 
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
@@ -326,19 +306,22 @@ if __name__ == "__main__":
         out = train_jit(rng)
         
     updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].shape[0])
-    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"]], axis=1)
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=(-2, -1))], axis=1)
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
     wandb.log({
         "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
         "returns": out["metrics"]["returned_episode_returns"].mean()
     })
     
-    '''mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
-    x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
-    plt.plot(x, mean_returns)
-    plt.xlabel("Timestep")
-    plt.ylabel("Return")
-    plt.savefig(f'switch_riddle_ippo_ret.png')
+    # mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
+    # x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
+    # plt.plot(x, mean_returns)
+    # plt.xlabel("Timestep")
+    # plt.ylabel("Return")
+    # plt.savefig(f'switch_riddle_ippo_ret.png')
 
     
-    import pdb; pdb.set_trace()'''
+    # import pdb; pdb.set_trace()
+
+if __name__=="__main__":
+    main()
