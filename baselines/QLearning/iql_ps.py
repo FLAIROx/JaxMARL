@@ -24,7 +24,7 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 
 from functools import partial
 
@@ -412,12 +412,11 @@ if __name__ == "__main__":
         "NUM_STEPS": env.max_steps,
         "BUFFER_SIZE":5000,
         "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e6+5e4,
+        "TOTAL_TIMESTEPS":2e6,
         "AGENT_HIDDEN_DIM":64,
         "EPSILON_START": 1.0,
         "EPSILON_FINISH": 0.05,
         "EPSILON_ANNEAL_TIME": 100000,
-        "AGENT_HIDDEN_DIM": 64,
         "MAX_GRAD_NORM": 10,
         "TARGET_UPDATE_INTERVAL": 200, 
         "LR": 0.005,
@@ -427,7 +426,7 @@ if __name__ == "__main__":
         "TEST_INTERVAL": 5e4
     }
 
-    b = 32 # number of concurrent trainings
+    b = 10 # number of concurrent trainings
     rng = jax.random.PRNGKey(42)
     rngs = jax.random.split(rng, b)
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
@@ -446,4 +445,5 @@ if __name__ == "__main__":
     plt.xlabel("Timesteps")
     plt.ylabel("Team Returns")
     plt.title(f"{env_name} returns (mean of {b} seeds)")
+    plt.savefig(f"{env_name}_returns.png")
     plt.show()

@@ -15,7 +15,7 @@ from jax import numpy as jnp
 from smax import make
 from baselines.QLearning.utils import load_params, get_space_dim
 from baselines.QLearning.iql_ps import AgentRNN, ScannedRNN
-from pettingzoo.mpe import simple_speaker_listener_v4, simple_spread_v3
+from pettingzoo.mpe import simple_speaker_listener_v4, simple_spread_v3, simple_adversary_v3
 import tqdm
 
 
@@ -74,13 +74,13 @@ key, key_r = jax.random.split(key)
 
 env_name = "MPE_simple_speaker_listener_v4"
 env_name = "MPE_simple_spread_v3"
+env_name = "MPE_simple_adversary_v3"
 env_jax = make(env_name)
 env_jax.reset(key_r)
 
 env_zoo = simple_speaker_listener_v4.parallel_env()
 env_zoo = simple_spread_v3.parallel_env()
-
-
+env_zoo = simple_adversary_v3.parallel_env()
 
 
 def _preprocess_obs(arr, extra_features):
@@ -94,7 +94,8 @@ def _preprocess_obs(arr, extra_features):
     return arr
 
 pretrained_folder = "baselines/pretrained/"
-alg_name = "iql_ps" # "vdn_ps", "qmix_ps"
+alg_name = "iql_ns" # "vdn_ps", "qmix_ps"
+parameter_sharing = False
 
 
 # experiment parameters (necessary if you don't want to use the CT wrapper
@@ -105,12 +106,16 @@ agents_one_hot = {a:oh for a, oh in zip(env_jax.agents, jnp.eye(len(env_jax.agen
 agent_hidden_dim = 64
 
 # agent network
-agent = AgentRNN(max_action_space, agent_hidden_dim)
+if parameter_sharing:
+    agent = AgentRNN(max_action_space, agent_hidden_dim)
 params = load_params(f'{pretrained_folder}/{env_name}/{alg_name}.safetensors')
+print('params keys', params.keys())
 if 'agent' in params.keys():
     params = params['agent'] # qmix also have mixer params
 
-def obs_to_act(obs, dones):
+    
+
+def obs_to_act(obs, dones, params=params):
 
 
     obs = jax.tree_util.tree_map(_preprocess_obs, obs, agents_one_hot)
@@ -135,6 +140,8 @@ ra = env_jax.agents[0]
 
 rew_tally = np.empty((num_ep, 2))
 
+mean_diff = np.empty((num_ep,))
+
 for e in tqdm.tqdm(range(num_ep)):
 
     obs_zoo, _ = env_zoo.reset()
@@ -147,7 +154,7 @@ for e in tqdm.tqdm(range(num_ep)):
 
     done_zoo = {agent: True for agent in env_jax.agents}
 
-    rew_tallys_zoo = {agent: 0 for agent in env_jax.agents}
+    rew_tallys_zoo = np.zeros((25, len(env_jax.agents)))
     ## ZOO CYCLE
 
     for j in range(25):
@@ -162,13 +169,12 @@ for e in tqdm.tqdm(range(num_ep)):
         #print('acts', acts)
         obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(acts)
         #print('done', done_zoo, 'rew', rew_zoo)
-        rew_tallys_zoo = {a: r + rew_zoo[a] for a, r in rew_tallys_zoo.items()}
-
-
+        rew_batch = np.array([rew_zoo[a] for a in env_jax.agents])
+        rew_tallys_zoo[j] = rew_batch
 
     ## JAX CYCLE
     done_jax = {agent:jnp.ones(1, dtype=bool) for agent in env_jax.agents+['__all__']}
-    rew_tallys_jax = {agent: 0 for agent in env_jax.agents}
+    rew_tallys_jax = np.zeros((25, len(env_jax.agents)))
 
     for j in range(25):
         #print('-- jax iter ', j)
@@ -180,16 +186,23 @@ for e in tqdm.tqdm(range(num_ep)):
         obs_jax, state, rew_jax, done_jax, _ = env_jax.step(key_s, state, acts)
         done_jax = jax.tree_map(lambda x: x[None], done_jax)
 
-        rew_tallys_jax = {a: r + rew_jax[a] for a, r in rew_tallys_jax.items()}
+        rew_batch = np.array([rew_jax[a] for a in env_jax.agents])
+        rew_tallys_jax[j] = rew_batch
 
+    mean_diff[e] = np.mean(np.abs(rew_tallys_zoo - rew_tallys_jax))
+    
+    
     #print('reward tally zoo', rew_tallys_zoo)
     #print('reward tally jax', rew_tallys_jax)   
 
-    rew_tally[e] = np.array([rew_tallys_zoo[ra], rew_tallys_jax[ra]])
+    #rew_tally[e] = np.array([rew_tallys_zoo[ra], rew_tallys_jax[ra]])
 
-print('rew_tally', rew_tally)
+print('mean diff', np.mean(mean_diff))
+print('std diff', np.std(mean_diff))
+
+'''print('rew_tally', rew_tally)
 r = np.allclose(rew_tally[:, 0], rew_tally[:, 1], 0, 1e-3)
-print('correspondance? ', r)
+print('correspondance? ', r)'''
 #obs, state, rewards, dones, info = env.step(key, state, actions)
 
 #print(rewards)
