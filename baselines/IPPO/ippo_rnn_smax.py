@@ -438,7 +438,7 @@ def make_train(config):
         runner_state, metric = jax.lax.scan(
             _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
-        return {"runner_state": runner_state, "metrics": metric}
+        return {"runner_state": runner_state}
 
     return train
 
@@ -455,29 +455,6 @@ def main(config):
     rng = jax.random.PRNGKey(config["SEED"])
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
     out = train_jit(rng)
-    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].shape[0])
-    returns_table = jnp.stack(
-        [updates_x, out["metrics"]["returned_episode_returns"]], axis=1
-    )
-    returns_table = wandb.Table(
-        data=returns_table.tolist(), columns=["updates", "returns"]
-    )
-    win_rate_table = jnp.stack([updates_x, out["metrics"]["win_rate"]], axis=1)
-    win_rate_table = wandb.Table(
-        data=win_rate_table.tolist(), columns=["updates", "win_rate"]
-    )
-    wandb.log(
-        {
-            "returns_plot": wandb.plot.line(
-                returns_table, "updates", "returns", title="returns_vs_updates"
-            ),
-            "win_rate_plot": wandb.plot.line(
-                win_rate_table, "updates", "win_rate", title="win_rate_vs_updates"
-            ),
-            "win_rate": out["metrics"]["win_rate"].mean(),
-            "returns": out["metrics"]["returned_episode_returns"].mean(),
-        }
-    )
 
 
 if __name__ == "__main__":
