@@ -24,7 +24,8 @@ from smax.environments.hanabi import HanabiGame
 import wandb
 import functools
 import matplotlib.pyplot as plt
-
+import hydra
+from omegaconf import OmegaConf
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -50,7 +51,7 @@ class ScannedRNN(nn.Module):
     @staticmethod
     def initialize_carry(batch_size, hidden_size):
         # Use a dummy key since the default state init fn is just zeros.
-        cell = nn.GRUCell(features=ins.shape[1])
+        cell = nn.GRUCell(features=hidden_size)
         return cell.initialize_carry(
             jax.random.PRNGKey(0), (batch_size, hidden_size)
         )
@@ -354,25 +355,9 @@ def make_train(config):
     return train
 
 
-if __name__ == "__main__":
-    config = {
-        "LR": 5e-4,
-        "NUM_ENVS": 128,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 1e10,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "Hanabi",
-        "ENV_KWARGS": {},
-        "ANNEAL_LR": True,
-    }
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_rnn_hanabi")
+def main(config):
+    config = OmegaConf.to_container(config) 
 
     # wandb.init(
     #     entity="jonny-dphil",
@@ -387,3 +372,6 @@ if __name__ == "__main__":
     plt.xlabel("Update Step")
     plt.ylabel("Return")
     plt.savefig(f'IPPO_{config["ENV_NAME"]}.png')
+
+if __name__ == "__main__":
+    main()
