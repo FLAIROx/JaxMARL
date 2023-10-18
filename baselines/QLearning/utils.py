@@ -80,9 +80,10 @@ class CTRolloutManager:
         self.valid_actions = {a:jnp.arange(u.n) for a, u in env.action_spaces.items()}
         self.valid_actions_oh ={a:jnp.concatenate((jnp.ones(u.n), jnp.zeros(self.max_action_space - u.n))) for a, u in env.action_spaces.items()}
 
-        # custom global state for specific envs
+        # custom global state and rewards for specific envs
         if 'smac' in env.name.lower():
-            self.global_state = lambda obs, state: self.env._env.get_world_state(state)
+            self.global_state = lambda obs, state: self.env.get_world_state(state)
+            self.global_reward = lambda rewards: rewards[self.training_agents[0]]*10
     
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key):
@@ -105,13 +106,14 @@ class CTRolloutManager:
     def wrapped_step(self, key, state, actions):
         obs, state, reward, done, infos = self.env.step(key, state, actions)
         obs = jax.tree_util.tree_map(self._preprocess_obs, obs, self.agents_one_hot)
+        obs = jax.tree_util.tree_map(lambda d, o: jnp.where(d, 0., o), {agent:done[agent] for agent in self.agents}, obs) # ensure that the obs are 0s for done agents
         obs["__all__"] = self.global_state(obs, state)
         reward["__all__"] = self.global_reward(reward)
         return obs, state, reward, done, infos
 
     @partial(jax.jit, static_argnums=0)
     def global_state(self, obs, state):
-        return jnp.concatenate([obs[agent] for agent in self.training_agents], axis=-1)
+        return jnp.concatenate([obs[agent] for agent in self.agents], axis=-1)
     
     @partial(jax.jit, static_argnums=0)
     def global_reward(self, reward):
