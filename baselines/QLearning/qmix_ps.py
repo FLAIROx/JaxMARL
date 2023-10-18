@@ -25,7 +25,7 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.core import frozen_dict
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 
 from functools import partial
 
@@ -483,7 +483,7 @@ if __name__ == "__main__":
         "TEST_INTERVAL": 5e4
     }
 
-    b = 4 # number of concurrent trainings
+    b = 10 # number of concurrent trainings
     rng = jax.random.PRNGKey(42)
     rngs = jax.random.split(rng, b)
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
