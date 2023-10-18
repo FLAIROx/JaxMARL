@@ -129,7 +129,11 @@ def make_train(config):
     config["MINIBATCH_SIZE"] = (
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
-    config["CLIP_EPS"] = config["CLIP_EPS"] / env.num_agents if config["SCALE_CLIP_EPS"] else config["CLIP_EPS"] 
+    config["CLIP_EPS"] = (
+        config["CLIP_EPS"] / env.num_agents
+        if config["SCALE_CLIP_EPS"]
+        else config["CLIP_EPS"]
+    )
 
     # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
     env = SMAXLogWrapper(env)
@@ -181,6 +185,7 @@ def make_train(config):
         def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
             runner_state, update_steps = update_runner_state
+
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, last_done, hstate, rng = runner_state
 
@@ -390,17 +395,31 @@ def make_train(config):
             )
             train_state = update_state[0]
             metric = traj_batch.info
+            metric = jax.tree_map(
+                lambda x: x.reshape(
+                    (config["NUM_STEPS"], config["NUM_ENVS"], env.num_agents)
+                ),
+                traj_batch.info,
+            )
             rng = update_state[-1]
 
             def callback(metric):
                 wandb.log(
                     {
-                        "returns": metric["returned_episode_returns"],
-                        "env_step": metric["update_steps"] * config["NUM_ENVS"] * config["NUM_STEPS"],
+                        # the metrics have an agent dimension, but this is identical
+                        # for all agents so index into the 0th item of that dimension.
+                        "returns": metric["returned_episode_returns"][:, :, 0][
+                            metric["returned_episode"][:, :, 0]
+                        ].mean(),
+                        "win_rate": metric["returned_won_episode"][:, :, 0][
+                            metric["returned_episode"][:, :, 0]
+                        ].mean(),
+                        "env_step": metric["update_steps"]
+                        * config["NUM_ENVS"]
+                        * config["NUM_STEPS"],
                     }
                 )
 
-            metric = {k: v.mean() for k, v in metric.items()}
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric)
             update_steps = update_steps + 1
