@@ -14,3 +14,6 @@
 "DEBUG": False
 "NUM_TEST_EPISODES": 32
 "TEST_INTERVAL": 5e4
+
+"ENTITY": "amacrutherford"
+"PROJECT": "mpe-rnn"

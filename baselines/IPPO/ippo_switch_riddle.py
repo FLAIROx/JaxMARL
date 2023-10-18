@@ -4,6 +4,7 @@ Based on PureJaxRL Implementation of PPO
 NOTE: currently implemented using the gymnax to smax wrapper
 """
 
+import wandb
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -16,6 +17,9 @@ import distrax
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
 import matplotlib.pyplot as plt
+import hydra
+from omegaconf import OmegaConf
+
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -38,8 +42,7 @@ class ActorCritic(nn.Module):
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
         )(actor_mean)
-        actor_logtstd = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
-        pi = distrax.MultivariateNormalDiag(actor_mean, jnp.exp(actor_logtstd))
+        pi = distrax.Categorical(logits=actor_mean)
 
         critic = nn.Dense(
             64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
@@ -65,7 +68,11 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 def batchify(x: dict, agent_list, num_actors):
-    x = jnp.stack([x[a] for a in agent_list])
+    max_dim = max([x[a].shape[-1] for a in agent_list])
+    def pad(z, length):
+        return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + [length - z.shape[-1]])], -1)
+
+    x = jnp.stack([x[a] if x[a].shape[-1] == max_dim else pad(x[a]) for a in agent_list])
     return x.reshape((num_actors, -1))
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
@@ -82,8 +89,7 @@ def make_train(config):
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
     
-    #env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
-    env = LogWrapper(env, replace_info=True)
+    env = LogWrapper(env)
     
     def linear_schedule(count):
         frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -92,8 +98,7 @@ def make_train(config):
     def train(rng):
 
         # INIT NETWORK
-        # TODO doesn't work for non-homogenous agents
-        network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
+        network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
         init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
         network_params = network.init(_rng, init_x)
@@ -115,9 +120,7 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
-
-
-
+        
         # TRAIN LOOP
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
@@ -284,27 +287,41 @@ def make_train(config):
 
     return train
 
-if __name__ == "__main__":
-    config = {
-        "LR": 2.5e-4,
-        "NUM_ENVS": 2048,
-        "NUM_STEPS": 10,
-        "TOTAL_TIMESTEPS": 2e7,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "ant_4x2", # Q: Do the versions correspond to internal or external?
-        "ENV_KWARGS": {},
-        "ANNEAL_LR": True,
-    }
 
-    rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config))
-    out = train_jit(rng)
-    import pdb; pdb.set_trace()
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_switch_riddle")
+def main(config): 
+
+    config = OmegaConf.to_container(config) 
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+
+    rng = jax.random.PRNGKey(config["SEED"])
+    with jax.disable_jit(config["DISABLE_JIT"]):
+        train_jit = jax.jit(make_train(config), device=jax.devices()[config["DEVICE"]])
+        out = train_jit(rng)
+        
+    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].shape[0])
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=(-2, -1))], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
+        "returns": out["metrics"]["returned_episode_returns"].mean()
+    })
+    
+    # mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
+    # x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
+    # plt.plot(x, mean_returns)
+    # plt.xlabel("Timestep")
+    # plt.ylabel("Return")
+    # plt.savefig(f'switch_riddle_ippo_ret.png')
+
+    
+    # import pdb; pdb.set_trace()
+
+if __name__=="__main__":
+    main()

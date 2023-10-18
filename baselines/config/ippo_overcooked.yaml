@@ -1,0 +1,17 @@
+"LR": 2.5e-4
+"NUM_ENVS": 16
+"NUM_STEPS": 128
+"TOTAL_TIMESTEPS": 5e6
+"UPDATE_EPOCHS": 4
+"NUM_MINIBATCHES": 4
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "tanh"
+"ENV_NAME": "overcooked"
+"ENV_KWARGS": 
+  "layout" : "cramped_room"
+"ANNEAL_LR": True

@@ -1,11 +1,10 @@
 """ 
 Based on PureJaxRL Implementation of PPO
 
-doing homogenous first with continuous actions. Also terminate synchronously
-
 NOTE: currently implemented using the gymnax to smax wrapper
 """
 
+import wandb
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -15,16 +14,11 @@ from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
-from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
-from smax.wrappers.gymnax import GymnaxToSMAX
-from smax.environments.overcooked import overcooked_layouts
-from smax.viz.overcooked_visualizer import OvercookedVisualizer
+import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
-
-import matplotlib.pyplot as plt
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -47,7 +41,8 @@ class ActorCritic(nn.Module):
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
         )(actor_mean)
-        pi = distrax.Categorical(logits=actor_mean)
+        actor_logtstd = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
+        pi = distrax.MultivariateNormalDiag(actor_mean, jnp.exp(actor_logtstd))
 
         critic = nn.Dense(
             64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
@@ -63,7 +58,6 @@ class ActorCritic(nn.Module):
 
         return pi, jnp.squeeze(critic, axis=-1)
     
-
 class Transition(NamedTuple):
     done: jnp.ndarray
     action: jnp.ndarray
@@ -73,51 +67,9 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
-def get_rollout(train_state, config):
-    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    # env_params = env.default_params
-    # env = LogWrapper(env)
-
-    network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
-    key = jax.random.PRNGKey(0)
-    key, key_r, key_a = jax.random.split(key, 3)
-
-    init_x = jnp.zeros(env.observation_space().shape)
-    init_x = init_x.flatten()
-
-    network.init(key_a, init_x)
-    network_params = train_state.params
-
-    done = False
-
-    obs, state = env.reset(key_r)
-    state_seq = [state]
-    while not done:
-        key, key_a0, key_a1, key_s = jax.random.split(key, 4)
-
-        # obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
-        # breakpoint()
-        obs = {k: v.flatten() for k, v in obs.items()}
-
-        pi_0, _ = network.apply(network_params, obs["agent_0"])
-        pi_1, _ = network.apply(network_params, obs["agent_1"])
-
-        actions = {"agent_0": pi_0.sample(seed=key_a0), "agent_1": pi_1.sample(seed=key_a1)}
-        # env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-        # env_act = {k: v.flatten() for k, v in env_act.items()}
-
-        # STEP ENV
-        obs, state, reward, done, info = env.step(key_s, state, actions)
-        done = done["__all__"]
-
-        state_seq.append(state)
-
-    return state_seq
-
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
     return x.reshape((num_actors, -1))
-
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
@@ -125,17 +77,16 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 def make_train(config):
     env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-#     env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
-
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
-        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"] 
+        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]  # Q: NUM_ACTORS CORRECT?
     )
     config["MINIBATCH_SIZE"] = (
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
     
-    env = LogWrapper(env)
+    #env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
+    env = LogWrapper(env, replace_info=True)
     
     def linear_schedule(count):
         frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -144,12 +95,10 @@ def make_train(config):
     def train(rng):
 
         # INIT NETWORK
-        network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+        # TODO doesn't work for non-homogenous agents
+        network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros(env.observation_space().shape)
-        
-        init_x = init_x.flatten()
-        
+        init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -158,6 +107,7 @@ def make_train(config):
             )
         else:
             tx = optax.chain(optax.clip_by_global_norm(config["MAX_GRAD_NORM"]), optax.adam(config["LR"], eps=1e-5))
+
         train_state = TrainState.create(
             apply_fn=network.apply,
             params=network_params,
@@ -167,33 +117,32 @@ def make_train(config):
         # INIT ENV
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
-        obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        
+        obsv, env_state = jax.vmap(env.reset)(reset_rng)
+
+
+
         # TRAIN LOOP
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, rng = runner_state
 
+                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-
-                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 
                 pi, value = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-                
-                env_act = {k:v.flatten() for k,v in env_act.items()}
-                
+
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
-                
-                obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
-                    rng_step, env_state, env_act
+                obsv, env_state, reward, done, info = jax.vmap(env.step)(
+                    rng_step, env_state, env_act,
                 )
+
                 info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 transition = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
@@ -202,8 +151,7 @@ def make_train(config):
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
                     log_prob,
                     obs_batch,
-                    info
-                    
+                    info,
                 )
                 runner_state = (train_state, env_state, obsv, rng)
                 return runner_state, transition
@@ -237,7 +185,7 @@ def make_train(config):
                     (jnp.zeros_like(last_val), last_val),
                     traj_batch,
                     reverse=True,
-                    unroll=16,
+                    unroll=8,
                 )
                 return advantages, advantages + traj_batch.value
 
@@ -339,29 +287,42 @@ def make_train(config):
 
     return train
 
-
-
-@hydra.main(version_base=None, config_path="../config", config_name="ippo_overcooked")
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_mabrax")
 def main(config):
-    config = OmegaConf.to_container(config) 
-    config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
-    rng = jax.random.PRNGKey(30)
-    with jax.disable_jit(False):
-        train_jit = jax.jit(make_train(config))
+
+    config = OmegaConf.to_container(config)
+
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+
+    rng = jax.random.PRNGKey(config["SEED"])
+    with jax.disable_jit(config["DISABLE_JIT"]):
+        train_jit = jax.jit(make_train(config),  device=jax.devices()[config["DEVICE"]])
         out = train_jit(rng)
-
-    filename = f'{config["ENV_NAME"]}_cramped_room_new'
-
-    plt.plot(out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1))
-    plt.xlabel("Update Step")
-    plt.ylabel("Return")
-    plt.savefig(f'{filename}.png')
-
-    train_state = out["runner_state"][0]
-    state_seq = get_rollout(train_state, config)
-    viz = OvercookedVisualizer()
-    # agent_view_size is hardcoded as it determines the padding around the layout.
-    viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
+    
+    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].squeeze().shape[0])
+    print('updates x', updates_x.shape)
+    print('metrics shape', out["metrics"]["returned_episode_returns"].shape)
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(-1).squeeze()], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
+        "returns": out["metrics"]["returned_episode_returns"].mean()
+    })
+    
+    # mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
+    # x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
+    # plt.plot(x, mean_returns)
+    # plt.xlabel("Timestep")
+    # plt.ylabel("Return")
+    # plt.savefig(f'mabrax_ippo_ret.png')'''
+    
+    # import pdb; pdb.set_trace()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,17 @@
+"LR": 2.5e-4
+"NUM_ENVS": 2048
+"NUM_STEPS": 10
+"TOTAL_TIMESTEPS": 2e7
+"UPDATE_EPOCHS": 4
+"NUM_MINIBATCHES": 4
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "tanh"
+"ENV_NAME": "MPE_simple_facmac_v1"
+"ENV_KWARGS": 
+  "score_function": "min"
+"ANNEAL_LR": True

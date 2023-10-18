@@ -12,3 +12,5 @@ results/
 docs/
 tmp/
 *-checkpoint.py
+wandb/*
+outputs/*

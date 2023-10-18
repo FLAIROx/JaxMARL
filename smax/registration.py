@@ -5,6 +5,10 @@ from .environments import (
     SimpleSpreadMPE,
     SimpleCryptoMPE,
     SimpleSpeakerListenerMPE,
+    SimpleFacmacMPE,
+    SimpleFacmacMPE3a,
+    SimpleFacmacMPE6a,
+    SimpleFacmacMPE9a,
     SimplePushMPE,
     SimpleAdversaryMPE,
     SimpleReferenceMPE,
@@ -50,6 +54,14 @@ def make(env_id: str, **env_kwargs):
         env = SimpleAdversaryMPE(**env_kwargs)
     elif env_id == "MPE_simple_reference_v3":
         env = SimpleReferenceMPE(**env_kwargs)
+    elif env_id == "MPE_simple_facmac_v1":
+        env = SimpleFacmacMPE(**env_kwargs)
+    elif env_id == "MPE_simple_facmac_3a_v1":
+        env = SimpleFacmacMPE3a(**env_kwargs)
+    elif env_id == "MPE_simple_facmac_6a_v1":
+        env = SimpleFacmacMPE6a(**env_kwargs)
+    elif env_id == "MPE_simple_facmac_9a_v1":
+        env = SimpleFacmacMPE9a(**env_kwargs)
 
     # 2. Switch Riddle
     elif env_id == "switch_riddle":
@@ -63,7 +75,7 @@ def make(env_id: str, **env_kwargs):
     elif env_id == "LearnedPolicyEnemyMiniSMAC":
         env = LearnedPolicyEnemyMiniSMAC(**env_kwargs)
 
-    # 4. Mujoco
+    # 4. MABrax
     elif env_id == "ant_4x2":
         env = Ant(**env_kwargs)
     elif env_id == "halfcheetah_6x1":
@@ -106,6 +118,10 @@ registered_envs = [
     "MPE_simple_push_v3",
     "MPE_simple_adversary_v3",
     "MPE_simple_reference_v3",
+    "MPE_simple_facmac_v1",
+    "MPE_simple_facmac_3a_v1",
+    "MPE_simple_facmac_6a_v1",
+    "MPE_simple_facmac_9a_v1",
     "switch_riddle",
     "MiniSMAC",
     "HeuristicEnemyMiniSMAC",

@@ -380,7 +380,7 @@ if __name__ == "__main__":
         "TEST_INTERVAL": 5e4
     }
 
-    b = 10 # number of concurrent trainings
+    b = 30 # number of concurrent trainings
     rng = jax.random.PRNGKey(42)
     rngs = jax.random.split(rng, b)
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
