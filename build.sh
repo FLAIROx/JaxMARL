@@ -1,0 +1,1 @@
+docker build -t smaxbaselines:benlis_minismac --build-arg UID=$UID .
