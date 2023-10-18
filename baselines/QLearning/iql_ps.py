@@ -23,9 +23,8 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 
-from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN
 
-from functools import partial
 
 class AgentRNN(nn.Module):
     # homogenous agent for parameters sharing, assumes all agents have same obs and action dim
@@ -45,7 +44,6 @@ class AgentRNN(nn.Module):
         q_vals = nn.Dense(self.action_dim, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.0))(embedding)
 
         return hidden, q_vals
-
 
 
 def make_train(config, env):
