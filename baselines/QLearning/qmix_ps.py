@@ -24,8 +24,13 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.core import frozen_dict
+import wandb
+import hydra
+from omegaconf import OmegaConf
 
+from smax import make
 from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN
+
     
 class AgentRNN(nn.Module):
     # homogenous agent for parameters sharing, assumes all agents have same obs and action dim
@@ -418,40 +423,14 @@ def make_train(config, env):
     
     return train
 
+@hydra.main(version_base=None, config_path="config", config_name="qmix_ps")
+def main(config):
+    config = OmegaConf.to_container(config)
 
-if __name__ == "__main__":
-
-    from smax import make
-    import time
-    env_name = "MPE_simple_spread_v3"
-    env = make(env_name)
-    config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "AGENT_INIT_SCALE":2.,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "MIXER_EMBEDDING_DIM": 32,
-        "MIXER_HYPERNET_HIDDEN_DIM": 64,
-        "MIXER_INIT_SCALE":0.00001,
-        "MAX_GRAD_NORM": 25,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "EPS_ADAM":0.001,
-        "WEIGHT_DECAY_ADAM":0.00001,
-        "GAMMA": 0.9,
-        "VERBOSE": True,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL": 5e4,
-        "ENTITY": "amacrutherford",
-        "PROJECT": "mpe-smax",
-        "WANDB_MODE": "online"
-    }
+    env = make(config["ENV_NAME"])
+    
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+    config["NUM_STEPS"] = env.max_steps
     
     wandb.init(
         entity=config["ENTITY"],
@@ -460,32 +439,23 @@ if __name__ == "__main__":
         config=config,
         mode=config["WANDB_MODE"],
     )
-
-    b = 10 # number of concurrent trainings
-    rng = jax.random.PRNGKey(42)
-    rngs = jax.random.split(rng, b)
-    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-    t0 = time.time()
-    outs = jax.block_until_ready(train_vjit(rngs))
-    t1 = time.time() - t0
-    print(f"time: {t1:.2f} s")
-
-    from matplotlib import pyplot as plt
-    plt.plot(outs['metrics']['timesteps'][0], outs['metrics']['test_returns']['__all__'].mean(axis=-1).mean(axis=0))
-    plt.xlabel("Timesteps")
-    plt.ylabel("Team Returns")
-    plt.title(f"{env_name} returns (mean of {b} seeds)")
-    #plt.savefig(f"QMIX_{env_name}_returns.png")
-    #plt.show()
     
-    # Log to wandb
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])
+    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
+    outs = jax.block_until_ready(train_vjit(rngs))
+    
+    # Log to wandb  
     returns_table = jnp.stack([
         outs['metrics']['timesteps'][0],
         outs['metrics']['rewards']['__all__'].mean(axis=0),
-    ])
-    
+    ], axis=1)
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["timestep", "returns"])
     
     wandb.log({
         "returns_plot": wandb.plot.line(returns_table, "timestep", "returns", title="returns_vs_timestep"),
     })
+
+if __name__ == "__main__":
+    main()
+    
