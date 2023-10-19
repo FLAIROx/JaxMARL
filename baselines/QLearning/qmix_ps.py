@@ -460,12 +460,7 @@ if __name__ == "__main__":
     print(f"time: {t1:.2f} s")
 
     from matplotlib import pyplot as plt
-    def rolling_average_plot(x, y, window_size=50, label=''):
-        y = jnp.mean(jnp.reshape(y, (-1, window_size)), axis=1)
-        x = x[::window_size]
-        plt.plot(x, y, label=label)
-
-    rolling_average_plot(outs['metrics']['timesteps'][0], outs['metrics']['test_returns']['__all__'].mean(axis=-1).mean(axis=0))
+    plt.plot(outs['metrics']['timesteps'][0], outs['metrics']['test_returns']['__all__'].mean(axis=-1).mean(axis=0))
     plt.xlabel("Timesteps")
     plt.ylabel("Team Returns")
     plt.title(f"{env_name} returns (mean of {b} seeds)")
