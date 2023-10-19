@@ -25,10 +25,10 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.core import frozen_dict
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 
 from functools import partial
-
+import wandb
 
 class ScannedRNN(nn.Module):
 
@@ -496,10 +496,21 @@ if __name__ == "__main__":
         "GAMMA": 0.9,
         "DEBUG": False,
         "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL": 5e4
+        "TEST_INTERVAL": 5e4,
+        "ENTITY": "amacrutherford",
+        "PROJECT": "mpe-smax",
+        "WANDB_MODE": "online"
     }
+    
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["QMIX", "RNN"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
 
-    b = 32 # number of concurrent trainings
+    b = 2 # number of concurrent trainings
     rng = jax.random.PRNGKey(42)
     rngs = jax.random.split(rng, b)
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
@@ -518,4 +529,17 @@ if __name__ == "__main__":
     plt.xlabel("Timesteps")
     plt.ylabel("Team Returns")
     plt.title(f"{env_name} returns (mean of {b} seeds)")
-    plt.show()
+    #plt.savefig(f"QMIX_{env_name}_returns.png")
+    #plt.show()
+    
+    # Log to wandb
+    returns_table = jnp.stack([
+        outs['metrics']['timesteps'][0],
+        outs['metrics']['rewards']['__all__'].mean(axis=0),
+    ])
+    
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["timestep", "returns"])
+    
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "timestep", "returns", title="returns_vs_timestep"),
+    })
