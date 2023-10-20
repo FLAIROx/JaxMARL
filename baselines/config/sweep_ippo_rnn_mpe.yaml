@@ -1,0 +1,73 @@
+entity: amacrutherford
+project: mpe-smax
+program: ippo_rnn_mpe.py
+command:
+  - python3
+  - ${program}
+  - ${args_no_hyphens}
+method: grid
+parameters:
+  LR: 
+    values:
+      - 1.0e-3
+      - 7.0e-4
+      - 5.0e-4
+      - 1.0e-4
+  NUM_ENVS: 
+    values:
+      - 32
+      - 64
+      - 128
+  SEED: 
+    values:
+      - 0
+  NUM_STEPS: 
+    values:
+      - 128
+  TOTAL_TIMESTEPS: 
+    values: 
+      - 5000000
+  UPDATE_EPOCHS: 
+    values:
+      - 2
+      - 5
+      - 10
+  NUM_MINIBATCHES: 
+    values:
+      - 1
+      - 2
+      - 4
+  GAMMA: 
+    values: 
+      - 0.99
+  GAE_LAMBDA: 
+    values:
+      - 0.95
+  CLIP_EPS: 
+    values:
+      - 0.05
+      - 0.1
+      - 0.2
+  SCALE_CLIP_EPS:
+    values:
+      - False
+  ENT_COEF: 
+    values:
+      - 0.00
+  VF_COEF: 
+    values:
+      - 0.5
+  MAX_GRAD_NORM: 
+    values:
+      - 0.5
+  ACTIVATION:
+    values:
+      - "tanh"
+      - "relu"
+  ENV_NAME: 
+    values:
+      - "MPE_simple_spread_v3"
+
+  ANNEAL_LR: 
+    values:
+      - True
