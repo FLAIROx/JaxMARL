@@ -435,7 +435,7 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["QMIX", "RNN"],
+        tags=["QMIX", "PS", "RNN"],
         config=config,
         mode=config["WANDB_MODE"],
     )
