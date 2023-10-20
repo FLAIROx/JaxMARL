@@ -1,7 +1,5 @@
 """ 
-Based on PureJaxRL Implementation of PPO
-
-NOTE: currently implemented using the gymnax to smax wrapper
+Based on the PureJaxRL Implementation of PPO
 """
 
 import jax
@@ -14,10 +12,11 @@ from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
 import smax
-from smax.wrappers.smaxbaselines import LogWrapper
+from smax.wrappers.smaxbaselines import MPELogWrapper as LogWrapper 
 import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
+import wandb
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -230,14 +229,23 @@ def make_train(config):
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (value_loss, loss_actor, entropy, ratio)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
                         train_state.params, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, total_loss
+                    
+                    loss_info = {
+                        "total_loss": total_loss[0],
+                        "actor_loss": total_loss[1][1],
+                        "critic_loss": total_loss[1][0],
+                        "entropy": total_loss[1][2],
+                        "ratio": total_loss[1][3],
+                    }
+                    
+                    return train_state, loss_info
 
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
@@ -259,11 +267,11 @@ def make_train(config):
                     ),
                     shuffled_batch,
                 )
-                train_state, total_loss = jax.lax.scan(
+                train_state, loss_info = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (train_state, traj_batch, advantages, targets, rng)
-                return update_state, total_loss
+                return update_state, loss_info
 
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
@@ -272,6 +280,10 @@ def make_train(config):
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
+            
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            metric = jax.tree_map(lambda x: x.mean(), metric)
+            metric = {**metric, **loss_info}
             
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
@@ -290,10 +302,35 @@ def make_train(config):
 def main(config):
     config = OmegaConf.to_container(config) 
 
-    rng = jax.random.PRNGKey(30)
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])    
     train_jit = jax.jit(make_train(config))
-    out = train_jit(rng)
-    import pdb; pdb.set_trace()
+    out = jax.vmap(train_jit)(rngs)
+    
+    updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
+    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
+    print('shape', out["metrics"]["returned_episode_returns"][0].shape)
+    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
+        "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+        "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+        "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+        "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+        "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+        "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
+    })
 
 
 if __name__ == "__main__":
