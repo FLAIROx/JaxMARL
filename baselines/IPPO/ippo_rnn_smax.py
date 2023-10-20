@@ -150,6 +150,7 @@ def make_train(config):
         # INIT NETWORK
         network = ActorCriticRNN(env.action_space(env.agents[0]).n, config=config)
         rng, _rng = jax.random.split(rng)
+        print('action num', env.action_space(env.agents[0]).n)
         init_x = (
             jnp.zeros(
                 (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
@@ -451,6 +452,7 @@ def main(config):
         project=config["PROJECT"],
         tags=["IPPO", "RNN"],
         config=config,
+        mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
