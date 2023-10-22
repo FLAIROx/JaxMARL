@@ -1,7 +1,7 @@
 "LR": 5.9e-4
 "NUM_ENVS": 128 # must be a multiple of 8
 "NUM_STEPS": 128 # must be 128
-"TOTAL_TIMESTEPS": 1e5
+"TOTAL_TIMESTEPS": 1e8
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -19,7 +19,7 @@
 
 
 "DISABLE_JIT": False
-"WANDB_MODE": "disabled"
+"WANDB_MODE": "online"
 "ANNEAL_LR": True
 "ENTITY": "amacrutherford"
 "PROJECT": "hanabi-rnn"

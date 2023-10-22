@@ -106,7 +106,7 @@ class ActorRNN(nn.Module):
 
     @nn.compact
     def __call__(self, hidden, x):
-        obs, dones = x
+        obs, dones, avail_actions = x
         embedding = nn.Dense(
             128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
@@ -123,6 +123,8 @@ class ActorRNN(nn.Module):
         action_logits = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
         )(actor_mean)
+        unavail_actions = 1 - avail_actions
+        action_logits = action_logits - (unavail_actions * 1e10)
 
         pi = distrax.Categorical(logits=action_logits)
 
@@ -163,6 +165,7 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     world_state: jnp.ndarray
     info: jnp.ndarray
+    avail_actions: jnp.ndarray
 
 
 def batchify(x: dict, agent_list, num_actors):
@@ -206,6 +209,7 @@ def make_train(config):
         ac_init_x = (
             jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).n)),
             jnp.zeros((1, config["NUM_ENVS"])),
+            jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
         )
         ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
         print('ac init x', ac_init_x)
@@ -268,11 +272,13 @@ def make_train(config):
                 # SELECT ACTION
                 # NOTE avail actions not used, could be removed.
                 rng, _rng = jax.random.split(rng)
-
+                legal_moves = env_state.env_state.legal_moves
+                avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],
                     last_done[np.newaxis, :],
+                    avail_actions,
                 )
                 print('env step ac in', ac_in)
                 ac_hstate, pi = actor_network.apply(train_states[0].params, hstates[0], ac_in)
@@ -312,6 +318,7 @@ def make_train(config):
                     obs_batch,
                     world_state,
                     info,
+                    avail_actions,
                 )
                 runner_state = (train_states, env_state, obsv, done_batch, (ac_hstate, cr_hstate), rng)
                 return runner_state, transition
@@ -372,7 +379,7 @@ def make_train(config):
                         _, pi = actor_network.apply(
                             actor_params,
                             init_hstate.transpose(),
-                            (traj_batch.obs, traj_batch.done),
+                            (traj_batch.obs, traj_batch.done, traj_batch.avail_actions),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
 
