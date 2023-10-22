@@ -24,7 +24,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
 import smax
-from smax.wrappers.smaxbaselines import LogWrapper, SMAXWrapper
+from smax.wrappers.smaxbaselines import MPELogWrapper, SMAXWrapper
 from smax.environments.multi_agent_env import MultiAgentEnv, State
 
 
@@ -34,13 +34,13 @@ import functools
 import matplotlib.pyplot as plt
 
     
-class HanabiWorldStateWrapper(SMAXWrapper):
+class MPEWorldStateWrapper(SMAXWrapper):
     
     @partial(jax.jit, static_argnums=0)
     def reset(self,
               key):
         obs, env_state = self._env.reset(key)
-        obs["world_state"] = self.world_state(obs, env_state)
+        obs["world_state"] = self.world_state(obs)
         return obs, env_state
     
     @partial(jax.jit, static_argnums=0)
@@ -51,26 +51,36 @@ class HanabiWorldStateWrapper(SMAXWrapper):
         obs, env_state, reward, done, info = self._env.step(
             key, state, action
         )
-        obs["world_state"] = self.world_state(obs, state)
+        obs["world_state"] = self.world_state(obs)
         #reward = jax.tree_map(lambda x: x * self._env.num_agents, reward)
         #print('reward', reward)
         #reward["world_reward"] = self.world_reward(reward)
         return obs, env_state, reward, done, info
 
     @partial(jax.jit, static_argnums=0)
-    def world_state(self, obs, state):
+    def world_state(self, obs):
         """ 
-        For each agent: [agent obs, own hand]
+        For each agent: [agent obs, all other agent obs]
         """
-            
-        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
-        hands = state.player_hands.reshape((self._env.num_agents, -1))
-        return jnp.concatenate((all_obs, hands), axis=1)
         
+        @partial(jax.vmap, in_axes=(0, None))
+        def _roll_obs(aidx, all_obs):
+            #r = self._env.num_agents - aidx
+            robs = jnp.roll(all_obs, -aidx, axis=0)
+            robs = robs.flatten()
+            return robs
+            
+        all_obs = jnp.array([obs[agent] for agent in self._env.agents]).flatten()
+        #print('all obs shape', all_obs.shape)
+        all_obs = jnp.expand_dims(all_obs, axis=0).repeat(self._env.num_agents, axis=0)
+        #print('all obs shape', all_obs.shape)
+        return all_obs
+        #return _roll_obs(jnp.arange(self._env.num_agents), all_obs)
     
     def world_state_size(self):
-   
-        return self._env.observation_space(self._env.agents[0]).n + 125 # NOTE hardcoded hand size
+        spaces = [self._env.observation_space(agent) for agent in self._env.agents]
+        #return spaces[0].shape[-1]
+        return sum([space.shape[-1] for space in spaces])
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -85,6 +95,7 @@ class ScannedRNN(nn.Module):
         """Applies the module."""
         rnn_state = carry
         ins, resets = x
+        print('ins', ins)
         rnn_state = jnp.where(
             resets[:, np.newaxis],
             self.initialize_carry(ins.shape[0], ins.shape[1]),
@@ -187,8 +198,8 @@ def make_train(config):
     config["CLIP_EPS"] = config["CLIP_EPS"] / env.num_agents if config["SCALE_CLIP_EPS"] else config["CLIP_EPS"]
 
     # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
-    env = HanabiWorldStateWrapper(env)
-    env = LogWrapper(env)
+    env = MPEWorldStateWrapper(env)
+    env = MPELogWrapper(env)
 
     def linear_schedule(count):
         frac = (
@@ -204,7 +215,7 @@ def make_train(config):
         critic_network = CriticRNN()
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
         ac_init_x = (
-            jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).n)),
+            jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
         ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
@@ -549,7 +560,7 @@ def make_train(config):
 
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_hanabi")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_mpe")
 def main(config):
 
     config = OmegaConf.to_container(config)

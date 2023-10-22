@@ -17,60 +17,17 @@ import optax
 from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
 import chex
-
+import wandb
+import functools
 from flax.training.train_state import TrainState
 import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
+
 import smax
-from smax.wrappers.smaxbaselines import LogWrapper, SMAXWrapper
-from smax.environments.multi_agent_env import MultiAgentEnv, State
+from smax.wrappers.smaxbaselines import SMAXLogWrapper
 
-
-# from smax.wrappers.gymnax import GymnaxToSMAX
-import wandb
-import functools
-import matplotlib.pyplot as plt
-
-    
-class HanabiWorldStateWrapper(SMAXWrapper):
-    
-    @partial(jax.jit, static_argnums=0)
-    def reset(self,
-              key):
-        obs, env_state = self._env.reset(key)
-        obs["world_state"] = self.world_state(obs, env_state)
-        return obs, env_state
-    
-    @partial(jax.jit, static_argnums=0)
-    def step(self,
-             key,
-             state,
-             action):
-        obs, env_state, reward, done, info = self._env.step(
-            key, state, action
-        )
-        obs["world_state"] = self.world_state(obs, state)
-        #reward = jax.tree_map(lambda x: x * self._env.num_agents, reward)
-        #print('reward', reward)
-        #reward["world_reward"] = self.world_reward(reward)
-        return obs, env_state, reward, done, info
-
-    @partial(jax.jit, static_argnums=0)
-    def world_state(self, obs, state):
-        """ 
-        For each agent: [agent obs, own hand]
-        """
-            
-        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
-        hands = state.player_hands.reshape((self._env.num_agents, -1))
-        return jnp.concatenate((all_obs, hands), axis=1)
-        
-    
-    def world_state_size(self):
-   
-        return self._env.observation_space(self._env.agents[0]).n + 125 # NOTE hardcoded hand size
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -85,6 +42,7 @@ class ScannedRNN(nn.Module):
         """Applies the module."""
         rnn_state = carry
         ins, resets = x
+        print('ins', ins)
         rnn_state = jnp.where(
             resets[:, np.newaxis],
             self.initialize_carry(ins.shape[0], ins.shape[1]),
@@ -187,8 +145,8 @@ def make_train(config):
     config["CLIP_EPS"] = config["CLIP_EPS"] / env.num_agents if config["SCALE_CLIP_EPS"] else config["CLIP_EPS"]
 
     # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
-    env = HanabiWorldStateWrapper(env)
-    env = LogWrapper(env)
+    #env = MPEWorldStateWrapper(env)
+    env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
         frac = (
@@ -204,16 +162,16 @@ def make_train(config):
         critic_network = CriticRNN()
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
         ac_init_x = (
-            jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).n)),
+            jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
         ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
         print('ac init x', ac_init_x)
         print('ac init hstate', ac_init_hstate)
         actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
-        
+        print('env state size',  env.state_size)
         cr_init_x = (
-            jnp.zeros((1, config["NUM_ENVS"], env.world_state_size(),)),  #  + env.observation_space(env.agents[0]).shape[0]
+            jnp.zeros((1, config["NUM_ENVS"], env.state_size,)),  #  + env.observation_space(env.agents[0]).shape[0]
             jnp.zeros((1, config["NUM_ENVS"])),
         )
         cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
@@ -284,9 +242,11 @@ def make_train(config):
                 #env_act = {k: v.squeeze() for k, v in env_act.items()}
 
                 # VALUE
-                #world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-                #world_state = jnp.repeat(world_state, env.num_agents, axis=1) 
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+                world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
+                world_state = jnp.repeat(world_state, env.num_agents, axis=1) 
+                #print('world state obs size', last_obs["world_state"].shape)
+                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
+                print('world state shape', world_state.shape)
                 #world_state = jnp.concatenate((obs_batch, world_state), axis=1)
                 cr_in = (
                     world_state[None, :],
@@ -324,9 +284,11 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
       
-            #last_world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-            #last_world_state = jnp.repeat(last_world_state, env.num_agents, axis=1)
-            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+            last_world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
+            last_world_state = jnp.repeat(last_world_state, env.num_agents, axis=1)
+            print('world state obs size', last_obs["world_state"].shape)
+            last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
+            
             #last_world_state = jnp.concatenate((last_obs_batch, last_world_state), axis=1)
             cr_in = (
                 last_world_state[None, :],
@@ -508,25 +470,31 @@ def make_train(config):
             
             train_states = update_state[0]
             metric = traj_batch.info
+            metric = jax.tree_map(
+                lambda x: x.reshape(
+                    (config["NUM_STEPS"], config["NUM_ENVS"], env.num_agents)
+                ),
+                traj_batch.info,
+            )
             rng = update_state[-1]
 
             def callback(metric):
-                
-                #print('metric shape', metric["returned_episode_returns"].shape)
                 wandb.log(
                     {
-                        "returns": metric["returned_episode_returns"][-1, :].mean(),
+                        # the metrics have an agent dimension, but this is identical
+                        # for all agents so index into the 0th item of that dimension.
+                        "returns": metric["returned_episode_returns"][:, :, 0][
+                            metric["returned_episode"][:, :, 0]
+                        ].mean(),
+                        "win_rate": metric["returned_won_episode"][:, :, 0][
+                            metric["returned_episode"][:, :, 0]
+                        ].mean(),
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
                     }
                 )
-                
             
-            #metric = {k: v.mean() for k, v in metric.items()}
-            #metric = {**metric, **loss_info}
-            #jax.debug.print('m sh {s}', s=metric["returned_episode_returns"].shape)
-            #jax.debug.print('m sh {s}', s=metric["returned_episode"].shape)
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric)
             update_steps = update_steps + 1
@@ -549,7 +517,7 @@ def make_train(config):
 
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_hanabi")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_smax")
 def main(config):
 
     config = OmegaConf.to_container(config)
