@@ -169,8 +169,9 @@ def make_train(config):
         init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
 
         # TRAIN LOOP
-        def _update_step(runner_state, unused):
+        def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
+            runner_state, update_steps = update_runner_state
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, last_done, hstate, rng = runner_state
 
@@ -336,19 +337,25 @@ def make_train(config):
             metric = traj_batch.info
             rng = update_state[-1]
 
-            def callback(metric):
-                print(metric["returned_episode_returns"][-1, :].mean())
-                # wandb.log({'Returns': metric["returned_episode_returns"][-1, :].mean()})
-
-            jax.debug.callback(callback, metric)
-
+            def callback(metric):                
+                wandb.log(
+                    {
+                        "returns": metric["returned_episode_returns"][-1, :].mean(),
+                        "env_step": metric["update_steps"]
+                        * config["NUM_ENVS"]
+                        * config["NUM_STEPS"],
+                    }
+                )
+            metric["update_steps"] = update_steps
+            jax.experimental.io_callback(callback, None, metric)
+            update_steps = update_steps + 1
             runner_state = (train_state, env_state, last_obs, last_done, hstate, rng)
-            return runner_state, None
+            return (runner_state, update_steps), None
 
         rng, _rng = jax.random.split(rng)
         runner_state = (train_state, env_state, obsv, jnp.zeros((config["NUM_ACTORS"]), dtype=bool), init_hstate, _rng)
         runner_state, _ = jax.lax.scan(
-            _update_step, runner_state, None, config["NUM_UPDATES"]
+            _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
         return {"runner_state": runner_state}
 
@@ -359,19 +366,17 @@ def make_train(config):
 def main(config):
     config = OmegaConf.to_container(config) 
 
-    # wandb.init(
-    #     entity="jonny-dphil",
-    #     project="Hanabax",
-    #     tags=["IPPO", "Time"]
-    # )
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "RNN", config["ENV_NAME"]],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
 
     rng = jax.random.PRNGKey(30)
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
     out = train_jit(rng)
-    plt.plot(out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1))
-    plt.xlabel("Update Step")
-    plt.ylabel("Return")
-    plt.savefig(f'IPPO_{config["ENV_NAME"]}.png')
 
 if __name__ == "__main__":
     main()
