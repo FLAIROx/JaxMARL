@@ -254,8 +254,10 @@ def make_train(config):
         init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
 
         # TRAIN LOOP
-        def _update_step(runner_state, unused):
+        def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
+            runner_state, update_steps = update_runner_state
+            
             def _env_step(runner_state, unused):
                 train_states, env_state, last_obs, last_done, hstate, rng = runner_state
 
@@ -490,10 +492,28 @@ def make_train(config):
             metric = traj_batch.info
             rng = update_state[-1]
 
-            metric = {k: v.mean() for k, v in metric.items()}
-            metric = {**metric, **loss_info}
+            def callback(metric):
+                
+                #print('metric shape', metric["returned_episode_returns"].shape)
+                wandb.log(
+                    {
+                        "returns": metric["returned_episode_returns"][-1, :].mean(),
+                        "env_step": metric["update_steps"]
+                        * config["NUM_ENVS"]
+                        * config["NUM_STEPS"],
+                    }
+                )
+                
+            
+            #metric = {k: v.mean() for k, v in metric.items()}
+            #metric = {**metric, **loss_info}
+            #jax.debug.print('m sh {s}', s=metric["returned_episode_returns"].shape)
+            #jax.debug.print('m sh {s}', s=metric["returned_episode"].shape)
+            metric["update_steps"] = update_steps
+            jax.experimental.io_callback(callback, None, metric)
+            update_steps = update_steps + 1
             runner_state = (train_states, env_state, last_obs, last_done, hstate, rng)
-            return runner_state, metric
+            return (runner_state, update_steps), metric
 
         rng, _rng = jax.random.split(rng)
         runner_state = (
@@ -505,9 +525,9 @@ def make_train(config):
             _rng,
         )
         runner_state, metric = jax.lax.scan(
-            _update_step, runner_state, None, config["NUM_UPDATES"]
+            _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
-        return {"runner_state": runner_state, "metrics": metric}
+        return {"runner_state": runner_state}
 
     return train
 
@@ -524,12 +544,12 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
-    rngs = jax.random.split(rng, config["NUM_SEEDS"])
+    #rngs = jax.random.split(rng, config["NUM_SEEDS"])
     with jax.disable_jit(config["DISABLE_JIT"]):
         train_jit = jax.jit(make_train(config)) #  device=jax.devices()[config["DEVICE"]]
-        out = jax.vmap(train_jit)(rngs)
+        out = train_jit(rng)
     
-    updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    '''updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
     loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0)], axis=1)    
     loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy"])
     
@@ -543,7 +563,7 @@ def main(config):
         "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
         "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
         "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
-    })
+    })'''
 
     
 if __name__=="__main__":
