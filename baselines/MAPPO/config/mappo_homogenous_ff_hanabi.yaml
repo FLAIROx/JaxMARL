@@ -11,7 +11,8 @@
 "ENT_COEF": 0.01
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
-"ACTIVATION": "tanh"
+"ACTIVATION": "relu"
+"LAYER_WIDTH": 512
 "ENV_NAME": "hanabi"
 "SEED": 30
 "NUM_SEEDS": 2
