@@ -164,8 +164,9 @@ class HanabiGame(MultiAgentEnv):
 
         return legal_moves
 
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
         """Reset the environment"""
+
 
         def _gen_cards(aidx, unused):
             """Generates one-hot card encodings given (color, rank) pairs"""
@@ -314,7 +315,7 @@ class HanabiGame(MultiAgentEnv):
         dones["__all__"] = done
 
         rewards = {agent: reward for agent in self.agents}
-        rewards["__all__"] = reward
+        # rewards["__all__"] = reward
 
         info = {}
 

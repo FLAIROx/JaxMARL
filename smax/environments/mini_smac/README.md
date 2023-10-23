@@ -1,0 +1,44 @@
+# MiniSMAC
+## Description
+MiniSMAC is a purely JAX SMAC-like environment. It, like SMAC, focuses on decentralised unit micromanagement across a range of scenarios. Each scenario features fixed teams. 
+
+## Scenarios (Aspirational ATM)
+
+| Name         | Ally Units             | Enemy Units            |
+|--------------|------------------------|------------------------|
+| 2s3z         | 2 stalkers & 3 zealots | 2 stalkers & 3 zealots |
+| 3s5z         | 3 stalkers & 5 zealots | 3 stalkers & 5 zealots |
+| 5m_vs_6m     | 5 marines              | 6 marines              |
+| 10m_vs_11m   | 10 marines             | 11 marines             |
+| 27m_vs_30m   | 27 marines             | 30 marines             |
+| 3s5z_vs_3s6z | 3 stalkers & 5 zealots | 3 stalkers & 6 zealots |
+| 3s_vs_5z     | 3 stalkers             | 5 zealots              |
+| 6h_vs_8z     | 6 hydralisks           | 8 zealots              |
+
+## Visualisation
+You can see the example `mini_smac_introduction.py` in the tutorials folder for an introduction to MiniSMAC, including example visualisation. MiniSMAC environments tick at 8 times faster than each step of the agent. This means that when visualising, we have to expand the state sequence to encompass all ticks. This is why the `state_seq` for MiniSMAC consists of a sequence of `(key, state, actions)` -- we must have not only the state and actions, but also the exact key passed to the step function to interpolate between the different states correctly. This process means visualisation can be time consuming if done for a large number of steps.
+
+```python
+from smax import make
+from smax.environments.mini_smac import map_name_to_scenario
+from smax.viz.visualizer import MiniSMACVisualizer
+
+scenario = map_name_to_scenario("3m")
+env = make(
+    "HeuristicEnemyMiniSMAC",
+    enemy_shoots=True,
+    scenario=scenario,
+    num_agents_per_team=3,
+    use_self_play_reward=False,
+    walls_cause_death=True,
+    see_enemy_actions=False,
+)
+
+# state_seq is a list of (key_s, state, actions) tuples
+# where key_s is the RNG key passed into the step function,
+# state is the jax env state and actions is the actions passed
+# into the step function.
+viz = MiniSMACVisualizer(env, state_seq)
+
+viz.animate(view=False, save_fname="output.gif")
+```

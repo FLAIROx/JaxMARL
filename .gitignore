@@ -4,4 +4,13 @@ __pycache__/
 *$py.class
 *.egg-info/
 *.ipynb
+*.DS_Store
+.vscode/
 docker/*
+*.pickle
+results/
+docs/
+tmp/
+*-checkpoint.py
+wandb/*
+outputs/*

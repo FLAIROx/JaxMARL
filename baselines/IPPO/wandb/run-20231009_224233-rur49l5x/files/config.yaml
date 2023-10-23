@@ -1,0 +1,89 @@
+wandb_version: 1
+
+LR:
+  desc: null
+  value: 0.001
+NUM_ENVS:
+  desc: null
+  value: 64
+NUM_STEPS:
+  desc: null
+  value: 300
+TOTAL_TIMESTEPS:
+  desc: null
+  value: 10000000.0
+UPDATE_EPOCHS:
+  desc: null
+  value: 4
+NUM_MINIBATCHES:
+  desc: null
+  value: 4
+GAMMA:
+  desc: null
+  value: 0.99
+GAE_LAMBDA:
+  desc: null
+  value: 0.95
+CLIP_EPS:
+  desc: null
+  value: 0.2
+ENT_COEF:
+  desc: null
+  value: 2.0e-06
+VF_COEF:
+  desc: null
+  value: 4.5
+MAX_GRAD_NORM:
+  desc: null
+  value: 0.5
+ACTIVATION:
+  desc: null
+  value: tanh
+SEED:
+  desc: null
+  value: 30
+ENV_NAME:
+  desc: null
+  value: ant_4x2
+ENV_KWARGS:
+  desc: null
+  value: {}
+ANNEAL_LR:
+  desc: null
+  value: true
+DEVICE:
+  desc: null
+  value: 0
+DISABLE_JIT:
+  desc: null
+  value: false
+ENTITY:
+  desc: null
+  value: amacrutherford
+PROJECT:
+  desc: null
+  value: smax-mabrax
+WANDB_MODE:
+  desc: null
+  value: online
+_wandb:
+  desc: null
+  value:
+    python_version: 3.8.16
+    cli_version: 0.15.4
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1696887753.92945
+    t:
+      1:
+      - 12
+      - 45
+      - 55
+      3:
+      - 15
+      - 16
+      - 23
+      4: 3.8.16
+      5: 0.15.4
+      8:
+      - 5
