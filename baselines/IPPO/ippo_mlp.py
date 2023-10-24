@@ -77,6 +77,7 @@ def make_train(config):
     # env, env_params = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     # env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
     env = HanabiGame()
+    env_params = env.default_params
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
             config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]
@@ -122,7 +123,7 @@ def make_train(config):
         # INIT ENV
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
-        obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng)
+        obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
         # TRAIN LOOP
         def _update_step(runner_state, unused):
@@ -150,7 +151,7 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
                 obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0, 0, 0, None))(
-                    rng_step, env_state, env_act
+                    rng_step, env_state, env_act, env_params
                 )
                 info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
