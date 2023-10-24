@@ -49,7 +49,7 @@ class ActorCriticMLP(nn.Module):
         )(actor_mean)
         unavail_actions = 1 - avail_actions
         action_logits = actor_mean - (unavail_actions * 1e10)
-        pi = distrax.Categorical(logits=actor_mean)
+        pi = distrax.Categorical(logits=action_logits)
 
         critic = nn.Dense(512, kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
@@ -133,10 +133,15 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-                legal_moves = env_state.env_state.legal_moves
-                avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+                # legal_moves = env_state.env_state.legal_moves
+                # avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+                # avail_actions = batchify(legal_moves, env.agents, config["NUM_ACTORS"])
+                avail_actions = jax.vmap(env.get_legal_moves)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
+                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions[np.newaxis, :])
                 pi, value = network.apply(train_state.params, ac_in)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
@@ -171,8 +176,12 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, last_done, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            legal_moves = env_state.env_state.legal_moves
-            avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+            # legal_moves = env_state.env_state.legal_moves
+            # # avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+            # avail_actions_batch = batchify(legal_moves, env.agents, config["NUM_ACTORS"])
+            avail_actions = jnp.ones(
+                (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
+            )
             ac_in = (last_obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
             _, last_val = network.apply(train_state.params, ac_in)
             last_val = last_val.squeeze()
@@ -294,6 +303,7 @@ def make_train(config):
 
             def callback(metric):
                 print(metric["returned_episode_returns"][-1, :].mean())
+                wandb.log({'Returns': metric["returned_episode_returns"][-1, :].mean()})
 
             jax.debug.callback(callback, metric)
 
@@ -330,8 +340,14 @@ if __name__ == "__main__":
         "ANNEAL_LR": False,
     }
 
+    wandb.init(
+        entity="jonny-dphil",
+        project="Hanabax",
+        tags=["IPPO", "Time"]
+    )
+
     rng = jax.random.PRNGKey(50)
-    train_jit = jax.jit(make_train(config))
+    train_jit = jax.jit(make_train(config)) #, device=jax.devices('gpu')[-1])
     out = train_jit(rng)
     results = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
     jnp.save('hanabi_results', results)
