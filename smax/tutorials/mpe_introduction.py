@@ -16,15 +16,15 @@ Below is an example of a simple environment loop, using random actions.
 
 import jax 
 from smax import make
-from smax.viz.visualizer import Visualizer
+from smax.environments.mpe import MPEVisualizer
 
 # Parameters + random keys
-max_steps = 100
+max_steps = 25
 key = jax.random.PRNGKey(0)
 key, key_r, key_a = jax.random.split(key, 3)
 
 # Instantiate environment
-env = make('simple_crypto_v2')
+env = make('MPE_simple_reference_v3')
 obs, state = env.reset(key_r)
 print('list of agents in environment', env.agents)
 
@@ -46,5 +46,5 @@ for _ in range(max_steps):
     obs, state, rewards, dones, infos = env.step(key_s, state, actions)
 
 
-viz = Visualizer(env, state_seq, env.default_params)
+viz = MPEVisualizer(env, state_seq)
 viz.animate(view=True)

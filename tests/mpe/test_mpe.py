@@ -2,27 +2,17 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pettingzoo
 from pettingzoo.test import parallel_api_test
-from pettingzoo.mpe import simple_v2, simple_world_comm_v2, simple_tag_v2, simple_spread_v2, simple_crypto_v2, simple_speaker_listener_v3, simple_push_v2, simple_adversary_v2, simple_reference_v2
-#from multiagentgymnax.u
+from pettingzoo.mpe import simple_v3, simple_world_comm_v3, simple_tag_v3, simple_spread_v3, simple_crypto_v3, simple_speaker_listener_v4, simple_push_v3, simple_adversary_v3, simple_reference_v3
 import tqdm
 from smax import make
+import pytest
 
 from smax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
+from smax.environments.mpe.default_params import DISCRETE_ACT, CONTINUOUS_ACT
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
-
-"""
-state = State(
-    p_pos=p_pos,
-    p_vel=jnp.zeros((self.num_entities, self.dim_p)),
-    c=jnp.zeros((self.num_agents, self.dim_c)),
-    done=jnp.full((self.num_agents), False),
-    step=0
-)                        
-"""
 
 def np_state_to_jax(env_zoo, env_jax):
     from smax.environments.mpe.simple import State
@@ -57,25 +47,20 @@ def np_state_to_jax(env_zoo, env_jax):
     
     #print('jax state', state)
     #print('test obs', state["p_pos"][1] - state["p_pos"][0])
-    if env_zoo.metadata["name"] == 'simple_crypto_v2':
+    if env_zoo.metadata["name"] == 'simple_crypto_v3':
         from smax.environments.mpe.simple_crypto import CryptoState
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
         return CryptoState(**state)
-    if env_zoo.metadata["name"] == 'simple_speaker_listener_v3':
-        from smax.environments.mpe.simple import TargetState
+    if env_zoo.metadata["name"] == 'simple_speaker_listener_v4':
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_b.name[-1])
-        return TargetState(**state)
-    if env_zoo.metadata["name"] == 'simple_push_v2' or env_zoo.metadata["name"] == 'simple_adversary_v2':
-        from smax.environments.mpe.simple import TargetState
+        return State(**state)
+    if env_zoo.metadata["name"] == 'simple_push_v3' or env_zoo.metadata["name"] == 'simple_adversary_v3':
         state["goal"] = int(env_zoo.aec_env.env.world.agents[0].goal_a.name[-1])
-        return TargetState(**state)
-    if env_zoo.metadata["name"] == 'simple_reference_v2':
-        from smax.environments.mpe.simple import TargetState
-        
+        return State(**state)
+    if env_zoo.metadata["name"] == 'simple_reference_v3':
         state["goal"] = np.flip(np.array([int(env_zoo.aec_env.env.world.agents[i].goal_b.name[-1]) for i in range(2)]))
-        #print('goals', state["goal"])
-        return TargetState(**state)
+        return State(**state)
     else:
         return State(**state)
 
@@ -97,23 +82,46 @@ def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
         if k not in ["step"]:        
             assert np.allclose(jax_value, state_zoo[k], atol=atol), f"State values do not match for key {k}, zoo value: {state_zoo[k]}, jax value: {jax_value}"
 
-
-def test_step(zoo_env_name):
+@pytest.mark.parametrize(("zoo_env_name", "action_type"),
+                         [("MPE_simple_v3", DISCRETE_ACT),
+                          ("MPE_simple_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_crypto_v3", DISCRETE_ACT),
+                          ("MPE_simple_crypto_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_reference_v3", DISCRETE_ACT),
+                          ("MPE_simple_reference_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_speaker_listener_v4", DISCRETE_ACT),
+                          ("MPE_simple_speaker_listener_v4", CONTINUOUS_ACT),
+                          ("MPE_simple_world_comm_v3", DISCRETE_ACT),
+                          ("MPE_simple_world_comm_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_adversary_v3", DISCRETE_ACT),
+                          ("MPE_simple_adversary_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_tag_v3", DISCRETE_ACT),
+                          ("MPE_simple_tag_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_push_v3", DISCRETE_ACT),
+                          ("MPE_simple_push_v3", CONTINUOUS_ACT),
+                          ("MPE_simple_spread_v3", DISCRETE_ACT),
+                          ("MPE_simple_spread_v3", CONTINUOUS_ACT),])
+def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
     print(f'-- Testing {zoo_env_name} --')
     key = jax.random.PRNGKey(0)
     
-    env_zoo, env_jax = mpe_env_mapper[zoo_env_name]
+    if action_type == CONTINUOUS_ACT:
+        continuous_actions=True
+    else:
+        continuous_actions=False
+    
+    env_zoo = zoo_mpe_env_mapper[zoo_env_name]
 
-    env_zoo = env_zoo.parallel_env(max_cycles=25, continuous_actions=True)
+    env_zoo = env_zoo.parallel_env(max_cycles=25, continuous_actions=continuous_actions)
     zoo_obs = env_zoo.reset()
 
-    env_jax = env_jax()
-    env_jax, env_params = make(zoo_env_name)
+    #env_jax = env_jax()
+    env_jax = make(zoo_env_name, action_type=action_type)
     
     #env_params = env_jax.default_params
     key, key_reset = jax.random.split(key)
-    env_jax.reset(key_reset, env_params)
-    for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}", leave=True):
+    env_jax.reset(key_reset)
+    for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}, epsiode:", leave=True):
         obs = env_zoo.reset()
         for s in range(num_steps):
             #print('-- step', s)
@@ -132,27 +140,36 @@ def test_step(zoo_env_name):
 
     print(f'-- {zoo_env_name} all tests passed --')
 
-mpe_env_mapper = {
-    "MPE_simple_v2": (simple_v2, SimpleMPE),
-    "MPE_simple_world_comm_v2": (simple_world_comm_v2, SimpleWorldCommMPE),
-    "MPE_simple_tag_v2": (simple_tag_v2, SimpleTagMPE),
-    "MPE_simple_spread_v2": (simple_spread_v2, SimpleSpreadMPE),
-    "MPE_simple_crypto_v2": (simple_crypto_v2, SimpleCryptoMPE),
-    "MPE_simple_speaker_listener_v3": (simple_speaker_listener_v3, SimpleSpeakerListenerMPE),
-    "MPE_simple_push_v2": (simple_push_v2, SimplePushMPE),
-    "MPE_simple_adversary_v2": (simple_adversary_v2, SimpleAdversaryMPE),
-    "MPE_simple_reference_v2": (simple_reference_v2, SimpleReferenceMPE),
+zoo_mpe_env_mapper = {
+    "MPE_simple_v3": simple_v3,
+    "MPE_simple_world_comm_v3": simple_world_comm_v3,
+    "MPE_simple_tag_v3": simple_tag_v3,
+    "MPE_simple_spread_v3": simple_spread_v3,
+    "MPE_simple_crypto_v3": simple_crypto_v3,
+    "MPE_simple_speaker_listener_v4": simple_speaker_listener_v4,
+    "MPE_simple_push_v3": simple_push_v3,
+    "MPE_simple_adversary_v3": simple_adversary_v3,
+    "MPE_simple_reference_v3": simple_reference_v3,
 }
 
 if __name__=="__main__":
+    print(' *** Testing MPE ***')
+    act_type = DISCRETE_ACT
+    test_mpe_vs_pettingzoo("MPE_simple_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_crypto_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_reference_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_speaker_listener_v4", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_world_comm_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_adversary_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_tag_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_push_v3", act_type)
+    test_mpe_vs_pettingzoo("MPE_simple_spread_v3", act_type)    
+
+
+    print(' *** All tests passed ***')
     
-    test_step("MPE_simple_reference_v2")
-    test_step("MPE_simple_adversary_v2")
-    test_step("MPE_simple_push_v2")
-    test_step("MPE_simple_speaker_listener_v3")
-    test_step("MPE_simple_crypto_v2")
-    test_step("MPE_simple_spread_v2")
-    test_step("MPE_simple_v2")
-    test_step("MPE_simple_world_comm_v2")
-    test_step("MPE_simple_tag_v2")
+    
+    
+    
+    
     

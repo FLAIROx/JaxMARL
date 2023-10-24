@@ -1,0 +1,48 @@
+2023-10-09 22:42:33,929 INFO    StreamThr :477211 [internal.py:wandb_internal():86] W&B internal server running at pid: 477211, started at: 2023-10-09 22:42:33.929109
+2023-10-09 22:42:33,934 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: status
+2023-10-09 22:42:33,937 INFO    WriterThread:477211 [datastore.py:open_for_write():85] open: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/run-rur49l5x.wandb
+2023-10-09 22:42:33,939 DEBUG   SenderThread:477211 [sender.py:send():369] send: header
+2023-10-09 22:42:33,990 DEBUG   SenderThread:477211 [sender.py:send():369] send: run
+2023-10-09 22:42:34,574 INFO    SenderThread:477211 [dir_watcher.py:__init__():211] watching files in: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/files
+2023-10-09 22:42:34,575 INFO    SenderThread:477211 [sender.py:_start_run_threads():1100] run started: rur49l5x with start time 1696887753.92945
+2023-10-09 22:42:34,578 DEBUG   SenderThread:477211 [sender.py:send_request():396] send_request: summary_record
+2023-10-09 22:42:34,578 INFO    SenderThread:477211 [sender.py:_save_file():1354] saving file wandb-summary.json with policy end
+2023-10-09 22:42:34,594 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: check_version
+2023-10-09 22:42:34,595 DEBUG   SenderThread:477211 [sender.py:send_request():396] send_request: check_version
+2023-10-09 22:42:34,667 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: run_start
+2023-10-09 22:42:34,749 DEBUG   HandlerThread:477211 [system_info.py:__init__():31] System info init
+2023-10-09 22:42:34,750 DEBUG   HandlerThread:477211 [system_info.py:__init__():46] System info init done
+2023-10-09 22:42:34,750 INFO    HandlerThread:477211 [system_monitor.py:start():181] Starting system monitor
+2023-10-09 22:42:34,751 INFO    SystemMonitor:477211 [system_monitor.py:_start():145] Starting system asset monitoring threads
+2023-10-09 22:42:34,752 INFO    HandlerThread:477211 [system_monitor.py:probe():201] Collecting system info
+2023-10-09 22:42:34,753 INFO    SystemMonitor:477211 [interfaces.py:start():190] Started cpu monitoring
+2023-10-09 22:42:34,754 INFO    SystemMonitor:477211 [interfaces.py:start():190] Started disk monitoring
+2023-10-09 22:42:34,756 INFO    SystemMonitor:477211 [interfaces.py:start():190] Started gpu monitoring
+2023-10-09 22:42:34,763 INFO    SystemMonitor:477211 [interfaces.py:start():190] Started memory monitoring
+2023-10-09 22:42:34,765 INFO    SystemMonitor:477211 [interfaces.py:start():190] Started network monitoring
+2023-10-09 22:42:34,819 DEBUG   HandlerThread:477211 [system_info.py:probe():195] Probing system
+2023-10-09 22:42:34,829 DEBUG   HandlerThread:477211 [system_info.py:_probe_git():180] Probing git
+2023-10-09 22:42:34,851 DEBUG   HandlerThread:477211 [system_info.py:_probe_git():188] Probing git done
+2023-10-09 22:42:34,851 DEBUG   HandlerThread:477211 [system_info.py:probe():240] Probing system done
+2023-10-09 22:42:34,852 DEBUG   HandlerThread:477211 [system_monitor.py:probe():210] {'os': 'Linux-5.15.0-1042-oracle-x86_64-with-glibc2.17', 'python': '3.8.16', 'heartbeatAt': '2023-10-09T21:42:34.820022', 'startedAt': '2023-10-09T21:42:33.907813', 'docker': None, 'cuda': None, 'args': (), 'state': 'running', 'program': 'ippo_mabrax.py', 'codePath': 'baselines/IPPO/ippo_mabrax.py', 'git': {'remote': 'git@github.com:FLAIROx/SMAX.git', 'commit': 'bfbaebc8d0cb242451f685dd3137102a067cf84c'}, 'email': 'amacrutherford@gmail.com', 'root': '/home/alex/repos/SMAX', 'host': 'parsifal', 'username': 'alex', 'executable': '/home/alex/anaconda3/envs/smax/bin/python', 'cpu_count': 20, 'cpu_count_logical': 40, 'cpu_freq': {'current': 2.259149999999999, 'min': 800.0, 'max': 3400.0}, 'cpu_freq_per_core': [{'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.881, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 0.8, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}, {'current': 2.3, 'min': 800.0, 'max': 3400.0}], 'disk': {'total': 1830.3284606933594, 'used': 315.9874687194824}, 'gpu': 'NVIDIA GeForce RTX 4090', 'gpu_count': 2, 'gpu_devices': [{'name': 'NVIDIA GeForce RTX 4090', 'memory_total': 25757220864}, {'name': 'NVIDIA GeForce RTX 4090', 'memory_total': 25757220864}], 'memory': {'total': 125.40717697143555}}
+2023-10-09 22:42:34,852 INFO    HandlerThread:477211 [system_monitor.py:probe():211] Finished collecting system info
+2023-10-09 22:42:34,852 INFO    HandlerThread:477211 [system_monitor.py:probe():214] Publishing system info
+2023-10-09 22:42:34,852 DEBUG   HandlerThread:477211 [system_info.py:_save_pip():51] Saving list of pip packages installed into the current environment
+2023-10-09 22:42:34,853 DEBUG   HandlerThread:477211 [system_info.py:_save_pip():67] Saving pip packages done
+2023-10-09 22:42:34,853 DEBUG   HandlerThread:477211 [system_info.py:_save_conda():74] Saving list of conda packages installed into the current environment
+2023-10-09 22:42:35,579 INFO    Thread-12 :477211 [dir_watcher.py:_on_file_created():272] file/dir created: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/files/requirements.txt
+2023-10-09 22:42:35,580 INFO    Thread-12 :477211 [dir_watcher.py:_on_file_created():272] file/dir created: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/files/wandb-summary.json
+2023-10-09 22:42:35,581 INFO    Thread-12 :477211 [dir_watcher.py:_on_file_created():272] file/dir created: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/files/conda-environment.yaml
+2023-10-09 22:42:39,578 INFO    Thread-12 :477211 [dir_watcher.py:_on_file_modified():289] file/dir modified: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/files/conda-environment.yaml
+2023-10-09 22:42:39,584 DEBUG   HandlerThread:477211 [system_info.py:_save_conda():86] Saving conda packages done
+2023-10-09 22:42:39,587 INFO    HandlerThread:477211 [system_monitor.py:probe():216] Finished publishing system info
+2023-10-09 22:42:39,595 DEBUG   SenderThread:477211 [sender.py:send():369] send: files
+2023-10-09 22:42:39,596 INFO    SenderThread:477211 [sender.py:_save_file():1354] saving file wandb-metadata.json with policy now
+2023-10-09 22:42:39,597 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: status_report
+2023-10-09 22:42:39,604 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: stop_status
+2023-10-09 22:42:39,607 DEBUG   SenderThread:477211 [sender.py:send_request():396] send_request: stop_status
+2023-10-09 22:42:39,828 DEBUG   SenderThread:477211 [sender.py:send():369] send: telemetry
+2023-10-09 22:42:39,990 INFO    wandb-upload_0:477211 [upload_job.py:push():133] Uploaded file /tmp/tmp7s94h1vvwandb/l97d1qsa-wandb-metadata.json
+2023-10-09 22:42:40,578 INFO    Thread-12 :477211 [dir_watcher.py:_on_file_created():272] file/dir created: /home/alex/repos/SMAX/baselines/IPPO/wandb/run-20231009_224233-rur49l5x/files/wandb-metadata.json
+2023-10-09 22:42:44,829 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: status_report
+2023-10-09 22:42:49,830 DEBUG   HandlerThread:477211 [handler.py:handle_request():144] handle_request: status_report
