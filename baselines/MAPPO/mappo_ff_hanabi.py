@@ -64,6 +64,7 @@ class HanabiWorldStateWrapper(SMAXWrapper):
         """
             
         all_obs = jnp.array([obs[agent] for agent in self._env.agents])
+        #return all_obs
         hands = state.player_hands.reshape((self._env.num_agents, -1))
         return jnp.concatenate((all_obs, hands), axis=1)
         
@@ -130,7 +131,6 @@ class CriticFF(nn.Module):
         return jnp.squeeze(critic, axis=-1)
 
 class Transition(NamedTuple):
-    global_done: jnp.ndarray
     done: jnp.ndarray
     action: jnp.ndarray
     value: jnp.ndarray
@@ -144,6 +144,7 @@ class Transition(NamedTuple):
 
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
+    #print('batchify x', x.shape)
     return x.reshape((num_actors, -1))
 
 
@@ -242,12 +243,14 @@ def make_train(config):
                 # SELECT ACTION
                 # NOTE avail actions not used, could be removed.
                 rng, _rng = jax.random.split(rng)
-                legal_moves = env_state.env_state.legal_moves
-                avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+                avail_actions = jax.vmap(env.get_legal_moves)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],
-                    avail_actions,
+                    avail_actions[None, :],
                 )
                 pi = actor_network.apply(train_states[0].params, ac_in)
                 action = pi.sample(seed=_rng)
@@ -258,9 +261,11 @@ def make_train(config):
                 #env_act = {k: v.squeeze() for k, v in env_act.items()}
 
                 # VALUE
+                world_state = last_obs["world_state"].swapaxes(0,1)
+                #print('world state shape', world_state.shape)
                 #world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
                 #world_state = jnp.repeat(world_state, env.num_agents, axis=1) 
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
                 #world_state = jnp.concatenate((obs_batch, world_state), axis=1)
                 value = critic_network.apply(train_states[1].params, world_state)
 
@@ -273,7 +278,6 @@ def make_train(config):
                 info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
-                    jnp.tile(done["__all__"], env.num_agents),
                     done_batch,
                     action.squeeze(),
                     value.squeeze(),
@@ -296,7 +300,8 @@ def make_train(config):
       
             #last_world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
             #last_world_state = jnp.repeat(last_world_state, env.num_agents, axis=1)
-            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+            last_world_state = last_obs["world_state"].swapaxes(0,1)
+            last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
             #last_world_state = jnp.concatenate((last_obs_batch, last_world_state), axis=1)
             last_val = critic_network.apply(train_states[1].params, last_world_state)
             last_val = last_val.squeeze()
@@ -305,7 +310,7 @@ def make_train(config):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
                     done, value, reward = (
-                        transition.global_done,
+                        transition.done,
                         transition.value,
                         transition.reward,
                     )
