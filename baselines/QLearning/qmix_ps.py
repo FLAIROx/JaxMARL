@@ -279,12 +279,34 @@ def make_train(config, env):
                 )
 
                 # compute target
-                targets = (
-                    learn_traj.rewards['__all__'][:-1]
-                    + config["GAMMA"]*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_mix
-                )
+                if config.get('TD_LAMBDA_LOSS', True):
+                    # time difference loss
+                    def _td_lambda_target(ret, values):
+                        reward, done, target_qs = values
+                        ret = jnp.where(
+                            done,
+                            target_qs,
+                            ret*config['TD_LAMBDA']*config['GAMMA']
+                            + reward
+                            + (1-config['TD_LAMBDA'])*config['GAMMA']*(1-done)*target_qs
+                        )
+                        return ret, ret
 
-                loss = jnp.mean((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2)
+                    ret = target_max_qvals_mix[-1] * (1-learn_traj.dones['__all__'][-1])
+                    ret, td_targets = jax.lax.scan(
+                        _td_lambda_target,
+                        ret,
+                        (learn_traj.rewards['__all__'][-2::-1], learn_traj.dones['__all__'][-2::-1], target_max_qvals_mix[-1::-1])
+                    )
+                    targets = td_targets[::-1]
+                    loss = jnp.mean(0.5*((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2))
+                else:
+                    # standard DQN loss
+                    targets = (
+                        learn_traj.rewards['__all__'][:-1]
+                        + config['GAMMA']*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_mix
+                    )
+                    loss = jnp.mean((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2)
                 
                 return loss
 
@@ -336,6 +358,19 @@ def make_train(config, env):
                 'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards)
             }
             metrics.update(test_metrics) # add the test metrics dictionary
+
+            if config.get('WANDB_ONLINE_REPORT', False):
+                def callback(metrics):
+                    wandb.log(
+                        {
+                            "returns": metrics['rewards']['__all__'].mean(),
+                            "test_returns": metrics['test_returns']['__all__'].mean(),
+                            "timestep": metrics['timesteps'],
+                            "updates": metrics['updates'],
+                            "loss": metrics['loss'],
+                        }
+                    )
+                jax.debug.callback(callback, metrics)
 
             runner_state = (
                 train_state,
@@ -435,7 +470,8 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["QMIX", "PS", "RNN"],
+        tags=["QMIX", "PS", "RNN", config["ENV_NAME"]],
+        name=f'qmix_ps_{config["ENV_NAME"]}',
         config=config,
         mode=config["WANDB_MODE"],
     )

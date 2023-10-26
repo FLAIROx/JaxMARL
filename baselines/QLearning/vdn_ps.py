@@ -24,7 +24,11 @@ import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
+import wandb
+import hydra
+from omegaconf import OmegaConf
 
+from smax import make
 from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN
 
 
@@ -206,12 +210,34 @@ def make_train(config, env):
                 target_max_qvals_sum = jnp.stack(list(target_max_qvals.values())).sum(axis=0)
 
                 # compute the centralized targets using the "__all__" rewards and dones
-                targets = (
-                    learn_traj.rewards['__all__'][:-1]
-                    + config['GAMMA']*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_sum
-                )
+                if config.get('TD_LAMBDA_LOSS', True):
+                    # time difference loss
+                    def _td_lambda_target(ret, values):
+                        reward, done, target_qs = values
+                        ret = jnp.where(
+                            done,
+                            target_qs,
+                            ret*config['TD_LAMBDA']*config['GAMMA']
+                            + reward
+                            + (1-config['TD_LAMBDA'])*config['GAMMA']*(1-done)*target_qs
+                        )
+                        return ret, ret
 
-                loss = jnp.mean((chosen_action_qvals_sum - jax.lax.stop_gradient(targets))**2)
+                    ret = target_max_qvals_sum[-1] * (1-learn_traj.dones['__all__'][-1])
+                    ret, td_targets = jax.lax.scan(
+                        _td_lambda_target,
+                        ret,
+                        (learn_traj.rewards['__all__'][-2::-1], learn_traj.dones['__all__'][-2::-1], target_max_qvals_sum[-1::-1])
+                    )
+                    targets = td_targets[::-1]
+                    loss = jnp.mean(0.5*((chosen_action_qvals_sum - jax.lax.stop_gradient(targets))**2))
+                else:
+                    # standard DQN loss
+                    targets = (
+                        learn_traj.rewards['__all__'][:-1]
+                        + config['GAMMA']*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_sum
+                    )
+                    loss = jnp.mean((chosen_action_qvals_sum - jax.lax.stop_gradient(targets))**2)
 
                 return loss
 
@@ -263,6 +289,19 @@ def make_train(config, env):
                 'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards) # sum of timesteps, mean of envs
             }
             metrics.update(test_metrics) # add the test metrics dictionary
+
+            if config.get('WANDB_ONLINE_REPORT', False):
+                def callback(metrics):
+                    wandb.log(
+                        {
+                            "returns": metrics['rewards']['__all__'].mean(),
+                            "test_returns": metrics['test_returns']['__all__'].mean(),
+                            "timestep": metrics['timesteps'],
+                            "updates": metrics['updates'],
+                            "loss": metrics['loss'],
+                        }
+                    )
+                jax.debug.callback(callback, metrics)
 
             runner_state = (
                 train_state,
@@ -355,45 +394,30 @@ def make_train(config, env):
     return train
 
 
-if __name__ == "__main__":
+@hydra.main(version_base=None, config_path="config", config_name="qmix_ps")
+def main(config):
+    config = OmegaConf.to_container(config)
 
-    from smax import make
-    import time
-    env_name = "MPE_simple_spread_v3"
-    env = make(env_name)
-    config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "AGENT_INIT_SCALE":2.,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "MAX_GRAD_NORM": 25,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "EPS_ADAM":0.001,
-        "GAMMA": 0.9,
-        "VERBOSE": True,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL": 5e4
-    }
-
-    b = 10 # number of concurrent trainings
-    rng = jax.random.PRNGKey(42)
-    rngs = jax.random.split(rng, b)
+    env = make(config["ENV_NAME"])
+    
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+    config["NUM_STEPS"] = env.max_steps
+    
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["VDN", "PS", "RNN", config["ENV_NAME"]],
+        name=f'vdn_ps_{config["ENV_NAME"]}',
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+    
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-    t0 = time.time()
     outs = jax.block_until_ready(train_vjit(rngs))
-    t1 = time.time() - t0
-    print(f"time: {t1:.2f} s")
 
-    from matplotlib import pyplot as plt
-    plt.plot(outs['metrics']['timesteps'][0], outs['metrics']['test_returns']['__all__'].mean(axis=-1).mean(axis=0))
-    plt.xlabel("Timesteps")
-    plt.ylabel("Team Returns")
-    plt.title(f"{env_name} returns (mean of {b} seeds)")
-    plt.show()
+
+if __name__ == "__main__":
+    main()
+    

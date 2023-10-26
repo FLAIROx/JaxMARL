@@ -16,14 +16,17 @@
 "LR": 0.005
 "EPS_ADAM": 0.001
 "WEIGHT_DECAY_ADAM": 0.00001
+"TD_LAMBDA_LOSS": True
+"TD_LAMBDA": 0.6
 "GAMMA": 0.9
 "VERBOSE": False
+"WANDB_ONLINE_REPORT": True
 "NUM_TEST_EPISODES": 32
 "TEST_INTERVAL": 5.0e4
 
 "NUM_SEEDS": 10
 "SEED": 30
 
-"ENTITY": "amacrutherford"
-"PROJECT": "mpe-smax"
+"ENTITY": "mttga"
+"PROJECT": "smax"
 "WANDB_MODE": "online"

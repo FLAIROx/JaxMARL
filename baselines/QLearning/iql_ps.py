@@ -183,12 +183,34 @@ def make_train(config, env):
                 q_u = jnp.take_along_axis(q, jnp.expand_dims(u, axis=-1), axis=-1)
                 return jnp.squeeze(q_u, axis=-1)
 
-            def compute_target(target_q_val, q_val, reward, done):
+            def compute_target(target_q_val, q_val, rewards, dones):
                 """compute the 1-step Q-Learning target"""
                 greedy_actions = jnp.argmax(q_val, axis=-1)
-                target_max_qvals = q_of_action(target_q_val, greedy_actions)
-                target = reward[:-1] + config["GAMMA"]*(1-done[:-1])*target_max_qvals[1:]
-                return target
+                target_max_qvals = q_of_action(target_q_val, greedy_actions)[1:]
+                if config.get('TD_LAMBDA_LOSS', True):
+                    # time difference loss
+                    def _td_lambda_target(ret, values):
+                        reward, done, target_qs = values
+                        ret = jnp.where(
+                            done,
+                            target_qs,
+                            ret*config['TD_LAMBDA']*config['GAMMA']
+                            + reward
+                            + (1-config['TD_LAMBDA'])*config['GAMMA']*(1-done)*target_qs
+                        )
+                        return ret, ret
+
+                    ret = target_max_qvals[-1] * (1-dones[-1])
+                    ret, td_targets = jax.lax.scan(
+                        _td_lambda_target,
+                        ret,
+                        (rewards[-2::-1], dones[-2::-1], target_max_qvals[-1::-1])
+                    )
+                    targets = td_targets[::-1]
+                else:
+                    # standard DQN loss
+                    targets = rewards[:-1] + config["GAMMA"]*(1-dones[:-1])*target_max_qvals
+                return targets
 
             def _loss_fn(params, target_agent_params, init_hs, learn_traj):
 
@@ -216,7 +238,11 @@ def make_train(config, env):
                 # compute a single l2 loss for all the agents in one pass (parameter sharing)
                 chosen_action_qvals = jnp.concatenate(list(chosen_action_qvals.values()))
                 targets = jnp.concatenate(list(targets.values()))
-                loss = jnp.mean((chosen_action_qvals - jax.lax.stop_gradient(targets))**2)
+
+                if config.get('TD_LAMBDA_LOSS', True):
+                    loss = jnp.mean(0.5*((chosen_action_qvals - jax.lax.stop_gradient(targets))**2))
+                else:
+                    loss = jnp.mean((chosen_action_qvals - jax.lax.stop_gradient(targets))**2)
 
                 return loss
 
@@ -268,6 +294,19 @@ def make_train(config, env):
                 'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards),
             }
             metrics.update(test_metrics) # add the test metrics dictionary
+
+            if config.get('WANDB_ONLINE_REPORT', False):
+                def callback(metrics):
+                    wandb.log(
+                        {
+                            "returns": metrics['rewards']['__all__'].mean(),
+                            "test_returns": metrics['test_returns']['__all__'].mean(),
+                            "timestep": metrics['timesteps'],
+                            "updates": metrics['updates'],
+                            "loss": metrics['loss'],
+                        }
+                    )
+                jax.debug.callback(callback, metrics)
 
             runner_state = (
                 train_state,
@@ -367,7 +406,8 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IQL", "PS", "RNN"],
+        tags=["IQL", "PS", "RNN", config["ENV_NAME"]],
+        name=f'iql_ps_{config["ENV_NAME"]}',
         config=config,
         mode=config["WANDB_MODE"],
     )

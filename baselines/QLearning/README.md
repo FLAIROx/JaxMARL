@@ -1,6 +1,13 @@
 # QLearning Baselines
 
+
+```diff
+- these implementations were tested with python 3.8 and jax 0.4.8 -> 0.4.11
+- With jax 0.4.13 you could experience a degradation of performances.
+```
+
 Pure-Jax mplementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network) and **QMIX**. The implementation follows the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py).
+
 
 ### Implementation remarks
 
@@ -10,7 +17,7 @@ General features:
 - Works also with non-homogenous agents (different obs/action spaces).
 - Experience replay is a simple buffer with uniform sampling.
 - Uses Double Q-Learning with a target agent network (hard-updated).
-- Uses the DDQN loss as the original pymarl.
+- You can choose between the DDQN loss as the original pymarl or the TD_Lambda loss as pymarl2.
 - Adam optimizer is used instead (not RMSPROP as in pymarl).
 - The environment is reset at the end of each episode.
 - Currently, the `last_action` feature is not included in the agents' observations.
@@ -40,24 +47,29 @@ from baselines.QLearning.iql_ps import make_train as iql_ps
 env = make("MPE_simple_spread_v3")
 
 config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "AGENT_INIT_SCALE":2.,
+        "NUM_ENVS": 8,
+        "BUFFER_SIZE": 5000,
+        "BUFFER_BATCH_SIZE": 32,
+        "TOTAL_TIMESTEPS": 2e6,
+        "AGENT_HIDDEN_DIM": 64,
+        "AGENT_INIT_SCALE": 2.0,
         "EPSILON_START": 1.0,
         "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
+        "EPSILON_ANNEAL_TIME": 1e5,
         "MAX_GRAD_NORM": 25,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "EPS_ADAM":0.001,
-        "GAMMA": 0.9,
+        "TARGET_UPDATE_INTERVAL": 200 ,
+        "LR": 5e-3,
+        "EPS_ADAM": 1e-3,
+        "TD_LAMBDA_LOSS": True,
+        "TD_LAMBDA": 0.6,
+        "GAMMA": 0.99,
+        "DEBUG": False,
+        "NUM_TEST_EPISODES": 32,
+        "TEST_INTERVAL": 5e4,
         "VERBOSE": True,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL": 5e4
+        "WANDB_ONLINE_REPORT": False,
+        "SEED": 30,
+        "NUM_SEEDS": 10,
     }
 
 rng = jax.random.PRNGKey(42)
