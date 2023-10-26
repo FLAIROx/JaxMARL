@@ -25,8 +25,12 @@ import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
+import hydra
+from omegaconf import OmegaConf
+import wandb
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from smax import make
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 
 from functools import partial
 
@@ -391,71 +395,41 @@ def make_train(config, env):
     
     return train
 
-
-def example():
-    import os
-    import time
-    from smax import make
-    from matplotlib import pyplot as plt
-    from .utils import save_params
+@hydra.main(version_base=None, config_path="config", config_name="iql_ns")
+def main(config):
     
-
-    env_name = "MPE_simple_adversary_v3"
-    env = make(env_name)
-    config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS":env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e+6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "AGENT_HIDDEN_DIM": 64,
-        "MAX_GRAD_NORM": 10,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "GAMMA": 0.99,
-        "DEBUG": False,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL":5e4,
-    }
-
-    b = 4 # number of concurrent trainings
-    rng = jax.random.PRNGKey(42)
-    rngs = jax.random.split(rng, b)
+    config = OmegaConf.to_container(config)
+    
+    env = make(config["ENV_NAME"])
+    
+    config["NUM_STEPS"] = env.max_steps
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+    
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IQL", "NS", "RNN"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+    
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-    t0 = time.time()
     outs = jax.block_until_ready(train_vjit(rngs))
-    t1 = time.time() - t0
-    print(f"time: {t1:.2f} s")
-
-    # save only one set of params indexed by the agants names
-    model_state = outs['runner_state'][0]
-    params = {
-        env.agents[i]: jax.tree_map(lambda x: x[0, i], model_state.params)
-        for i in range(len(env.agents))
-    }
-    save_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pretrained', env_name)
-    os.makedirs(save_dir, exist_ok=True)
-    save_params(params, f'{save_dir}/iql_ns.safetensors')
-    print(f'Parameters of first batch saved in {save_dir}/iql_ns.safetensors')
-
     
-    def rolling_average_plot(x, y, window_size=50, label=''):
-        y = jnp.mean(jnp.reshape(y, (-1, window_size)), axis=1)
-        x = x[::window_size]
-        plt.plot(x, y, label=label)
-
-    rolling_average_plot(outs['metrics']['timesteps'][0], outs['metrics']['rewards']['__all__'].mean(axis=0))
-    plt.xlabel("Timesteps")
-    plt.ylabel("Team Returns")
-    plt.title(f"{env_name} returns (mean of {b} seeds)")
-    plt.show()
-
+    # Log to wandb  
+    returns_table = jnp.stack([
+        outs['metrics']['timesteps'][0],
+        outs['metrics']['rewards']['__all__'].mean(axis=0),
+    ], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["timestep", "returns"])
+    
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "timestep", "returns", title="returns_vs_timestep"),
+    })
 
 
 if __name__ == "__main__":
-    example()
+    main()
     

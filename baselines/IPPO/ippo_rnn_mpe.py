@@ -18,15 +18,11 @@ import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-# import smax
-# from smax.wrappers.smaxbaselines import LogWrapper
-from smax.wrappers.smaxbaselines import SMAXLogWrapper
-from smax.environments.mini_smac import map_name_to_scenario, HeuristicEnemyMiniSMAC
+import smax
+from smax.wrappers.smaxbaselines import MPELogWrapper
 
-# from smax.wrappers.gymnax import GymnaxToSMAX
 import wandb
 import functools
-import matplotlib.pyplot as plt
 
 
 class ScannedRNN(nn.Module):
@@ -118,10 +114,8 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    # env, env_params = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    # env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
-    scenario = map_name_to_scenario(config["MAP_NAME"])
-    env = HeuristicEnemyMiniSMAC(scenario=scenario, **config["ENV_KWARGS"])
+    env = smax.make(config["ENV_NAME"])
+    
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -135,8 +129,7 @@ def make_train(config):
         else config["CLIP_EPS"]
     )
 
-    # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
-    env = SMAXLogWrapper(env)
+    env = MPELogWrapper(env)
 
     def linear_schedule(count):
         frac = (
@@ -150,7 +143,6 @@ def make_train(config):
         # INIT NETWORK
         network = ActorCriticRNN(env.action_space(env.agents[0]).n, config=config)
         rng, _rng = jax.random.split(rng)
-        print('action num', env.action_space(env.agents[0]).n)
         init_x = (
             jnp.zeros(
                 (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
@@ -192,10 +184,13 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-                avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_actions = jnp.ones(
+                    (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
+                )
+                '''avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
                 avail_actions = jax.lax.stop_gradient(
                     batchify(avail_actions, env.agents, config["NUM_ACTORS"])
-                )
+                )'''
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],
@@ -412,9 +407,6 @@ def make_train(config):
                         "returns": metric["returned_episode_returns"][:, :, 0][
                             metric["returned_episode"][:, :, 0]
                         ].mean(),
-                        "win_rate": metric["returned_won_episode"][:, :, 0][
-                            metric["returned_episode"][:, :, 0]
-                        ].mean(),
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
@@ -444,7 +436,7 @@ def make_train(config):
     return train
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="ippo_rnn_smax")
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_rnn_mpe")
 def main(config):
     config = OmegaConf.to_container(config)
     wandb.init(
@@ -452,12 +444,32 @@ def main(config):
         project=config["PROJECT"],
         tags=["IPPO", "RNN"],
         config=config,
-        mode=config["WANDB_MODE"],
+        mode=config["WANDB_MODE"]
     )
     rng = jax.random.PRNGKey(config["SEED"])
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
     out = train_jit(rng)
+    
+    '''updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
+    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])'''
+    '''print('shape', out["metrics"]["returned_episode_returns"][0].shape)
+    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
+        "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+        
+    })'''
 
+'''
+"total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+        "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+        "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+        "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+        "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
+'''
 
 if __name__ == "__main__":
     main()
