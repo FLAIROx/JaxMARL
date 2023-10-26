@@ -1,5 +1,7 @@
+"ENV_NAME": "hanabi"
+"ENV_KWARGS": {}
 "LR": 5.0e-4
-"NUM_ENVS": 128 # must be a multiple of 8
+"NUM_ENVS": 1024 # must be a multiple of 8
 "NUM_STEPS": 128 # must be 128
 "TOTAL_TIMESTEPS": 1e10
 "UPDATE_EPOCHS": 4
@@ -13,15 +15,13 @@
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
 "LAYER_WIDTH": 512
-"ENV_NAME": "hanabi"
 "SEED": 30
-"NUM_SEEDS": 2
-"ENV_KWARGS": {}
+#"NUM_SEEDS":
+"ANNEAL_LR": False
 
 
 "DISABLE_JIT": False
 "WANDB_MODE": "online"
-"ANNEAL_LR": True
 "ENTITY": "amacrutherford"
 "PROJECT": "hanabi-rnn"
 "DEVICE": 0
