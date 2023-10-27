@@ -28,6 +28,10 @@ from smax.wrappers.smaxbaselines import SMAXLogWrapper, SMAXWrapper
 from smax.environments.mini_smac import map_name_to_scenario, HeuristicEnemyMiniSMAC
 
 class SMAXWorldStateWrapper(SMAXWrapper):
+    """
+    Provides a `"world_state"` observation for the centralised critic.
+    world state observation of dimension: (num_agents, world_state_size)    
+    """
     
     def __init__(self,
                  env: HeuristicEnemyMiniSMAC,
@@ -67,7 +71,6 @@ class SMAXWorldStateWrapper(SMAXWrapper):
         world_state = obs["world_state"]
         world_state = world_state[None].repeat(self._env.num_allies, axis=0)
         return world_state
-        #return jnp.concatenate((all_obs, world_state), axis=1)
         
     @partial(jax.jit, static_argnums=0)
     def ws_with_agent_id(self, obs, state):
@@ -299,16 +302,11 @@ def make_train(config):
                 env_act = {k: v.squeeze() for k, v in env_act.items()}
 
                 # VALUE
-                #print('world state obs size', last_obs["world_state"].shape)
-                world_state = last_obs["world_state"].swapaxes(0,1)
+                # output of wrapper is (num_envs, num_agents, world_state_size)
+                # swap axes to (num_agents, num_envs, world_state_size) before reshaping to (num_actors, world_state_size)
+                world_state = last_obs["world_state"].swapaxes(0,1)  
                 world_state = world_state.reshape((config["NUM_ACTORS"],-1))
-                '''world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-                #print('world state obs size', world_state.shape)
-                world_state = jnp.repeat(world_state, env.num_agents, axis=1).swapaxes(0, 1)
-                #print('world state obs size', world_state.shape)
-                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
-                #print('world state shape', world_state.shape)
-                world_state = jnp.concatenate((obs_batch, world_state), axis=1)'''
+                
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
@@ -345,14 +343,10 @@ def make_train(config):
             
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
-            '''last_world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-            last_world_state = jnp.repeat(last_world_state, env.num_agents, axis=1).swapaxes(0, 1)'''
-            #print('world state obs size', last_obs["world_state"].shape)
+            
             last_world_state = last_obs["world_state"].swapaxes(0,1)
             last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
-            '''last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
-            last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            last_world_state = jnp.concatenate((last_obs_batch, last_world_state), axis=1)'''
+            
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
