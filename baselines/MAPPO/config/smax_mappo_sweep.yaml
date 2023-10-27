@@ -33,15 +33,15 @@ parameters:
     values:
       - 3s_vs_5z
       - 2s3z
-      - 27m_vs_30m
-      - smacv2_20_units
-      - smacv2_10_units
       - smacv2_5_units
       - 3s5z
       - 5m_vs_6m
       - 10m_vs_11m
       - 3s5z_vs_3s6z
       - 6h_vs_8z
+      - 27m_vs_30m
+      - smacv2_20_units
+      - smacv2_10_units
   MAX_GRAD_NORM:
     values:
       - 0.25
@@ -63,7 +63,7 @@ parameters:
       - 4
   TOTAL_TIMESTEPS:
     values:
-      - 30000000
+      - 20000000
   UPDATE_EPOCHS:
     values:
       - 4
