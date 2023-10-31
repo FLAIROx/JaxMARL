@@ -444,7 +444,7 @@ def main(config):
     
     # load the pretrained agents
     load_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'QLearning/checkpoints', config["ENV_NAME"])
-    pretrained_params = load_params(f'{load_dir}/iql_ps.safetensors')
+    pretrained_params = load_params(f'{load_dir}/iql_ns.safetensors')
     pretrained_agents = ['agent_0'] # in simple tag, agents names are ['adversary_0', 'adversary_1', 'adversary_2', 'agent_0'] and agent_0 is the pray
     print('pretrained params:', pretrained_params.keys())
     pretrained_agents = {a:pretrained_params[a] for a in pretrained_agents}
