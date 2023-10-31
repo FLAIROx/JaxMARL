@@ -24,8 +24,12 @@ import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
+import hydra
+from omegaconf import OmegaConf
+import os 
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from smax import make
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 from functools import partial
 
 class ScannedRNN(nn.Module):
@@ -321,7 +325,7 @@ def make_train(config, env):
 
                 jax.debug.callback(callback, metrics)
 
-            runner_state = (train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, rng)
+            runner_state = (train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng)
 
             return runner_state, metrics
         
@@ -393,33 +397,18 @@ def make_train(config, env):
     
     return train
 
+@hydra.main(version_base=None, config_path="config", config_name="vdn_ns")
+def main(config):
+    import matplotlib.pyplot as plt
+    import time 
+    
+    config = OmegaConf.to_container(config)
 
-if __name__ == "__main__":
-
-    from smax import make
-    import time
-    env_name = "MPE_simple_spread_v3"
-    env = make(env_name)
-    config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e+6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "AGENT_HIDDEN_DIM": 64,
-        "MAX_GRAD_NORM": 10,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "GAMMA": 0.99,
-        "DEBUG": False,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL":5e4,
-    }
-
+    env = make(config["ENV_NAME"])
+    
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+    config["NUM_STEPS"] = env.max_steps
+    
     b = 32 # number of concurrent trainings
     rng = jax.random.PRNGKey(42)
     rngs = jax.random.split(rng, b)
@@ -438,5 +427,8 @@ if __name__ == "__main__":
     rolling_average_plot(outs['metrics']['timesteps'][0], outs['metrics']['rewards']['__all__'].mean(axis=0))
     plt.xlabel("Timesteps")
     plt.ylabel("Team Returns")
-    plt.title(f"{env_name} returns (mean of {b} seeds)")
+    plt.title(f"{config['ENV_NAME']} returns (mean of {b} seeds)")
     plt.show()
+
+if __name__ == "__main__":
+    main()
