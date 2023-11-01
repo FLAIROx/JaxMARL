@@ -355,7 +355,7 @@ def make_train(config, env):
     
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="iql_ps")
+@hydra.main(version_base=None, config_path="../config", config_name="iql_ps")
 def main(config):
     config = OmegaConf.to_container(config)
     

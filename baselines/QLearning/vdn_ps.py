@@ -358,7 +358,7 @@ def make_train(config, env):
     
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="vdn_ps")
+@hydra.main(version_base=None, config_path="../config", config_name="vdn_ps")
 def main(config):
     import matplotlib.pyplot as plt
     import time 

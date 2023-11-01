@@ -475,7 +475,7 @@ def make_train(config, env):
     
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="qmix_ns")
+@hydra.main(version_base=None, config_path="../config", config_name="qmix_ns")
 def main(config):
     config = OmegaConf.to_container(config)
 

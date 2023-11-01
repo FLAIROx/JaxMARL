@@ -418,7 +418,7 @@ def make_train(config, env, pretrained_agents:dict):
     
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="vdn_ps_pretrained")
+@hydra.main(version_base=None, config_path="../config", config_name="vdn_ps_pretrained")
 def main(config):
     import matplotlib.pyplot as plt
     import time 
