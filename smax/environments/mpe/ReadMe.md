@@ -22,6 +22,13 @@ We additionally include a fully cooperative variant of Simple Tag, first used to
 ## Action Space
 Following the PettingZoo implementation, we allow for both discrete or continuous action spaces in all MPE envrionments. The environments use discrete actions by default.
 
+**Discrete (default)**
+Represents the combination of movement and communication actions. Agents that can move select a value 0-4 corresponding to `[do nothing, down, up, left, right]` while agents that can communicate choose between 2 and 10 communication options. The agent's abilities, along with the number of communication options varies with the envrionments.
+
+**Continuous (action_type="Continuous")**
+Agnets that can move choose continuous values over `[do nothing, up, down, right, left]` with actions summed along their axis (i.e. vertical force = up - down). Agents that can communicate output values over the dimension of their communcation space. These two vectors are concatenated for agents that can move and communicate.
+
+
 ## Visualisation
 Check the example `mpe_introduction.py` file in the tutorials folder for an introduction to our implementation of the MPE environments, including an example visualisation. We animate the environment after the state transitions have been collected as follows:
 
