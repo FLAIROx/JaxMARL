@@ -1,17 +1,5 @@
 """
-Short introduction to the package.
-
-## Abstract base class
-Uses the PettingZoo Parallel API. All agents act synchronously, with actions, 
-observations, returns and dones passed as dictionaries keyed by agent names. 
-The code can be found in `multiagentgymnax/multi_agent_env.py`
-
-The class follows an identical structure to that of `gymnax` with one execption. 
-The class is instatiated with `num_agents`, defining the number of agents within the environment.
-
-## Environment loop
-Below is an example of a simple environment loop, using random actions.
-
+Introduction running and visualising the MPE environments using random actions.
 """
 
 import jax 
