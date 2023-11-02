@@ -1,12 +1,17 @@
 # MPE Environments
 
-Multi Particle Environments (MPE) are a set of communication oriented environment where particle agents can (sometimes) move, communicate, see each other, push each other around, and interact with fixed landmarks.
-
-<img src="docs/qmix_MPE_simple_tag_v3.gif" width="200" height="200"/>
-<img src="docs/vdn_MPE_simple_spread_v3.gif" width="200" height="200"/>
+Multi Particle Environments (MPE) are a set of communication oriented environment where particle agents can (sometimes) move, communicate, see each other, push each other around, and interact with fixed landmarks. We implement all of the [PettingZoo MPE Environments](https://pettingzoo.farama.org/environments/mpe/).
 
 
-We implement all of the [PettingZoo MPE Environments](https://pettingzoo.farama.org/environments/mpe/):
+<div class="collage">
+  <div class="row" align="left">
+    <img src="docs/qmix_MPE_simple_tag_v3.gif" alt="MPE Simple Tag" width="30%"/>
+    <img src="docs/vdn_MPE_simple_spread_v3.gif" alt="MPE Simple Spread" width="30%"/>
+    <img src="docs/qmix_MPE_simple_speaker_listener_v4.gif" alt="MPE Speaker Listener" width="30%">
+  </div>
+</div>
+
+
 
 | Envrionment  | JaxMARL Registry Name  |
 |---|---|
