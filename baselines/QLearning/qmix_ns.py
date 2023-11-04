@@ -25,8 +25,12 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.core import frozen_dict
+import wandb
+import hydra
+from omegaconf import OmegaConf
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from smax import make
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
 
 from functools import partial
 
@@ -471,53 +475,39 @@ def make_train(config, env):
     
     return train
 
+@hydra.main(version_base=None, config_path="../config", config_name="qmix_ns")
+def main(config):
+    config = OmegaConf.to_container(config)
+
+    env = make(config["ENV_NAME"])
+    
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+    config["NUM_STEPS"] = env.max_steps
+    
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["QMIX", "NS", "RNN"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+    
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])
+    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
+    outs = jax.block_until_ready(train_vjit(rngs))
+    
+    # Log to wandb  
+    returns_table = jnp.stack([
+        outs['metrics']['timesteps'][0],
+        outs['metrics']['rewards']['__all__'].mean(axis=0),
+    ], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["timestep", "returns"])
+    
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "timestep", "returns", title="returns_vs_timestep"),
+    })
+
 
 if __name__ == "__main__":
-
-    from smax import make
-    import time
-    env_name = "MPE_simple_spread_v3"
-    env = make(env_name)
-    config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "MIXER_EMBEDDING_DIM": 32,
-        "MIXER_HYPERNET_HIDDEN_DIM": 64,
-        "MAX_GRAD_NORM": 25,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "EPS_ADAM":1e-2,
-        "WEIGHT_DECAY_ADAM":0.00001,
-        "GAMMA": 0.9,
-        "DEBUG": False,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL":5e4,
-    }
-
-    b = 32 # number of concurrent trainings
-    rng = jax.random.PRNGKey(42)
-    rngs = jax.random.split(rng, b)
-    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-    t0 = time.time()
-    outs = jax.block_until_ready(train_vjit(rngs))
-    t1 = time.time() - t0
-    print(f"time: {t1:.2f} s")
-
-    from matplotlib import pyplot as plt
-    def rolling_average_plot(x, y, window_size=50, label=''):
-        y = jnp.mean(jnp.reshape(y, (-1, window_size)), axis=1)
-        x = x[::window_size]
-        plt.plot(x, y, label=label)
-
-    rolling_average_plot(outs['metrics']['timesteps'][0], outs['metrics']['rewards']['__all__'].mean(axis=0))
-    plt.xlabel("Timesteps")
-    plt.ylabel("Team Returns")
-    plt.title(f"{env_name} returns (mean of {b} seeds)")
-    plt.show()
+    main()

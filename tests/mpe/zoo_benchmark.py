@@ -1,3 +1,7 @@
+"""
+Simple benchmarking of the speed of JaxMARL vs PettingZoo's MPE environments.
+"""
+
 import jax
 import jax.numpy as jnp
 from smax.environments.mpe.simple_world_comm import SimpleWorldCommMPE

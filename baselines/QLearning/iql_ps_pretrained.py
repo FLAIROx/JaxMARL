@@ -22,8 +22,12 @@ import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
+import os
+import hydra
+from omegaconf import OmegaConf
 
-from .utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer
+from smax import make
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, load_params
 
 from functools import partial
 
@@ -426,38 +430,23 @@ def make_train(config, env, pretrained_agents:dict):
     return train
 
 
-def example():
-    import os
-    import time
-    from smax import make
+@hydra.main(version_base=None, config_path="../config", config_name="iql_ps_pretrained")
+def main(config):
     from matplotlib import pyplot as plt
-    from .utils import load_params
-
-    env_name = "MPE_simple_tag_v3"
-    env = make(env_name)
-
-    config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS":env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e+6,
-        "AGENT_HIDDEN_DIM":64,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "AGENT_HIDDEN_DIM": 64,
-        "MAX_GRAD_NORM": 10,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "GAMMA": 0.99,
-        "DEBUG": False,
-    }
-
+    import time
+    
+    config = OmegaConf.to_container(config)
+    
+    env = make(config["ENV_NAME"])
+    
+    config["NUM_STEPS"] = env.max_steps
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+    
     # load the pretrained agents
-    load_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pretrained', env_name)
+    load_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'QLearning/checkpoints', config["ENV_NAME"])
     pretrained_params = load_params(f'{load_dir}/iql_ns.safetensors')
     pretrained_agents = ['agent_0'] # in simple tag, agents names are ['adversary_0', 'adversary_1', 'adversary_2', 'agent_0'] and agent_0 is the pray
+    print('pretrained params:', pretrained_params.keys())
     pretrained_agents = {a:pretrained_params[a] for a in pretrained_agents}
 
     b = 4 # number of concurrent trainings
@@ -477,10 +466,9 @@ def example():
     rolling_average_plot(outs['metrics']['timesteps'][0], outs['metrics']['rewards']['__all__'].mean(axis=0))
     plt.xlabel("Timesteps")
     plt.ylabel("Team Returns")
-    plt.title(f"{env_name} returns (mean of {b} seeds)")
-    plt.savefig(f"{env_name}_iql_ps_pretrained.png")
+    plt.title(f"{config['ENV_NAME']} returns (mean of {b} seeds)")
+    plt.savefig(f"{config['ENV_NAME']}_iql_ps_pretrained.png")
     plt.show()
 
-
 if __name__ == "__main__":
-    example()
+    main()

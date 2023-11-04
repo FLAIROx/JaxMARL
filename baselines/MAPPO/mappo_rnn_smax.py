@@ -28,12 +28,30 @@ from smax.wrappers.smaxbaselines import SMAXLogWrapper, SMAXWrapper
 from smax.environments.mini_smac import map_name_to_scenario, HeuristicEnemyMiniSMAC
 
 class SMAXWorldStateWrapper(SMAXWrapper):
+    """
+    Provides a `"world_state"` observation for the centralised critic.
+    world state observation of dimension: (num_agents, world_state_size)    
+    """
+    
+    def __init__(self,
+                 env: HeuristicEnemyMiniSMAC,
+                 obs_with_agent_id=True,):
+        super().__init__(env)
+        self.obs_with_agent_id = obs_with_agent_id
+        
+        if not self.obs_with_agent_id:
+            self._world_state_size = self._env.state_size
+            self.world_state_fn = self.ws_just_env_state
+        else:
+            self._world_state_size = self._env.state_size + self._env.num_allies
+            self.world_state_fn = self.ws_with_agent_id
+            
     
     @partial(jax.jit, static_argnums=0)
     def reset(self,
               key):
         obs, env_state = self._env.reset(key)
-        obs["world_state"] = self.world_state(obs, env_state)
+        obs["world_state"] = self.world_state_fn(obs, env_state)
         return obs, env_state
     
     @partial(jax.jit, static_argnums=0)
@@ -44,26 +62,27 @@ class SMAXWorldStateWrapper(SMAXWrapper):
         obs, env_state, reward, done, info = self._env.step(
             key, state, action
         )
-        obs["world_state"] = self.world_state(obs, state)
-        #reward = jax.tree_map(lambda x: x * self._env.num_agents, reward)
-        #print('reward', reward)
-        #reward["world_reward"] = self.world_reward(reward)
+        obs["world_state"] = self.world_state_fn(obs, state)
         return obs, env_state, reward, done, info
 
     @partial(jax.jit, static_argnums=0)
-    def world_state(self, obs, state):
-        """ 
-        For each agent: [agent obs, own hand]
-        """
-            
-        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
+    def ws_just_env_state(self, obs, state):
         #return all_obs
-        return all_obs
+        world_state = obs["world_state"]
+        world_state = world_state[None].repeat(self._env.num_allies, axis=0)
+        return world_state
         
-    
+    @partial(jax.jit, static_argnums=0)
+    def ws_with_agent_id(self, obs, state):
+        #all_obs = jnp.array([obs[agent] for agent in self._env.agents])
+        world_state = obs["world_state"]
+        world_state = world_state[None].repeat(self._env.num_allies, axis=0)
+        one_hot = jnp.eye(self._env.num_allies)
+        return jnp.concatenate((world_state, one_hot), axis=1)
+        
     def world_state_size(self):
    
-        return self._env.observation_space(self._env.agents[0]).shape[0] #+ 125 # NOTE hardcoded hand size
+        return self._world_state_size 
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -187,7 +206,7 @@ def make_train(config):
         else config["CLIP_EPS"]
     )
 
-    env = SMAXWorldStateWrapper(env)
+    env = SMAXWorldStateWrapper(env, config["OBS_WITH_AGENT_ID"])
     env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
@@ -283,16 +302,11 @@ def make_train(config):
                 env_act = {k: v.squeeze() for k, v in env_act.items()}
 
                 # VALUE
-                #print('world state obs size', last_obs["world_state"].shape)
-                world_state = last_obs["world_state"].swapaxes(0,1)
+                # output of wrapper is (num_envs, num_agents, world_state_size)
+                # swap axes to (num_agents, num_envs, world_state_size) before reshaping to (num_actors, world_state_size)
+                world_state = last_obs["world_state"].swapaxes(0,1)  
                 world_state = world_state.reshape((config["NUM_ACTORS"],-1))
-                '''world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-                #print('world state obs size', world_state.shape)
-                world_state = jnp.repeat(world_state, env.num_agents, axis=1).swapaxes(0, 1)
-                #print('world state obs size', world_state.shape)
-                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
-                #print('world state shape', world_state.shape)
-                world_state = jnp.concatenate((obs_batch, world_state), axis=1)'''
+                
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
@@ -329,14 +343,10 @@ def make_train(config):
             
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
-            '''last_world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-            last_world_state = jnp.repeat(last_world_state, env.num_agents, axis=1).swapaxes(0, 1)'''
-            #print('world state obs size', last_obs["world_state"].shape)
+            
             last_world_state = last_obs["world_state"].swapaxes(0,1)
             last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
-            '''last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
-            last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            last_world_state = jnp.concatenate((last_obs_batch, last_world_state), axis=1)'''
+            
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
@@ -400,11 +410,8 @@ def make_train(config):
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
                         loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
                         entropy = pi.entropy().mean(where=(1 - traj_batch.done))
-                        actor_loss = (
-                            loss_actor
-                            #+ config["VF_COEF"] * value_loss
-                            - config["ENT_COEF"] * entropy
-                        )
+                        actor_loss = loss_actor - config["ENT_COEF"] * entropy
+                        
                         return actor_loss, (loss_actor, entropy)
                     
                     def _critic_loss_fn(critic_params, init_hstate, traj_batch, targets):

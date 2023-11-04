@@ -1,4 +1,6 @@
-""" NOTE this file structure should and will be improved """
+"""
+Test correspondance between pettingzoo and JaxMARL MPE environments
+"""
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -20,22 +22,16 @@ def np_state_to_jax(env_zoo, env_jax):
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
     c = np.zeros((env_jax.num_entities, env_jax.dim_c))
-    #print('--', env_zoo.aec_env.agents) # gives list of agent names
-    #print('--', env_zoo.aec_env.env.world.agents)
     for agent in env_zoo.aec_env.env.world.agents:
         a_idx = env_jax.a_to_i[agent.name]
-        #print('zoo agent pos', agent.state.p_pos)
         p_pos[a_idx] = agent.state.p_pos
         p_vel[a_idx] = agent.state.p_vel
-        #print('Zoo communication state', agent.state.c)
         c[a_idx] = agent.state.c
 
 
     for landmark in env_zoo.aec_env.env.world.landmarks:
         l_idx = env_jax.l_to_i[landmark.name]
-        #print('zoo landmark name', landmark.name)
         p_pos[l_idx] = landmark.state.p_pos
-        #print('zoo landmark pos', landmark.state.p_pos)
         
     state = {
         "p_pos": p_pos,
@@ -45,8 +41,6 @@ def np_state_to_jax(env_zoo, env_jax):
         "done": np.full((env_jax.num_agents), False),
     }
     
-    #print('jax state', state)
-    #print('test obs', state["p_pos"][1] - state["p_pos"][0])
     if env_zoo.metadata["name"] == 'simple_crypto_v3':
         from smax.environments.mpe.simple_crypto import CryptoState
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
@@ -115,19 +109,15 @@ def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
     env_zoo = env_zoo.parallel_env(max_cycles=25, continuous_actions=continuous_actions)
     zoo_obs = env_zoo.reset()
 
-    #env_jax = env_jax()
     env_jax = make(zoo_env_name, action_type=action_type)
     
-    #env_params = env_jax.default_params
     key, key_reset = jax.random.split(key)
     env_jax.reset(key_reset)
     for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}, epsiode:", leave=True):
         obs = env_zoo.reset()
         for s in range(num_steps):
-            #print('-- step', s)
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
             state = np_state_to_jax(env_zoo, env_jax)
-            #print('actions: ', actions)
             
             obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(actions)
             key, key_step = jax.random.split(key)

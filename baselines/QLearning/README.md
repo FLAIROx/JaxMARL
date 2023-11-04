@@ -82,3 +82,6 @@ If you wish to run the code as a script, you can still do that by running it as 
 ```bash
 python -m baselines.QLearning.iql_ps
 ```
+
+### TODO
+- IQL NS checkpoint for simple tag

@@ -12,6 +12,7 @@
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.25
 "ACTIVATION": "relu"
+"OBS_WITH_AGENT_ID": True
 "ENV_NAME": "HeuristicEnemyMiniSMAC"
 "MAP_NAME": "smacv2_5_units"
 "SEED": 0
