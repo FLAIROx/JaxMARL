@@ -1,4 +1,3 @@
-"ENV_NAME": "MPE_simple_spread_v3"
 "NUM_ENVS": 8
 "BUFFER_SIZE": 5000
 "BUFFER_BATCH_SIZE": 32
@@ -21,10 +20,4 @@
 "WANDB_ONLINE_REPORT": True
 "NUM_TEST_EPISODES": 32
 "TEST_INTERVAL": 50000
-
-"NUM_SEEDS": 10
-"SEED": 30
-
-"ENTITY": "mttga"
-"PROJECT": "smax"
-"WANDB_MODE": "online"
+"ALG_NAME": vdn

@@ -1,0 +1,11 @@
+# experiment params
+"NUM_SEEDS": 10
+"SEED": 30
+
+# wandb params
+"ENTITY": "mttga"
+"PROJECT": "smax"
+"WANDB_MODE": "online"
+
+# where to save the params (if None, will not save)
+"SAVE_PATH": "baselines/QLearning/checkpoints"

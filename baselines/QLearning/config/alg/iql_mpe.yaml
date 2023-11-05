@@ -21,10 +21,4 @@
 "WANDB_ONLINE_REPORT": True
 "NUM_TEST_EPISODES": 32
 "TEST_INTERVAL": 50000
-
-"NUM_SEEDS": 10
-"SEED": 30
-
-"ENTITY": "mttga"
-"PROJECT": "smax"
-"WANDB_MODE": "online"
+"ALG_NAME": iql

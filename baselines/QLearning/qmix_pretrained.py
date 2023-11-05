@@ -8,6 +8,7 @@ a pretrained iql network and train a team of predators against them
 with this script.
 """
 
+import os
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -22,7 +23,8 @@ import hydra
 from omegaconf import OmegaConf
 
 from smax import make
-from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN, load_params
+from smax.environments.mini_smac import map_name_to_scenario
+from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN, load_params, save_params
 
     
 class AgentRNN(nn.Module):
@@ -507,54 +509,57 @@ def make_train(config, env, pretrained_agents:dict):
     
     return train
 
-@hydra.main(version_base=None, config_path="../config", config_name="qmix_pretrained")
+@hydra.main(version_base=None, config_path="./config", config_name="config")
 def main(config):
     config = OmegaConf.to_container(config)
 
-    env = make(config["ENV_NAME"])
+    print('Config:\n', OmegaConf.to_yaml(config))
 
-    config["NUM_STEPS"] = env.max_steps
+    env_name = config["env"]["ENV_NAME"]
+    alg_name = f'qmix_{"ps" if config["alg"].get("PARAMETERS_SHARING", True) else "ns"}'
+    
+    # smac init neeeds a scenario
+    if 'SMAC' in env_name:
+        config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
+        env_name = 'smax_'+config['env']['MAP_NAME']
+
+    env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+    config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
     
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=[
-            "QMIX",
-            "PS" if config.get("PARAMETERS_SHARING", True) else "NS",
+            alg_name.upper(),
+            env_name.upper(),
             "RNN",
-            "TD_LOSS" if config.get("TD_LAMBDA_LOSS", True) else "DQN_LOSS",
+            "TD_LOSS" if config["alg"].get("TD_LAMBDA_LOSS", True) else "DQN_LOSS",
             f"jax_{jax.__version__}",
-            config["ENV_NAME"],
-            "PRETRAINED",
         ],
-        name=f'qmix_{"ps" if config.get("PARAMETERS_SHARING", True) else "ns"}_{config["ENV_NAME"]}',
+        name=f'{alg_name}_{env_name}',
         config=config,
         mode=config["WANDB_MODE"],
     )
 
-    # load the pretrained agents
-    pretrained_params = load_params(config['PRETRAINED_FILE'])
+    pretrained_params = load_params(config['env']['PRETRAINED_FILE'])
     if 'mixer' in pretrained_params: # qmix case
         pretrained_params = pretrained_params['agent']
-    pretrained_agents = config['PRETRAINED_AGENTS']
+    pretrained_agents = config['env']['PRETRAINED_AGENTS']
     pretrained_agents = {a:pretrained_params for a in pretrained_agents} # modify this if you want to use separate parameters for each pretrained agent
     
-    # train
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_vjit = jax.jit(jax.vmap(make_train(config, env, pretrained_agents)))
+    train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env, pretrained_agents)))
     outs = jax.block_until_ready(train_vjit(rngs))
     
-    # Log offline to wandb  
-    returns_table = jnp.stack([
-        outs['metrics']['timesteps'][0],
-        outs['metrics']['rewards']['__all__'].mean(axis=0),
-    ], axis=1)
-    returns_table = wandb.Table(data=returns_table.tolist(), columns=["timestep", "returns"])
-    
-    wandb.log({
-        "returns_plot": wandb.plot.line(returns_table, "timestep", "returns", title="returns_vs_timestep"),
-    })
+    # save params
+    if config['SAVE_PATH'] is not None:
+        model_state = outs['runner_state'][0]
+        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
+        save_dir = os.path.join(config['SAVE_PATH'], env_name)
+        os.makedirs(save_dir, exist_ok=True)
+        save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
 
 
 if __name__ == "__main__":

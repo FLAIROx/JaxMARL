@@ -1,0 +1,6 @@
+"ENV_NAME": "HeuristicEnemyMiniSMAC"
+"MAP_NAME": "3m"
+"ENV_KWARGS":
+  "see_enemy_actions": True
+  "walls_cause_death": True
+  "attack_mode": "closest"
