@@ -1,0 +1,37 @@
+"ENV_NAME": "MPE_simple_tag_v3"
+"NUM_ENVS": 8
+"BUFFER_SIZE": 5000
+"BUFFER_BATCH_SIZE": 32
+"TOTAL_TIMESTEPS": 2050000
+"AGENT_HIDDEN_DIM": 64
+"AGENT_INIT_SCALE": 2.
+"PARAMETERS_SHARING": True
+"EPSILON_START": 1.0
+"EPSILON_FINISH": 0.05
+"EPSILON_ANNEAL_TIME": 100000
+"MIXER_EMBEDDING_DIM": 32
+"MIXER_HYPERNET_HIDDEN_DIM": 64
+"MIXER_INIT_SCALE": 0.00001
+"MAX_GRAD_NORM": 25
+"TARGET_UPDATE_INTERVAL": 200
+"LR": 0.005
+"LR_LINEAR_DECAY": True
+"EPS_ADAM": 0.001
+"WEIGHT_DECAY_ADAM": 0.00001
+"TD_LAMBDA_LOSS": True
+"TD_LAMBDA": 0.6
+"GAMMA": 0.9
+"VERBOSE": False
+"WANDB_ONLINE_REPORT": True
+"NUM_TEST_EPISODES": 32
+"TEST_INTERVAL": 50000
+
+"PRETRAINED_FILE": "baselines/QLearning/checkpoints/MPE_simple_tag_v3/iql_ps.safetensors"
+"PRETRAINED_AGENTS": ["agent_0"] # in simple tag, agents names are ['adversary_0', 'adversary_1', 'adversary_2', 'agent_0'] and agent_0 is the pray
+
+"NUM_SEEDS": 10
+"SEED": 30
+
+"ENTITY": "mttga"
+"PROJECT": "smax"
+"WANDB_MODE": "online"

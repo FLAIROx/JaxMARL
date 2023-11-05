@@ -1,12 +1,13 @@
 """
-End-to-End JAX Implementation of VDN with Parameters Sharing.
+End-to-End JAX Implementation of IQL.
 
 Notice:
-- Agents are controlled by a single RNN (parameters sharing).
+- Agents are controlled by a single RNN architecture.
+- You can choose if sharing parameters between agents or not.
 - Works also with non-homogenous agents (different obs/action spaces)
 - Experience replay is a simple buffer with uniform sampling.
 - Uses Double Q-Learning with a target agent network (hard-updated).
-- Loss is the 1-step TD error.
+- You can use TD Loss (pymarl2) or DDQN loss (pymarl)
 - Adam optimizer is used instead of RMSPROP.
 - The environment is reset at the end of each episode.
 - Trained with a team reward (reward['__all__'])
@@ -14,7 +15,6 @@ Notice:
 
 The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
 """
-
 
 import jax
 import jax.numpy as jnp
@@ -86,15 +86,30 @@ def make_train(config, env):
         # INIT NETWORK
         agent = AgentRNN(action_dim=wrapped_env.max_action_space, hidden_dim=config["AGENT_HIDDEN_DIM"], init_scale=config['AGENT_INIT_SCALE'])
         rng, _rng = jax.random.split(rng)
-        init_x = (
-            jnp.zeros((1, 1, wrapped_env.obs_size)), # (time_step, batch_size, obs_size)
-            jnp.zeros((1, 1)) # (time_step, batch size)
-        )
-        init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], 1) # (batch_size, hidden_dim)
-        network_params = agent.init(_rng, init_hs, init_x)
+        if config.get('PARAMETERS_SHARING', True):
+            init_x = (
+                jnp.zeros((1, 1, wrapped_env.obs_size)), # (time_step, batch_size, obs_size)
+                jnp.zeros((1, 1)) # (time_step, batch size)
+            )
+            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], 1) # (batch_size, hidden_dim)
+            network_params = agent.init(_rng, init_hs, init_x)
+        else:
+            init_x = (
+                jnp.zeros((len(env.agents), 1, 1, wrapped_env.obs_size)), # (time_step, batch_size, obs_size)
+                jnp.zeros((len(env.agents), 1, 1)) # (time_step, batch size)
+            )
+            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents),  1) # (n_agents, batch_size, hidden_dim)
+            rngs = jax.random.split(_rng, len(env.agents)) # a random init for each agent
+            network_params = jax.vmap(agent.init, in_axes=(0, 0, 0))(rngs, init_hs, init_x)
+
+        # INIT TRAIN STATE AND OPTIMIZER
+        def linear_schedule(count):
+            frac = 1.0 - (count / config["NUM_UPDATES"])
+            return config["LR"] * frac
+        lr = linear_schedule if config.get('LR_LINEAR_DECAY', False) else config['LR']
         tx = optax.chain(
             optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
-            optax.adam(config['LR'], eps=config['EPS_ADAM']),
+            optax.adam(learning_rate=lr, eps=config['EPS_ADAM'])
         )
         train_state = TrainState.create(
             apply_fn=agent.apply,
@@ -111,23 +126,38 @@ def make_train(config, env):
             duration=config["EPSILON_ANNEAL_TIME"]
         )
 
-        def homogeneous_pass(params, hidden_state, obs, dones):
-            # concatenate agents and parallel envs to process them in one batch
-            agents, flatten_agents_obs = zip(*obs.items())
-            original_shape = flatten_agents_obs[0].shape # assumes obs shape is the same for all agents
-            batched_input = (
-                jnp.concatenate(flatten_agents_obs, axis=1), # (time_step, n_agents*n_envs, obs_size)
-                jnp.concatenate([dones[agent] for agent in agents], axis=1), # ensure to not pass other keys (like __all__)
-            )
-            hidden_state, q_vals = agent.apply(params, hidden_state, batched_input)
-            q_vals = q_vals.reshape(original_shape[0], len(agents), *original_shape[1:-1], -1) # (time_steps, n_agents, n_envs, action_dim)
-            q_vals = {a:q_vals[:,i] for i,a in enumerate(agents)}
-            return hidden_state, q_vals
+        # depending if using parameters sharing or not, q-values are computed using one or multiple parameters
+        if config.get('PARAMETERS_SHARING', True):
+            def homogeneous_pass(params, hidden_state, obs, dones):
+                # concatenate agents and parallel envs to process them in one batch
+                agents, flatten_agents_obs = zip(*obs.items())
+                original_shape = flatten_agents_obs[0].shape # assumes obs shape is the same for all agents
+                batched_input = (
+                    jnp.concatenate(flatten_agents_obs, axis=1), # (time_step, n_agents*n_envs, obs_size)
+                    jnp.concatenate([dones[agent] for agent in agents], axis=1), # ensure to not pass other keys (like __all__)
+                )
+                hidden_state, q_vals = agent.apply(params, hidden_state, batched_input)
+                q_vals = q_vals.reshape(original_shape[0], len(agents), *original_shape[1:-1], -1) # (time_steps, n_agents, n_envs, action_dim)
+                q_vals = {a:q_vals[:,i] for i,a in enumerate(agents)}
+                return hidden_state, q_vals
+        else:
+            def homogeneous_pass(params, hidden_state, obs, dones):
+                # homogeneous pass vmapped in respect to the agents parameters (i.e., no parameter sharing)
+                agents, flatten_agents_obs = zip(*obs.items())
+                batched_input = (
+                    jnp.stack(flatten_agents_obs, axis=0), # (n_agents, time_step, n_envs, obs_size)
+                    jnp.stack([dones[agent] for agent in agents], axis=0), # ensure to not pass other keys (like __all__)
+                )
+                # computes the q_vals with the params of each agent separately by vmapping
+                hidden_state, q_vals = jax.vmap(agent.apply, in_axes=0)(params, hidden_state, batched_input)
+                q_vals = {a:q_vals[i] for i,a in enumerate(agents)}
+                return hidden_state, q_vals
 
         # TRAINING LOOP
         def _update_step(runner_state, unused):
 
             train_state, target_agent_params, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng = runner_state
+
 
             # EPISODE STEP
             def _env_step(step_state, unused):
@@ -159,7 +189,10 @@ def make_train(config, env):
 
             # prepare the step state and collect the episode trajectory
             rng, _rng = jax.random.split(rng)
-            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_ENVS"])
+            if config.get('PARAMETERS_SHARING', True):
+                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_ENVS"]) # (n_agents*n_envs, hs_size)
+            else:
+                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["NUM_ENVS"]) # (n_agents, n_envs, hs_size)
 
             step_state = (
                 train_state.params,
@@ -184,32 +217,7 @@ def make_train(config, env):
                 q_u = jnp.take_along_axis(q, jnp.expand_dims(u, axis=-1), axis=-1)
                 return jnp.squeeze(q_u, axis=-1)
 
-            def _loss_fn(params, target_agent_params, init_hs, learn_traj):
-
-                obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
-                _, q_vals = homogeneous_pass(params, init_hs, obs_, learn_traj.dones)
-                _, target_q_vals = homogeneous_pass(target_agent_params, init_hs, obs_, learn_traj.dones)
-
-                # get the q_vals of the taken actions (with exploration) for each agent
-                chosen_action_qvals = jax.tree_map(
-                    lambda q, u: q_of_action(q, u)[:-1], # avoid last timestep
-                    q_vals,
-                    learn_traj.actions
-                )
-
-                # get the target q values of the greedy actions
-                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
-                target_max_qvals = jax.tree_map(
-                    lambda t_q, q: q_of_action(t_q, jnp.argmax(q, axis=-1))[1:], # get the greedy actions and avoid first timestep
-                    target_q_vals,
-                    valid_q_vals
-                )
-
-                # VDN: computes q_tot as the sum of the agents' individual q values
-                chosen_action_qvals_sum = jnp.stack(list(chosen_action_qvals.values())).sum(axis=0)
-                target_max_qvals_sum = jnp.stack(list(target_max_qvals.values())).sum(axis=0)
-
-                # compute the centralized targets using the "__all__" rewards and dones
+            def compute_target(target_max_qvals, rewards, dones):
                 if config.get('TD_LAMBDA_LOSS', True):
                     # time difference loss
                     def _td_lambda_target(ret, values):
@@ -223,21 +231,53 @@ def make_train(config, env):
                         )
                         return ret, ret
 
-                    ret = target_max_qvals_sum[-1] * (1-learn_traj.dones['__all__'][-1])
+                    ret = target_max_qvals[-1] * (1-dones[-1])
                     ret, td_targets = jax.lax.scan(
                         _td_lambda_target,
                         ret,
-                        (learn_traj.rewards['__all__'][-2::-1], learn_traj.dones['__all__'][-2::-1], target_max_qvals_sum[-1::-1])
+                        (rewards[-2::-1], dones[-2::-1], target_max_qvals[-1::-1])
                     )
                     targets = td_targets[::-1]
-                    loss = jnp.mean(0.5*((chosen_action_qvals_sum - jax.lax.stop_gradient(targets))**2))
                 else:
                     # standard DQN loss
-                    targets = (
-                        learn_traj.rewards['__all__'][:-1]
-                        + config['GAMMA']*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_sum
-                    )
-                    loss = jnp.mean((chosen_action_qvals_sum - jax.lax.stop_gradient(targets))**2)
+                    targets = rewards[:-1] + config["GAMMA"]*(1-dones[:-1])*target_max_qvals
+                return targets
+
+            def _loss_fn(params, target_agent_params, init_hs, learn_traj):
+
+                obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
+                _, q_vals = homogeneous_pass(params, init_hs, obs_, learn_traj.dones)
+                _, target_q_vals = homogeneous_pass(target_agent_params, init_hs, obs_, learn_traj.dones)
+
+                # get the q_vals of the taken actions (with exploration) for each agent
+                chosen_action_qvals = jax.tree_map(
+                    lambda q, u: q_of_action(q, u)[:-1], # avoid last timestep
+                    q_vals,
+                    learn_traj.actions
+                )
+
+                # get the target for each agent (assumes every agent has a reward)
+                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
+                target_max_qvals = jax.tree_map(
+                    lambda t_q, q: q_of_action(t_q, jnp.argmax(q, axis=-1))[1:], # avoid first timestep
+                    target_q_vals,
+                    jax.lax.stop_gradient(valid_q_vals)
+                )
+
+                # compute a single l2 loss for all the agents in one pass (parameter sharing)
+                targets = jax.tree_map(
+                    compute_target,
+                    target_max_qvals,
+                    {agent:learn_traj.rewards[agent] for agent in env.agents}, # rewards and agents could contain additional keys
+                    {agent:learn_traj.dones[agent] for agent in env.agents}
+                )
+                chosen_action_qvals = jnp.concatenate(list(chosen_action_qvals.values()))
+                targets = jnp.concatenate(list(targets.values()))
+
+                if config.get('TD_LAMBDA_LOSS', True):
+                    loss = jnp.mean(0.5*((chosen_action_qvals - jax.lax.stop_gradient(targets))**2))
+                else:
+                    loss = jnp.mean((chosen_action_qvals - jax.lax.stop_gradient(targets))**2)
 
                 return loss
 
@@ -246,11 +286,40 @@ def make_train(config, env):
             rng, _rng = jax.random.split(rng)
             _, learn_traj = buffer.sample(buffer_state, _rng) # (batch_size, max_time_steps, ...)
             learn_traj = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), learn_traj) # (max_time_steps, batch_size, ...)
-            init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"]) 
+            
+            # for iql the loss must be computed differently with or without parameters sharing
+            if config.get('PARAMETERS_SHARING', True):
+                init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"]) # (n_agents*batch_size, hs_size)
+                # compute loss and optimize grad
+                grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)
+                loss, grads = grad_fn(train_state.params, target_agent_params, init_hs, learn_traj)
+            else:
+                # without parameters sharing, a different loss must be computed for each agent via vmap
+                def _loss_fn(params, target_params, init_hs, obs, dones, actions, valid_actions, rewards):
+                    _, q_vals = agent.apply(params, init_hs, (obs, dones))
+                    _, target_q_vals = agent.apply(target_params, init_hs, (obs, dones))
+                    chosen_action_qvals = q_of_action(q_vals, actions)[:-1]
+                    valid_actions = valid_actions.reshape(*[1]*len(q_vals.shape[:-1]), -1) # reshape to match q_vals shape
+                    valid_argmax = jnp.argmax(jnp.where(valid_actions.astype(bool), jax.lax.stop_gradient(q_vals), -1000000.), axis=-1)
+                    target_max_qvals = q_of_action(target_q_vals, valid_argmax)[1:] # target q_vals of greedy actions, avoiding first time step
+                    targets = compute_target(target_max_qvals, rewards, dones)
+                    return jnp.mean((chosen_action_qvals - jax.lax.stop_gradient(targets))**2)
+                init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["BUFFER_BATCH_SIZE"]) # (n_agents, batch_size, hs_size)
+                grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)
+                batchify = lambda x: jnp.stack([x[agent] for agent in env.agents], axis=0)
+                loss, grads = jax.vmap(grad_fn, in_axes=0)(
+                    train_state.params,
+                    target_agent_params,
+                    init_hs,
+                    batchify(learn_traj.obs),
+                    batchify(learn_traj.dones),
+                    batchify(learn_traj.actions),
+                    batchify(wrapped_env.valid_actions_oh),
+                    batchify(learn_traj.rewards)
+                )
+                loss = loss.mean()
 
-            # compute loss and optimize grad
-            grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)
-            loss, grads = grad_fn(train_state.params, target_agent_params, init_hs, learn_traj)
+            # apply gradients
             train_state = train_state.apply_gradients(grads=grads)
 
 
@@ -286,7 +355,7 @@ def make_train(config, env):
                 'timesteps': time_state['timesteps']*config['NUM_ENVS'],
                 'updates' : time_state['updates'],
                 'loss': loss,
-                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards) # sum of timesteps, mean of envs
+                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards),
             }
             metrics.update(test_metrics) # add the test metrics dictionary
 
@@ -334,7 +403,10 @@ def make_train(config, env):
             init_obs, env_state = test_env.batch_reset(_rng)
             init_dones = {agent:jnp.zeros((config["NUM_TEST_EPISODES"]), dtype=bool) for agent in env.agents+['__all__']}
             rng, _rng = jax.random.split(rng)
-            hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_TEST_EPISODES"])
+            if config["PARAMETERS_SHARING"]:
+                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_TEST_EPISODES"]) # (n_agents*n_envs, hs_size)
+            else:
+                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["NUM_TEST_EPISODES"]) # (n_agents, n_envs, hs_size)
             step_state = (
                 params,
                 env_state,
@@ -343,20 +415,16 @@ def make_train(config, env):
                 hstate, 
                 _rng,
             )
-
             step_state, rews_dones = jax.lax.scan(
                 _greedy_env_step, step_state, None, config["NUM_STEPS"]
             )
-
             # compute the episode returns of the first episode that is done for each parallel env
             def first_episode_returns(rewards, dones):
                 first_done = jax.lax.select(jnp.argmax(dones)==0., dones.size, jnp.argmax(dones))
                 first_episode_mask = jnp.where(jnp.arange(dones.size) <= first_done, True, False)
                 return jnp.where(first_episode_mask, rewards, 0.).sum()
-
             all_dones = rews_dones[1]['__all__']
             returns = jax.tree_map(lambda r: jax.vmap(first_episode_returns, in_axes=1)(r, all_dones), rews_dones[0])
-
             metrics = {
                 'test_returns': returns # episode returns
             }
@@ -393,20 +461,26 @@ def make_train(config, env):
     
     return train
 
-@hydra.main(version_base=None, config_path="../config", config_name="vdn_ps")
+@hydra.main(version_base=None, config_path="../config", config_name="iql")
 def main(config):
     config = OmegaConf.to_container(config)
 
     env = make(config["ENV_NAME"])
-    
-    config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS"] + 5.0e4
+
     config["NUM_STEPS"] = env.max_steps
     
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["VDN", "PS", "RNN", config["ENV_NAME"]],
-        name=f'vdn_ps_{config["ENV_NAME"]}',
+        tags=[
+            "IQL",
+            "PS" if config.get("PARAMETERS_SHARING", True) else "NS",
+            "RNN",
+            "TD_LOSS" if config.get("TD_LAMBDA_LOSS", True) else "DQN_LOSS",
+            f"jax_{jax.__version__}",
+            config["ENV_NAME"]
+        ],
+        name=f'iql_{"ps" if config.get("PARAMETERS_SHARING", True) else "ns"}_{config["ENV_NAME"]}',
         config=config,
         mode=config["WANDB_MODE"],
     )
@@ -416,7 +490,17 @@ def main(config):
     train_vjit = jax.jit(jax.vmap(make_train(config, env)))
     outs = jax.block_until_ready(train_vjit(rngs))
 
+    # Log offline to wandb  
+    returns_table = jnp.stack([
+        outs['metrics']['timesteps'][0],
+        outs['metrics']['rewards']['__all__'].mean(axis=0),
+    ], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["timestep", "returns"])
+    
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "timestep", "returns", title="returns_vs_timestep"),
+    })
+
 
 if __name__ == "__main__":
     main()
-    
