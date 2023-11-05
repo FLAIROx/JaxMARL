@@ -3,8 +3,8 @@
 "SEED": 30
 
 # wandb params
-"ENTITY": "mttga"
-"PROJECT": "smax"
+"ENTITY": ""
+"PROJECT": "jaxMARL"
 "WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)
