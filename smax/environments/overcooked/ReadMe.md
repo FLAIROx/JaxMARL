@@ -23,6 +23,11 @@ layout = layout_grid_to_dict(custom_layout_grid)
 
 The implementation aims to be as close as possible to the original Overcooked-AI environment, including dynamics, collision logic, and action and observation spaces.
 
+#### A note on dynamics
+In the original Overcooked-AI environment and in this JAX implementation, the pot starts cooking as soon as 3 onions are placed in the pot.
+An update to Overcooked-AI has since changed the dynamics to require an additional pot interaction to start cooking. 
+Updating the Overcooked-JAX to implement the new pot dynamics is on the roadmap and should be done by the end of 2023.
+
 ## Action Space
 There are 6 possible actions, comprised of 4 movement actions (right, down, left, up), interact and no-op.
 
