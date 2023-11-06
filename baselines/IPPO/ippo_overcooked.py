@@ -19,11 +19,21 @@ from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
 import smax
 from smax.wrappers.smaxbaselines import LogWrapper
 from smax.wrappers.gymnax import GymnaxToSMAX
-from utils import batchify, unbatchify
 from smax.environments.overcooked import overcooked_layouts
 from smax.viz.overcooked_visualizer import OvercookedVisualizer
 
 import matplotlib.pyplot as plt
+
+
+def batchify(x: dict, agent_list, num_actors):
+    x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+
+def unbatchify(x: dict, agent_list, num_envs, num_actors):
+    x = x.reshape((num_actors, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}
+
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -336,7 +346,7 @@ if __name__ == "__main__":
         "LR": 2.5e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e6,
+        "TOTAL_TIMESTEPS": 1e7,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 4,
         "GAMMA": 0.99,
