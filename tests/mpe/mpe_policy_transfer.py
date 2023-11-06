@@ -14,7 +14,7 @@ import numpy as np
 from jax import numpy as jnp
 from smax import make
 from baselines.QLearning.utils import load_params, get_space_dim
-from baselines.QLearning.iql_ps import AgentRNN, ScannedRNN
+from SMAX.baselines.QLearning.iql import AgentRNN, ScannedRNN
 from pettingzoo.mpe import simple_speaker_listener_v4, simple_spread_v3, simple_adversary_v3
 import tqdm
 

@@ -9,7 +9,7 @@ A more detailed description of the original game can be found [here](https://mar
 
 ![https://marl-ieee-nitk.github.io/assets/SwitchRiddle.png](https://marl-ieee-nitk.github.io/assets/SwitchRiddle.png)
 
-### Observation, action space and reward
+## Observation, action space and reward
 
 In this implementation, each agent receives a 2-dimensional observation vector:
 
@@ -32,7 +32,7 @@ The game ends when an agent tells the warden or the maximum time steps is reache
 - -1 if the agent in the room tells the warden before every agent has gone to the room once.
 - 0 otherwise (also if the maximum number of time steps is reached).
 
-### Usage
+## Usage
 
 A pedantic snippet for verbosing the environment:
 
@@ -73,10 +73,22 @@ for _ in range(20):
 The environment contains a rendering function that prints the current state of the environment:
 
 ```python
->> print(state)
+>> env.render(state)
 Current step: 0
 Bulb state: Off
 Agent in room: 0
 Agents been in room: [0 0 0 0 0]
 Done: False
 ```
+
+## Citation
+
+If you use this environment, please cite:
+
+    @inproceedings{foerster2016learning,
+        title={Learning to communicate with deep multi-agent reinforcement learning},
+        author={Foerster, Jakob and Assael, Yannis M and de Freitas, Nando and Whiteson, Shimon},
+        booktitle={Advances in Neural Information Processing Systems},
+        pages={2137--2145},
+        year={2016} 
+    }

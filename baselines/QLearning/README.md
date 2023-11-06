@@ -1,75 +1,101 @@
 # QLearning Baselines
 
-Pure-Jax mplementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network) and **QMIX**. The implementation follows the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py).
+*Pure Jax implementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network), and **QMix**. These implementations follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase.*
 
-### Implementation remarks
+```
+⚠️ The implementations were tested with Python 3.8 and Jax 0.4.8 -> 0.4.11. 
+With Jax 0.4.13, you could experience a degradation of performance.
+```
+
+```
+❗The implementations were tested in the following environments:
+- MPE
+- Smax
+```
+
+## 🔎 Implementation Details
 
 General features:
 
 - Agents are controlled by a single RNN architecture.
-- Works also with non-homogenous agents (different obs/action spaces).
+- You can choose whether to share parameters between agents or not.
+- Works also with non-homogeneous agents (different observation/action spaces).
 - Experience replay is a simple buffer with uniform sampling.
 - Uses Double Q-Learning with a target agent network (hard-updated).
-- Uses the DDQN loss as the original pymarl.
-- Adam optimizer is used instead (not RMSPROP as in pymarl).
+- You can select between TD Loss (pymarl2) or DDQN loss (pymarl).
+- Adam optimizer is used instead of RMSPROP.
 - The environment is reset at the end of each episode.
-- Currently, the `last_action` feature is not included in the agents' observations.
+- Trained with a team reward (reward['__all__']).
+- At the moment, last_actions are not included in the agents' observations.
 
-Three versions of the algorithms are present:
-
-1. Without parameters sharing (iql_ns.py, vdn_ns.py, qmix_ns.py): each agents has its own parameters, and all the agents operations are vmapped in respect to them.
-2. With parameters sharing (iql_ps.py, vdn_ps.py, qmix_ps.py): the same set of parameters are assigned to all agent, and all the agents operations are computed in a single batch.
-3. With parameters sharing using pretrained agents (iql_ps_pretrained.py, vdn_ps_pretrained.py, qmix_ps_pretrained.py): these scripts allow to use some pretrained networks to control some of the environment agents.
-
-All the algs use the `CTRolloutManager` env wrapper (found it in utils.py) which is used to:
+All the algorithms use the `CTRolloutManager` environment wrapper (found in utils.py), which is used to:
 
 - Batchify the step and reset functions to run parallel environments.
-- Add a global observation (`obs["__all__"]`) and a global reward (`rewards["__all__"]`) to the returns of `env.step`, for centralized training.
-- Preprocess and uniform the observation vectors (flat, pad, add additional features like id one-hot encoding, etc.)
+- Add a global observation (`obs["__all__"]`) and a global reward (`rewards["__all__"]`) to the returns of `env.step` for centralized training.
+- Preprocess and uniform the observation vectors (flatten, pad, add additional features like id one-hot encoding, etc.).
 
-Please modify this wrapper for you needs.
+Please modify this wrapper for your needs.
 
-### Usage
+## 🚀 Usage
 
-Often is useful to run these scripts in a notebook or in another script, therefore they are designed as a module. If you cloned the SMAX repository and you are in the repo root, you can do something like:
+If you have cloned JaxMarl and you are in the repository root, you can run the algorithms as scripts. You will need to specify which parameter configurations will be loaded by Hydra by choosing them (or adding yours) in the config folder. Below are some examples:
+
+```bash
+# IQL with MPE speaker-listener
+python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
+# VDN with MPE spread
+python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
+# QMix with Smax
+python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
+# QMix against pretrained agents
+python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
+```
+
+Notice that with Hydra, you can modify parameters on the go in this way:
+
+```bash
+# Run IQL without parameter sharing from the command line
+python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_spread alg.PARAMETERS_SHARING=False
+```
+
+It is often useful to run these scripts manually in a notebook or in another script.
 
 ```python
 from smax import make
-from baselines.QLearning.iql_ps import make_train as iql_ps
+from baselines.QLearning.qmix import make_train
 
 env = make("MPE_simple_spread_v3")
 
 config = {
-        "NUM_ENVS":8,
-        "NUM_STEPS": env.max_steps,
-        "BUFFER_SIZE":5000,
-        "BUFFER_BATCH_SIZE":32,
-        "TOTAL_TIMESTEPS":2e6+5e4,
-        "AGENT_HIDDEN_DIM":64,
-        "AGENT_INIT_SCALE":2.,
-        "EPSILON_START": 1.0,
-        "EPSILON_FINISH": 0.05,
-        "EPSILON_ANNEAL_TIME": 100000,
-        "MAX_GRAD_NORM": 25,
-        "TARGET_UPDATE_INTERVAL": 200, 
-        "LR": 0.005,
-        "EPS_ADAM":0.001,
-        "GAMMA": 0.9,
-        "VERBOSE": True,
-        "NUM_TEST_EPISODES":32,
-        "TEST_INTERVAL": 5e4
-    }
+    "NUM_ENVS": 8,
+    "BUFFER_SIZE": 5000,
+    "BUFFER_BATCH_SIZE": 32,
+    "TOTAL_TIMESTEPS": 2050000,
+    "AGENT_HIDDEN_DIM": 64,
+    "AGENT_INIT_SCALE": 2.0,
+    "PARAMETERS_SHARING": True,
+    "EPSILON_START": 1.0,
+    "EPSILON_FINISH": 0.05,
+    "EPSILON_ANNEAL_TIME": 100000,
+    "MIXER_EMBEDDING_DIM": 32,
+    "MIXER_HYPERNET_HIDDEN_DIM": 64,
+    "MIXER_INIT_SCALE": 0.00001,
+    "MAX_GRAD_NORM": 25,
+    "TARGET_UPDATE_INTERVAL": 200,
+    "LR": 0.005,
+    "LR_LINEAR_DECAY": True,
+    "EPS_ADAM": 0.001,
+    "WEIGHT_DECAY_ADAM": 0.00001,
+    "TD_LAMBDA_LOSS": True,
+    "TD_LAMBDA": 0.6,
+    "GAMMA": 0.9,
+    "VERBOSE": False,
+    "WANDB_ONLINE_REPORT": True,
+    "NUM_TEST_EPISODES": 32,
+    "TEST_INTERVAL": 50000,
+}
 
 rng = jax.random.PRNGKey(42)
-train_vjit = jax.jit((iql_ps(config, env))
+train_vjit = jax.jit(make_train(config, env))
 outs_iql = train_vjit(rng)
 ```
-
-If you wish to run the code as a script, you can still do that by running it as a module:
-
-```bash
-python -m baselines.QLearning.iql_ps
-```
-
-### TODO
-- IQL NS checkpoint for simple tag

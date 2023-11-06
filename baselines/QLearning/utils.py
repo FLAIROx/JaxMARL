@@ -83,8 +83,8 @@ class CTRolloutManager:
 
         # custom global state and rewards for specific envs
         if 'smac' in env.name.lower():
-            self.global_state = lambda obs, state: self.env.get_world_state(state)
-            self.global_reward = lambda rewards: rewards[self.training_agents[0]]*10
+            self.global_state = lambda obs, state: obs['world_state']
+            self.global_reward = lambda rewards: rewards[self.training_agents[0]]
     
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key):
@@ -98,17 +98,17 @@ class CTRolloutManager:
 
     @partial(jax.jit, static_argnums=0)
     def wrapped_reset(self, key):
-        obs, state = self.env.reset(key)
-        obs = jax.tree_util.tree_map(self._preprocess_obs, obs, self.agents_one_hot)
-        obs["__all__"] = self.global_state(obs, state)
+        obs_, state = self.env.reset(key)
+        obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
+        obs["__all__"] = self.global_state(obs_, state)
         return obs, state
 
     @partial(jax.jit, static_argnums=0)
     def wrapped_step(self, key, state, actions):
-        obs, state, reward, done, infos = self.env.step(key, state, actions)
-        obs = jax.tree_util.tree_map(self._preprocess_obs, obs, self.agents_one_hot)
+        obs_, state, reward, done, infos = self.env.step(key, state, actions)
+        obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
         obs = jax.tree_util.tree_map(lambda d, o: jnp.where(d, 0., o), {agent:done[agent] for agent in self.agents}, obs) # ensure that the obs are 0s for done agents
-        obs["__all__"] = self.global_state(obs, state)
+        obs["__all__"] = self.global_state(obs_, state)
         reward["__all__"] = self.global_reward(reward)
         return obs, state, reward, done, infos
 
