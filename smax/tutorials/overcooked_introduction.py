@@ -36,7 +36,7 @@ layout = overcooked_layouts["cramped_room"]
 # layout = layout_grid_to_dict(custom_layout_grid)
 
 # Instantiate environment
-env = make('Overcooked', layout=layout, max_steps=max_steps)
+env = make('overcooked', layout=layout, max_steps=max_steps)
 
 obs, state = env.reset(key_r)
 print('list of agents in environment', env.agents)
