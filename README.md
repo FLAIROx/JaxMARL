@@ -44,3 +44,11 @@ pip install -e .
 
 ## Contributing 
 Create a branch and send a merge request once your environment passes tests that show consistency with the existing implementation.
+
+## See Also
+
+- [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
+- [Gymanx](https://github.com/RobertTLange/gymnax): implementations of classic RL tasks including classic control, bsuite and MinAtar.
+- [Jumanji](https://github.com/instadeepai/jumanji): a diverse set of environments ranging from simple games to NP-hard combinatoral problems.
+- [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
+- [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks.
