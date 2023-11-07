@@ -1,10 +1,33 @@
-# JaxMARL: Multi-Agent RL in JAX 
+# JaxMARL
 
-Multi-Agent RL environments and algorithms implemented in JAX.
+Multi-Agent Reinforcement Learning environments and algorithms implemented in JAX.
 
 JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environemnts as well as popular baseline algorithms. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine.
 
 ## Environments
+
+| Environment |  Source & Description | 
+| --- | --- | 
+| MPE | links todo |
+| Overcooked |  |
+| Multi-Agent Brax |  | 
+| Hanabi |   |
+| SMAX |  |
+| STORM |  |
+| Coin Game |  |
+| Switch Riddle |  | 
+
+## Baseline Algorithms
+
+| Algorithm |  Source & Description | 
+| --- | --- | 
+| IPPO | links todo | 
+| MAPPO |  |
+| IQL |  |
+| VDN |  | 
+| QMIX |  |
+
+
 
 ## Installation
 JaxMARL can be installed directly from PyPi:
@@ -50,7 +73,7 @@ n_obs, n_state, reward, done, infos = env.step(key_step, state, actions)
 Please contribute! TODO add contributing guide as per Jumanji
 
 ## See Also
-There are a number of other libraries which inspired this work, we encourage you to take a look:
+There are a number of other libraries which inspired this work, we encourage you to take a look!
 - [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
 - [Gymanx](https://github.com/RobertTLange/gymnax): implementations of classic RL tasks including classic control, bsuite and MinAtar.
 - [Jumanji](https://github.com/instadeepai/jumanji): a diverse set of environments ranging from simple games to NP-hard combinatoral problems.
