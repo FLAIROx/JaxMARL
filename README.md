@@ -1,8 +1,30 @@
-# Scalable MARL in JAX (SMAX)
+# JaxMARL: Multi-Agent RL in JAX 
 
-Welcome to the work-in-progress Scalable MARL in Jax (SMAX) library. We build heavily off Gymnax and take API inspiration from PettingZoo.
+Multi-Agent RL environments and algorithms implemented in JAX.
 
-## Basic `SMAX` API  Usage
+JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environemnts as well as popular baseline algorithms. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine.
+
+## Environments
+
+## Installation
+JaxMARL can be installed directly from PyPi:
+```
+pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
+```
+We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). Ensure you have the correct JAX installation for your hardware accelerator, details can be found in the [Jax Documentation](https://github.com/google/jax#installation)
+
+
+
+To run our test scripts, some additional dependencies are required (for scripts which compare against existing implementations), these can be installed with:
+```
+TODO
+```
+
+## Quick Start 
+
+We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. TODO ADD MORE
+
+### Basic JaxMARL API  Usage
 ```python 
 import jax
 from smax import make
@@ -24,29 +46,11 @@ actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enu
 n_obs, n_state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
-## Installation
-Using Conda, run the following commands. You must ensure you install the correct JAX version, more information can be found [here](https://github.com/google/jax#installation)
-```
-conda create -n smax python=3.8
-conda activate smax
-
-# NOTE this installs jax for CUDA 12
-# if you have a different CUDA version or no GPU, see https://github.com/google/jax#installation
-pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-conda install -c conda-forge flax chex tqdm wandb dotmap
-pip install gymnax evosax pettingzoo brax>=0.9
-pip install -e .
-
-# to run MPE tests, you will also need pygame
-# pip install pygame
-```
-
 ## Contributing 
-Create a branch and send a merge request once your environment passes tests that show consistency with the existing implementation.
+Please contribute! TODO add contributing guide as per Jumanji
 
 ## See Also
-
+There are a number of other libraries which inspired this work, we encourage you to take a look:
 - [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
 - [Gymanx](https://github.com/RobertTLange/gymnax): implementations of classic RL tasks including classic control, bsuite and MinAtar.
 - [Jumanji](https://github.com/instadeepai/jumanji): a diverse set of environments ranging from simple games to NP-hard combinatoral problems.
