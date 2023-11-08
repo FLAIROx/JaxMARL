@@ -1,0 +1,74 @@
+command:
+  - python3
+  - ${program}
+  - ${args_no_hyphens}
+entity: amacrutherford
+method: grid
+parameters:
+  ANNEAL_LR:
+    values:
+      - true
+  CLIP_EPS:
+    values:
+      - 0.2
+  SCALE_CLIP_EPS:
+    values:
+      - False
+  ENT_COEF:
+    values:
+      - 0.0
+  ENV_NAME:
+    values:
+      - HeuristicEnemyMiniSMAC
+  GAE_LAMBDA:
+    values:
+      - 0.95
+  GAMMA:
+    values:
+      - 0.99
+  LR:
+    values:
+      - 0.002
+  MAP_NAME:
+    values:
+      - 3s_vs_5z
+      - 2s3z
+      - smacv2_5_units
+      - 3s5z
+      - 5m_vs_6m
+      - 10m_vs_11m
+      - 3s5z_vs_3s6z
+      - 6h_vs_8z
+      - 27m_vs_30m
+      - smacv2_20_units
+      - smacv2_10_units
+  MAX_GRAD_NORM:
+    values:
+      - 0.25
+  NUM_ENVS:
+    values:
+      - 64
+  NUM_MINIBATCHES:
+    values:
+      - 4
+  NUM_STEPS:
+    values:
+      - 128
+  SEED:
+    values:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+  TOTAL_TIMESTEPS:
+    values:
+      - 10e6
+  UPDATE_EPOCHS:
+    values:
+      - 4
+  VF_COEF:
+    values:
+      - 0.5
+program: mappo_rnn_smax.py
+project: smax-rnn-final-results11
