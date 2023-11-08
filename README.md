@@ -2,7 +2,7 @@
 
 TODO python versions etc
 
-[**Installation**](#install) | [**Quick Start**](#start) | [**Citation**](#cite)
+[**Installation**](#install) | [**Quick Start**](#start) | [**Environments**](#envs) | [**Algorithms**](#algs) | [**Citation**](#cite)
 ---
 
 <div class="collage">
@@ -12,14 +12,16 @@ TODO python versions etc
     </div>
 </div>
 
-## MARL environments and algorithms implemented in JAX.
+## Multi-Agent Reinforcement Learning in JAX
 
-JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is to have one library which enables thorough evaluation of MARL methods across a wide range of tasks against relevant baselines. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
+JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library to enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
-## Environments
+For more details, take a look at our blog post or this notebook walks through the basic usage. LINKS TODO
 
-| Environment |  Source & Description | 
-| --- | --- | 
+<h2 name="envs" id="envs">Environments </h2>
+
+| Environment | Visualisation |  Source & Description | 
+| --- | --- | --- |
 | MPE | links todo |
 | Overcooked |  |
 | Multi-Agent Brax |  | 
@@ -29,7 +31,7 @@ JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide ra
 | Coin Game |  |
 | Switch Riddle |  | 
 
-## Baseline Algorithms
+<h2 name="algs" id="algs">Baseline Algorithms </h2>
 
 We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory.
 
@@ -43,22 +45,25 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 
 <h2 name="install" id="install">Installation </h2>
-JaxMARL can be installed directly from PyPi:
+
+Before installing, ensure you have the correct [JAX installation]((https://github.com/google/jax#installation)) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
+
 ```
 pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
 ```
-We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). Ensure you have the correct JAX installation for your hardware accelerator, details can be found in the [Jax Documentation](https://github.com/google/jax#installation)
-
-To run our test scripts, some additional dependencies are required (as some scripts compare against existing implementations), these can be installed with:
+We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). To run our test scripts, some additional dependencies are required (as some scripts compare against existing implementations), these can be installed with:
 ```
 TODO
 ```
 
 <h2 name="start" id="start">Quick Start </h2>
 
-We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. The done dictionary contains an additional `"__all__"` key, specifying whether the episode has ended. We follow a parallel structure, with each agent passing an action at each timestep. For ascyhronous games, such as Hanabi, a dummy action is passed for agents not acting at a given timestep.
+We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. You can try out training an agent on XX in this Colab TODO. Further introduction scripts can be found here LINK TODO.
 
 ### Basic JaxMARL API  Usage
+
+Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. The done dictionary contains an additional `"__all__"` key, specifying whether the episode has ended. We follow a parallel structure, with each agent passing an action at each timestep. For ascyhronous games, such as Hanabi, a dummy action is passed for agents not acting at a given timestep.
+
 ```python 
 import jax
 from jaxmarl import make
