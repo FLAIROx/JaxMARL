@@ -2,26 +2,28 @@
 
 TODO python versions etc
 
-[**Installation**](#install) | [**Quick Start**](#start) | [**Environments**](#envs) | [**Algorithms**](#algs) | [**Citation**](#cite)
+[**Installation**](#install) | [**Quick Start**](#start) | [**Environments**](#environments) | [**Algorithms**](#algorithms) | [**Citation**](#cite)
 ---
 
 <div class="collage">
     <div class="row" align="centre">
         <img src="docs/imgs/cramped_room.gif" alt="Overcooked" width="20%">
         <img src="docs/imgs/qmix_MPE_simple_tag_v3.gif" alt="MPE" width="20%">
+        <img src="docs/imgs/storm.gif" alt="STORM" width="20%">
+        <img src="docs/imgs/smax.gif" alt="SMAX" width="20%">
     </div>
 </div>
 
 ## Multi-Agent Reinforcement Learning in JAX
 
-JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library to enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
+JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
 For more details, take a look at our blog post or this notebook walks through the basic usage. LINKS TODO
 
-<h2 name="envs" id="envs">Environments </h2>
+<h2 name="environments" id="environments">Environments </h2>
 
-| Environment | Visualisation |  Source & Description | 
-| --- | --- | --- |
+| Environment |  Source & Description | 
+| --- | --- |
 | MPE | links todo |
 | Overcooked |  |
 | Multi-Agent Brax |  | 
@@ -31,7 +33,7 @@ For more details, take a look at our blog post or this notebook walks through th
 | Coin Game |  |
 | Switch Riddle |  | 
 
-<h2 name="algs" id="algs">Baseline Algorithms </h2>
+<h2 name="algorithms" id="algorithms">Baseline Algorithms </h2>
 
 We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory.
 
@@ -53,7 +55,7 @@ pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
 ```
 We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). To run our test scripts, some additional dependencies are required (as some scripts compare against existing implementations), these can be installed with:
 ```
-TODO
+pip install jaxmarl[dev]
 ```
 
 <h2 name="start" id="start">Quick Start </h2>
