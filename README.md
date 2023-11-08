@@ -36,21 +36,21 @@ pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
 ```
 We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). Ensure you have the correct JAX installation for your hardware accelerator, details can be found in the [Jax Documentation](https://github.com/google/jax#installation)
 
-
-
-To run our test scripts, some additional dependencies are required (for scripts which compare against existing implementations), these can be installed with:
+To run our test scripts, some additional dependencies are required (as some scripts compare against existing implementations), these can be installed with:
 ```
 TODO
 ```
 
 ## Quick Start 
 
-We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. TODO ADD MORE
+We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. 
+
+XX, with a dummy action passed for agents not acting at that timestep.
 
 ### Basic JaxMARL API  Usage
 ```python 
 import jax
-from smax import make
+from jaxmarl import make
 
 key = jax.random.PRNGKey(0)
 key, key_reset, key_act, key_step = jax.random.split(rng, 4)
@@ -75,7 +75,7 @@ Please contribute! TODO add contributing guide as per Jumanji
 ## See Also
 There are a number of other libraries which inspired this work, we encourage you to take a look!
 - [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
-- [Gymanx](https://github.com/RobertTLange/gymnax): implementations of classic RL tasks including classic control, bsuite and MinAtar.
-- [Jumanji](https://github.com/instadeepai/jumanji): a diverse set of environments ranging from simple games to NP-hard combinatoral problems.
+- [Gymanx](https://github.com/RobertTLange/gymnax): Implementations of classic RL tasks including classic control, bsuite and MinAtar.
+- [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatoral problems.
 - [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
 - [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks.
