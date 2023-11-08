@@ -2,7 +2,7 @@
 
 Multi-Agent Reinforcement Learning environments and algorithms implemented in JAX.
 
-JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environemnts as well as popular baseline algorithms. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine.
+JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is to have one library which enables thorough evaluation of MARL methods across a wide range of tasks against relevant baselines. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
 ## Environments
 
@@ -19,6 +19,8 @@ JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide ra
 
 ## Baseline Algorithms
 
+We follow CleanRL's philosophy of providing single file implementations.
+
 | Algorithm |  Source & Description | 
 | --- | --- | 
 | IPPO | links todo | 
@@ -26,7 +28,6 @@ JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide ra
 | IQL |  |
 | VDN |  | 
 | QMIX |  |
-
 
 
 ## Installation
@@ -43,9 +44,7 @@ TODO
 
 ## Quick Start 
 
-We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. 
-
-XX, with a dummy action passed for agents not acting at that timestep.
+We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. The done dictionary contains an additional `"__all__"` key, specifying whether the episode has ended. We follow a parallel structure, with each agent passing an action at each timestep. For ascyhronous games, such as Hanabi, a dummy action is passed for agents not acting at a given timestep.
 
 ### Basic JaxMARL API  Usage
 ```python 
@@ -70,7 +69,15 @@ n_obs, n_state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
 ## Contributing 
-Please contribute! TODO add contributing guide as per Jumanji
+Please contribute! Please take a look at our contributing guide LINK TODO for how to add an environment/algorithm or submit a bug report.
+
+## Citing JaxMARL
+
+If you use JaxMARL in your work, please cite us as follows:
+
+```
+TODO
+```
 
 ## See Also
 There are a number of other libraries which inspired this work, we encourage you to take a look!
