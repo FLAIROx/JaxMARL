@@ -48,12 +48,12 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 <h2 name="install" id="install">Installation </h2>
 
-Before installing, ensure you have the correct [JAX installation]((https://github.com/google/jax#installation)) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
+Before installing, ensure you have the correct [JAX installation](https://github.com/google/jax#installation) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
 
 ```
 pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
 ```
-We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). To run our test scripts, some additional dependencies are required (as some scripts compare against existing implementations), these can be installed with:
+We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
 pip install jaxmarl[dev]
 ```
@@ -84,7 +84,7 @@ key_act = jax.random.split(key_act, env.num_agents)
 actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enumerate(env.agents)}
 
 # Perform the step transition.
-n_obs, n_state, reward, done, infos = env.step(key_step, state, actions)
+obs, state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
 ## Contributing 
