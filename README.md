@@ -27,26 +27,24 @@ For more details, take a look at our blog post or this notebook walks through th
 | MPE | [Paper](https://arxiv.org/abs/1706.02275) | links todo | Communication orientated tasks in a multi-agent particle world
 | Overcooked | [Paper](https://arxiv.org/abs/1910.05789) |  | Fully-cooperative human-AI coordination tasks based on the homonyms video game | 
 | Multi-Agent Brax | [Paper](https://arxiv.org/abs/2003.06709) | | Continuous multi-agent robotic control based on Brax, analagous to Multi-Agent MuJoCo |
-| Hanabi | [Paper](https://arxiv.org/abs/1902.00506) |  |  |
+| Hanabi | [Paper](https://arxiv.org/abs/1902.00506) |  | Fully-cooperative partially-observable multiplayer card game |
 | SMAX | novel |   | Simplifed cooperative StarCraft micro-management environment |
-| STORM |  |
-| Coin Game |  |
-| Switch Riddle |  | 
+| Spatial-Temporal Representations of Matrix Games (STORM) |  | | Matrix games represented as grid world scenarios
+| Coin Game |  | | Two-player grid world environment which emulates social dilemmas
+| Switch Riddle |  |  | Simple cooperative communication game included for debugging
 
-original paper; readme; 1 line (5 word) summary
  
 <h2 name="algorithms" id="algorithms">Baseline Algorithms </h2>
 
 We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory.
 
-| Algorithm |  Origin | README | Summary | 
+| Algorithm | Reference | README | Summary | 
 | --- | --- | --- | --- |
-| IPPO | links todo | 
-| MAPPO |  |
+| IPPO | [Paper](https://arxiv.org/abs/2103.01955) | 
+| MAPPO | [Paper](https://arxiv.org/abs/2103.01955) |
 | IQL |  |
 | VDN |  | 
 | QMIX |  |
-orignal paper; read me; type
 
 <h2 name="install" id="install">Installation </h2>
 
