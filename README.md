@@ -22,29 +22,31 @@ For more details, take a look at our blog post or this notebook walks through th
 
 <h2 name="environments" id="environments">Environments </h2>
 
-| Environment |  Source & Description | 
-| --- | --- |
-| MPE | links todo |
-| Overcooked |  |
-| Multi-Agent Brax |  | 
-| Hanabi |   |
-| SMAX |  |
+| Environment | Reference | README | Summary |
+| --- | --- | --- | --- |
+| MPE | [Paper](https://arxiv.org/abs/1706.02275) | links todo | Communication orientated tasks in a multi-agent particle world
+| Overcooked | [Paper](https://arxiv.org/abs/1910.05789) |  | Fully-cooperative human-AI coordination tasks based on the homonyms video game | 
+| Multi-Agent Brax | [Paper](https://arxiv.org/abs/2003.06709) | | Continuous multi-agent robotic control based on Brax, analagous to Multi-Agent MuJoCo |
+| Hanabi | [Paper](https://arxiv.org/abs/1902.00506) |  |  |
+| SMAX | novel |   | Simplifed cooperative StarCraft micro-management environment |
 | STORM |  |
 | Coin Game |  |
 | Switch Riddle |  | 
 
+original paper; readme; 1 line (5 word) summary
+ 
 <h2 name="algorithms" id="algorithms">Baseline Algorithms </h2>
 
 We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory.
 
-| Algorithm |  Source & Description | 
-| --- | --- | 
+| Algorithm |  Origin | README | Summary | 
+| --- | --- | --- | --- |
 | IPPO | links todo | 
 | MAPPO |  |
 | IQL |  |
 | VDN |  | 
 | QMIX |  |
-
+orignal paper; read me; type
 
 <h2 name="install" id="install">Installation </h2>
 
