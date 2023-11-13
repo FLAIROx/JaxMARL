@@ -165,7 +165,7 @@ class HanabiGame(MultiAgentEnv):
 
         return {a: legal_moves[i] for i, a in enumerate(self.agents)}
 
-    def reset_env(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
         """Reset the environment"""
 
         def _gen_cards(aidx, unused):

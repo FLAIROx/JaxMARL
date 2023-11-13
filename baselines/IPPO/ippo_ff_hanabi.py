@@ -19,6 +19,7 @@ from gymnax.wrappers.purerl import LogWrapper
 # import smax
 # from smax.wrappers.smaxbaselines import LogWrapper
 from smax.wrappers.smaxbaselines import LogWrapper
+from smax.environments.hanabi.hanabi import HanabiGame
 # from smax.wrappers.gymnax import GymnaxToSMAX
 import smax
 import wandb
@@ -49,7 +50,7 @@ class ActorCriticMLP(nn.Module):
         )(actor_mean)
         unavail_actions = 1 - avail_actions
         action_logits = actor_mean - (unavail_actions * 1e10)
-        pi = distrax.Categorical(logits=actor_mean)
+        pi = distrax.Categorical(logits=action_logits)
 
         critic = nn.Dense(512, kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
@@ -83,6 +84,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 def make_train(config):
     env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     # env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
+#     env = HanabiGame()
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
             config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]
@@ -110,7 +112,6 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n))
         )
-        init_mask = jnp.zeros(env.action_space(env.agents[0]).n)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -139,10 +140,12 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-                legal_moves = env_state.env_state.legal_moves
-                avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+                avail_actions = jax.vmap(env.get_legal_moves)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
+                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions[np.newaxis, :])
                 pi, value = network.apply(train_state.params, ac_in)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
@@ -165,7 +168,6 @@ def make_train(config):
                     obs_batch,
                     info,
                     avail_actions
-
                 )
                 runner_state = (train_state, env_state, obsv, done_batch, rng)
                 return runner_state, transition
@@ -177,8 +179,9 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, last_done, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            legal_moves = env_state.env_state.legal_moves
-            avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+            avail_actions = jnp.ones(
+                (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
+            )
             ac_in = (last_obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
             _, last_val = network.apply(train_state.params, ac_in)
             last_val = last_val.squeeze()
@@ -216,7 +219,6 @@ def make_train(config):
 
                     def _loss_fn(params, traj_batch, gae, targets):
                         # RERUN NETWORK
-                        act_mask = jnp.ones((traj_batch.obs.shape[0], env.action_space(env.agents[0]).n))
                         pi, value = network.apply(params,
                                                   (traj_batch.obs, traj_batch.done, traj_batch.avail_actions))
                         log_prob = pi.log_prob(traj_batch.action)
