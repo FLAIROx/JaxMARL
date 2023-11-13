@@ -8,13 +8,13 @@
 "GAE_LAMBDA": 0.95
 "CLIP_EPS": 0.2
 "SCALE_CLIP_EPS": False
-"ENT_COEF": 0.01
+"ENT_COEF": 0.0
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.25
 "ACTIVATION": "relu"
 "OBS_WITH_AGENT_ID": True
 "ENV_NAME": "HeuristicEnemySMAX"
-"MAP_NAME": "smacv2_5_units"
+"MAP_NAME": "27m_vs_30m"
 "SEED": 0
 #"NUM_SEEDS": 2
 "ENV_KWARGS": 
