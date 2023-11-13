@@ -5,8 +5,8 @@ import jax.experimental.checkify as checkify
 import chex
 import flax.linen as nn
 from gymnax.environments.spaces import Box as BoxGymnax, Discrete as DiscreteGymnax
-from smax.environments.spaces import Box, Discrete, MultiDiscrete
-from smax.environments.multi_agent_env import MultiAgentEnv
+from jaxmarl.environments.spaces import Box, Discrete, MultiDiscrete
+from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 
 from .buffers import uniform_replay
 from .buffers.uniform import UniformReplayBufferState

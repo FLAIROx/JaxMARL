@@ -12,15 +12,15 @@ Methodology:
 import jax
 import numpy as np
 from jax import numpy as jnp
-from smax import make
+from jaxmarl import make
 from baselines.QLearning.utils import load_params, get_space_dim
-from SMAX.baselines.QLearning.iql import AgentRNN, ScannedRNN
+from jaxmarl.baselines.QLearning.iql import AgentRNN, ScannedRNN
 from pettingzoo.mpe import simple_speaker_listener_v4, simple_spread_v3, simple_adversary_v3
 import tqdm
 
 
 def np_state_to_jax(env_zoo, env_jax):
-    from smax.environments.mpe.simple import State
+    from jaxmarl.environments.mpe.simple import State
 
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
@@ -53,7 +53,7 @@ def np_state_to_jax(env_zoo, env_jax):
     #print('jax state', state)
     #print('test obs', state["p_pos"][1] - state["p_pos"][0])
     if env_zoo.metadata["name"] == 'simple_crypto_v3':
-        from smax.environments.mpe.simple_crypto import CryptoState
+        from jaxmarl.environments.mpe.simple_crypto import CryptoState
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
         return CryptoState(**state)

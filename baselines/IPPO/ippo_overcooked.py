@@ -3,7 +3,7 @@ Based on PureJaxRL Implementation of PPO
 
 doing homogenous first with continuous actions. Also terminate synchronously
 
-NOTE: currently implemented using the gymnax to smax wrapper
+NOTE: currently implemented using the gymnax to jaxmarl wrapper
 """
 
 import jax
@@ -16,11 +16,10 @@ from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
 from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
-import smax
-from smax.wrappers.smaxbaselines import LogWrapper
-from smax.wrappers.gymnax import GymnaxToSMAX
-from smax.environments.overcooked import overcooked_layouts
-from smax.viz.overcooked_visualizer import OvercookedVisualizer
+import jaxmarl
+from jaxmarl.wrappers.baselines import LogWrapper
+from jaxmarl.environments.overcooked import overcooked_layouts
+from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 import hydra
 from omegaconf import OmegaConf
 
@@ -74,7 +73,7 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 def get_rollout(train_state, config):
-    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     # env_params = env.default_params
     # env = LogWrapper(env)
 
@@ -124,8 +123,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 def make_train(config):
-    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-#     env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (

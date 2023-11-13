@@ -17,5 +17,5 @@
 "SEED": 30
 
 "ENTITY": "amacrutherford"
-"PROJECT": "mpe-smax"
+"PROJECT": "mpe-jaxmarl"
 "WANDB_MODE" : "online"

@@ -19,7 +19,7 @@ parameters:
       - 0.0
   ENV_NAME:
     values:
-      - HeuristicEnemyMiniSMAC
+      - HeuristicEnemySMAX
   GAE_LAMBDA:
     values:
       - 0.95
@@ -70,5 +70,5 @@ parameters:
   VF_COEF:
     values:
       - 0.5
-program: mappo_rnn_smax.py
-project: smax-rnn-final-results11
+program: mappo_rnn_jaxmarl.py
+project: jaxmarl-rnn-final-results11

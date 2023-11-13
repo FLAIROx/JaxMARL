@@ -10,7 +10,7 @@ def _parse_requirements(path: str) -> List[str]:
         ]
 
 setup(
-    name="smax",
+    name="jaxmarl",
     version="0.0.1",
     author="FLAIR",
     description="Multi-Agent Reinforcement Learning with JAX",

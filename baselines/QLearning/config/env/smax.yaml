@@ -1,4 +1,4 @@
-"ENV_NAME": "HeuristicEnemyMiniSMAC"
+"ENV_NAME": "HeuristicEnemySMAX"
 "MAP_NAME": "smacv2_5_units"
 "ENV_KWARGS":
   "see_enemy_actions": True

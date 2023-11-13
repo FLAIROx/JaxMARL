@@ -3,7 +3,7 @@ Based on PureJaxRL Implementation of PPO
 
 doing homogenous first with continuous actions. Also terminate synchronously
 
-NOTE: currently implemented using the gymnax to smax wrapper
+NOTE: currently implemented using the gymnax to jaxmarl wrapper
 """
 
 import jax
@@ -18,12 +18,11 @@ import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-# import smax
-# from smax.wrappers.smaxbaselines import LogWrapper
-from smax.wrappers.smaxbaselines import SMAXLogWrapper
-from smax.environments.mini_smac import map_name_to_scenario, HeuristicEnemyMiniSMAC
+# import jaxmarl
+# from jaxmarl.wrappers.baselines import LogWrapper
+from jaxmarl.wrappers.baselines import SMAXLogWrapper
+from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
 
-# from smax.wrappers.gymnax import GymnaxToSMAX
 import wandb
 import functools
 import matplotlib.pyplot as plt
@@ -118,10 +117,9 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    # env, env_params = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    # env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
+    # env, env_params = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     scenario = map_name_to_scenario(config["MAP_NAME"])
-    env = HeuristicEnemyMiniSMAC(scenario=scenario, **config["ENV_KWARGS"])
+    env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -444,7 +442,7 @@ def make_train(config):
     return train
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="ippo_rnn_smax")
+@hydra.main(version_base=None, config_path="../config", config_name="ippo_rnn_jaxmarl")
 def main(config):
     config = OmegaConf.to_container(config)
     wandb.init(

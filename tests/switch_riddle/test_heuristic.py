@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from smax import make
+from jaxmarl import make
 import pytest
 
 def get_nothing_actions(env):

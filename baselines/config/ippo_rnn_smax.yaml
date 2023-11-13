@@ -12,7 +12,7 @@
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
-"ENV_NAME": "HeuristicEnemyMiniSMAC"
+"ENV_NAME": "HeuristicEnemySMAX"
 "MAP_NAME": "2s3z"
 "SEED": 30
 "ENV_KWARGS": 

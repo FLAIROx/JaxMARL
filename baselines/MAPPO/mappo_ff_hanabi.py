@@ -23,18 +23,17 @@ import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
-import smax
-from smax.wrappers.smaxbaselines import LogWrapper, SMAXWrapper
-from smax.environments.multi_agent_env import MultiAgentEnv, State
+import jaxmarl
+from jaxmarl.wrappers.baselines import LogWrapper, jaxmarlWrapper
+from jaxmarl.environments.multi_agent_env import MultiAgentEnv, State
 
 
-# from smax.wrappers.gymnax import GymnaxToSMAX
 import wandb
 import functools
 import matplotlib.pyplot as plt
 
     
-class HanabiWorldStateWrapper(SMAXWrapper):
+class HanabiWorldStateWrapper(jaxmarlWrapper):
     
     @partial(jax.jit, static_argnums=0)
     def reset(self,
@@ -154,7 +153,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]

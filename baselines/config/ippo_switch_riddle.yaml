@@ -18,5 +18,5 @@
 "DISABLE_JIT": False
 "DEVICE": 0
 "ENTITY": "amacrutherford"
-"PROJECT": "smax-switch-riddle"
+"PROJECT": "jaxmarl-switch-riddle"
 "WANDB_MODE": "disabled"

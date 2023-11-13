@@ -10,7 +10,7 @@ With Jax 0.4.13, you could experience a degradation of performance.
 ```
 ❗The implementations were tested in the following environments:
 - MPE
-- Smax
+- jaxmarl
 ```
 
 ## 🔎 Implementation Details
@@ -45,8 +45,8 @@ If you have cloned JaxMarl and you are in the repository root, you can run the a
 python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 # VDN with MPE spread
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
-# QMix with Smax
-python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
+# QMix with jaxmarl
+python baselines/QLearning/qmix.py +alg=qmix_jaxmarl +env=jaxmarl
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
 ```
@@ -61,7 +61,7 @@ python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_spread alg.PARAMETERS_SH
 It is often useful to run these scripts manually in a notebook or in another script.
 
 ```python
-from smax import make
+from jaxmarl import make
 from baselines.QLearning.qmix import make_train
 
 env = make("MPE_simple_spread_v3")

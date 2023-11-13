@@ -7,17 +7,17 @@ import numpy as np
 from pettingzoo.test import parallel_api_test
 from pettingzoo.mpe import simple_v3, simple_world_comm_v3, simple_tag_v3, simple_spread_v3, simple_crypto_v3, simple_speaker_listener_v4, simple_push_v3, simple_adversary_v3, simple_reference_v3
 import tqdm
-from smax import make
+from jaxmarl import make
 import pytest
 
-from smax.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
-from smax.environments.mpe.default_params import DISCRETE_ACT, CONTINUOUS_ACT
+from jaxmarl.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
+from jaxmarl.environments.mpe.default_params import DISCRETE_ACT, CONTINUOUS_ACT
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
 
 
 def np_state_to_jax(env_zoo, env_jax):
-    from smax.environments.mpe.simple import State
+    from jaxmarl.environments.mpe.simple import State
 
     p_pos = np.zeros((env_jax.num_entities, env_jax.dim_p))
     p_vel = np.zeros((env_jax.num_entities, env_jax.dim_p))
@@ -42,7 +42,7 @@ def np_state_to_jax(env_zoo, env_jax):
     }
     
     if env_zoo.metadata["name"] == 'simple_crypto_v3':
-        from smax.environments.mpe.simple_crypto import CryptoState
+        from jaxmarl.environments.mpe.simple_crypto import CryptoState
         state["goal_colour"] = env_zoo.aec_env.env.world.agents[1].color
         state["private_key"] = env_zoo.aec_env.env.world.agents[2].key
         return CryptoState(**state)

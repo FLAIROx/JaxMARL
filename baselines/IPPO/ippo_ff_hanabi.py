@@ -3,7 +3,7 @@ Based on PureJaxRL Implementation of PPO
 
 doing homogenous first with continuous actions. Also terminate synchronously
 
-NOTE: currently implemented using the gymnax to smax wrapper
+NOTE: currently implemented using the gymnax to jaxmarl wrapper
 """
 
 import jax
@@ -16,11 +16,10 @@ from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
 import distrax
 from gymnax.wrappers.purerl import LogWrapper
-# import smax
-# from smax.wrappers.smaxbaselines import LogWrapper
-from smax.wrappers.smaxbaselines import LogWrapper
-# from smax.wrappers.gymnax import GymnaxToSMAX
-import smax
+# import jaxmarl
+# from jaxmarl.wrappers.baselines import LogWrapper
+from jaxmarl.wrappers.baselines import LogWrapper
+import jaxmarl
 import wandb
 import functools
 import matplotlib.pyplot as plt
@@ -81,8 +80,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 def make_train(config):
-    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    # env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
             config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]

@@ -1,4 +1,4 @@
-from smax.environments.multi_agent_env import MultiAgentEnv
+from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from functools import partial
 import jax
 

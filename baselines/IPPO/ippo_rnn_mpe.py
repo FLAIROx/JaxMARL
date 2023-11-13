@@ -3,7 +3,7 @@ Based on PureJaxRL Implementation of PPO
 
 doing homogenous first with continuous actions. Also terminate synchronously
 
-NOTE: currently implemented using the gymnax to smax wrapper
+NOTE: currently implemented using the gymnax to jaxmarl wrapper
 """
 
 import jax
@@ -18,8 +18,8 @@ import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-import smax
-from smax.wrappers.smaxbaselines import MPELogWrapper
+import jaxmarl
+from jaxmarl.wrappers.baselines import MPELogWrapper
 
 import wandb
 import functools
@@ -114,7 +114,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    env = smax.make(config["ENV_NAME"])
+    env = jaxmarl.make(config["ENV_NAME"])
     
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (

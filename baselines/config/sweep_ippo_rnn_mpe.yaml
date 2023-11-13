@@ -1,5 +1,5 @@
 entity: amacrutherford
-project: mpe-smax
+project: mpe-jaxmarl
 program: ippo_rnn_mpe.py
 command:
   - python3

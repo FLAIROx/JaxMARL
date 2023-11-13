@@ -11,8 +11,8 @@ from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
-import smax
-from smax.wrappers.smaxbaselines import MPELogWrapper as LogWrapper 
+import jaxmarl
+from jaxmarl.wrappers.baselines import MPELogWrapper as LogWrapper 
 import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
@@ -77,7 +77,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 def make_train(config):
-    env = smax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]  # Q: NUM_ACTORS CORRECT?

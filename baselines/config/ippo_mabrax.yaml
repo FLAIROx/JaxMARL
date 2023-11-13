@@ -18,5 +18,5 @@
 "DEVICE": 0
 "DISABLE_JIT": False
 "ENTITY": "amacrutherford"
-"PROJECT": "smax-mabrax"
+"PROJECT": "jaxmarl-mabrax"
 "WANDB_MODE": "disabled"

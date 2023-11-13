@@ -22,8 +22,8 @@ import wandb
 import hydra
 from omegaconf import OmegaConf
 
-from smax import make
-from smax.environments.mini_smac import map_name_to_scenario
+from jaxmarl import make
+from jaxmarl.environments.smax import map_name_to_scenario
 from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN, load_params, save_params
 
     
@@ -521,7 +521,7 @@ def main(config):
     # smac init neeeds a scenario
     if 'SMAC' in env_name:
         config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
-        env_name = 'smax_'+config['env']['MAP_NAME']
+        env_name = 'jaxmarl_'+config['env']['MAP_NAME']
 
     env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
     config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env

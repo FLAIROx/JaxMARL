@@ -24,17 +24,17 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
 
-from smax.wrappers.smaxbaselines import SMAXLogWrapper, SMAXWrapper
-from smax.environments.mini_smac import map_name_to_scenario, HeuristicEnemyMiniSMAC
+from jaxmarl.wrappers.baselines import SMAXLogWrapper, jaxmarlWrapper
+from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
 
-class SMAXWorldStateWrapper(SMAXWrapper):
+class jaxmarlWorldStateWrapper(jaxmarlWrapper):
     """
     Provides a `"world_state"` observation for the centralised critic.
     world state observation of dimension: (num_agents, world_state_size)    
     """
     
     def __init__(self,
-                 env: HeuristicEnemyMiniSMAC,
+                 env: HeuristicEnemySMAX,
                  obs_with_agent_id=True,):
         super().__init__(env)
         self.obs_with_agent_id = obs_with_agent_id
@@ -192,7 +192,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 def make_train(config):
     scenario = map_name_to_scenario(config["MAP_NAME"])
-    env = HeuristicEnemyMiniSMAC(scenario=scenario, **config["ENV_KWARGS"])
+    env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -206,7 +206,7 @@ def make_train(config):
         else config["CLIP_EPS"]
     )
 
-    env = SMAXWorldStateWrapper(env, config["OBS_WITH_AGENT_ID"])
+    env = jaxmarlWorldStateWrapper(env, config["OBS_WITH_AGENT_ID"])
     env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
@@ -571,7 +571,7 @@ def make_train(config):
 
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_smax")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_jaxmarl")
 def main(config):
 
     config = OmegaConf.to_container(config)
