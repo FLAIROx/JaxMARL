@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 
 from jaxmarl import make
-from jaxmarl.environments.matrix_games_in_the_grid.mg_in_the_grid_env import Items
+from jaxmarl.environments.storm.mg_in_the_grid_env import Items
 
 action=1
 render_agent_view = False
