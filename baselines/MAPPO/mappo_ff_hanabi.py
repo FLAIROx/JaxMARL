@@ -24,7 +24,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
 import jaxmarl
-from jaxmarl.wrappers.baselines import LogWrapper, jaxmarlWrapper
+from jaxmarl.wrappers.baselines import LogWrapper, JaxMARLWrapper
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv, State
 
 
@@ -33,7 +33,7 @@ import functools
 import matplotlib.pyplot as plt
 
     
-class HanabiWorldStateWrapper(jaxmarlWrapper):
+class HanabiWorldStateWrapper(JaxMARLWrapper):
     
     @partial(jax.jit, static_argnums=0)
     def reset(self,
