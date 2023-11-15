@@ -51,7 +51,7 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 <h2 name="install" id="install">Installation 🧗 </h2>
 
-Before installing, ensure you have the correct [JAX installation](https://github.com/google/jax#installation) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
+Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
 
 ```
 pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
@@ -63,7 +63,7 @@ pip install jaxmarl[dev]
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
 
-We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. You can try out training an agent on XX in this Colab TODO. Further introduction scripts can be found here LINK TODO.
+We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. You can try out training an agent on XX in this Colab TODO. Further introduction scripts can be found [here](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/tutorials).
 
 ### Basic JaxMARL API  Usage 🖥️
 
