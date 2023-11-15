@@ -1,14 +1,5 @@
 """
-Short introduction to the package.
-
-## Abstract base class
-Uses the PettingZoo Parallel API. All agents act synchronously, with actions, 
-observations, returns and dones passed as dictionaries keyed by agent names. 
-The code can be found in `multiagentgymnax/multi_agent_env.py`
-
-## Environment loop
-Below is an example of a simple environment loop, using random actions.
-
+Short introduction to running the Overcooked environment and visualising it using random actions.
 """
 
 import jax 

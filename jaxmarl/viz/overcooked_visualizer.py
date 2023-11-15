@@ -82,7 +82,7 @@ class OvercookedVisualizer:
 		grid_offset = np.array([1,1])
 		h, w = grid.shape[:2]
 		# === Compute highlight mask
-		highlight_mask = np.zeros(shape=(h,w), dtype=np.bool)
+		highlight_mask = np.zeros(shape=(h,w), dtype=bool)
 
 		if highlight:
 			# TODO: Fix this for multiple agents
@@ -318,7 +318,7 @@ class OvercookedVisualizer:
 		agent_dir_idx=None,
 		agent_inv=None):
 		if highlight_mask is None:
-			highlight_mask = np.zeros(shape=grid.shape[:2], dtype=np.bool)
+			highlight_mask = np.zeros(shape=grid.shape[:2], dtype=bool)
 
 		# Compute the total grid size in pixels
 		width_px = grid.shape[1]*tile_size
