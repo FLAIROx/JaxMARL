@@ -1,4 +1,4 @@
-# JaxMARL
+<h1 align="center">JaxMARL</h1>
 
 <p align="center">
        <a href= "https://github.com/FLAIROx/JaxMARL/blob/main/LICENSE">
