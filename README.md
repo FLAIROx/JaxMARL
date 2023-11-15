@@ -56,7 +56,7 @@ Before installing, ensure you have the correct [JAX version](https://github.com/
 ```
 pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
 ```
-We have tested JaxMARL on Python 3.8 and 3.9 (TODO 3.9). To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
+We have tested JaxMARL on Python 3.8 and 3.9. To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
 pip install jaxmarl[dev]
 ```
