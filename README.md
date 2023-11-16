@@ -14,10 +14,10 @@
 
 <div class="collage">
     <div class="row" align="centre">
-        <img src="docs/imgs/cramped_room.gif" alt="Overcooked" width="20%">
-        <img src="docs/imgs/qmix_MPE_simple_tag_v3.gif" alt="MPE" width="20%">
-        <img src="docs/imgs/storm.gif" alt="STORM" width="20%">
-        <img src="docs/imgs/smax.gif" alt="SMAX" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/cramped_room.gif?raw=true" alt="Overcooked" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true" alt="MPE" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/storm.gif?raw=true" alt="STORM" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true" alt="SMAX" width="20%">
     </div>
 </div>
 
