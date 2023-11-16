@@ -58,7 +58,7 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
 
 ```
-pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
+pip install jaxmarl 
 ```
 We have tested JaxMARL on Python 3.8 and 3.9. To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
