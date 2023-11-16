@@ -23,8 +23,7 @@ if mo:
     verstr = mo.group(1)
 else:
     raise RuntimeError("Unable to find version string in %s." % (VERSIONFILE,))
-
-
+git_tar = f"https://github.com/FLAIROx/JaxMARL/archive/v{verstr}.tar.gz"
 
 setup(
     name="jaxmarl",
@@ -34,6 +33,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/FLAIROx/JaxMARL",
+    download_url=git_tar,
     keywords="MARL reinforcement-learning python jax",
     packages=find_packages(exclude=["baselines"]),
     python_requires=">=3.8",
