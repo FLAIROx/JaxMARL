@@ -2,7 +2,7 @@
 
 <p align="center">
        <a href="https://pypi.python.org/pypi/jaxmarl">
-        <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg?style=flat-square" /></a>
+        <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg" /></a>
        <a href= "https://badge.fury.io/py/jaxmarl">
         <img src="https://badge.fury.io/py/jaxmarl.svg" /></a>
        <a href= "https://github.com/FLAIROx/JaxMARL/blob/main/LICENSE">
@@ -47,7 +47,7 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 | Algorithm | Reference | README | 
 | --- | --- | --- | 
-| IPPO | [Paper](https://arxiv.org/abs/2103.01955) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/IPPO) | 
+| IPPO | [Paper](https://arxiv.org/pdf/2011.09533.pdf) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/IPPO) | 
 | MAPPO | [Paper](https://arxiv.org/abs/2103.01955) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/MAPPO) | 
 | IQL | [Paper](https://arxiv.org/abs/1312.5602v1) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) | DQN 
 | VDN | [Paper](https://arxiv.org/abs/1706.05296)  | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
@@ -58,7 +58,7 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. JaxMARL can then be installed directly from PyPi:
 
 ```
-pip install jaxmarl  -- NOTE THIS DOES NOT WORK YET USE: pip install -e .
+pip install jaxmarl 
 ```
 We have tested JaxMARL on Python 3.8 and 3.9. To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
