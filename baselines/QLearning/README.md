@@ -10,7 +10,7 @@ With Jax 0.4.13, you could experience a degradation of performance.
 ```
 ❗The implementations were tested in the following environments:
 - MPE
-- jaxmarl
+- SMAX
 ```
 
 ## 🔎 Implementation Details
@@ -38,15 +38,15 @@ Please modify this wrapper for your needs.
 
 ## 🚀 Usage
 
-If you have cloned JaxMarl and you are in the repository root, you can run the algorithms as scripts. You will need to specify which parameter configurations will be loaded by Hydra by choosing them (or adding yours) in the config folder. Below are some examples:
+If you have cloned JaxMARL and you are in the repository root, you can run the algorithms as scripts. You will need to specify which parameter configurations will be loaded by Hydra by choosing them (or adding yours) in the config folder. Below are some examples:
 
 ```bash
 # IQL with MPE speaker-listener
 python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 # VDN with MPE spread
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
-# QMix with jaxmarl
-python baselines/QLearning/qmix.py +alg=qmix_jaxmarl +env=jaxmarl
+# QMix with SMAX
+python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
 ```
