@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 
 from jaxmarl import make
-from jaxmarl.environments.storm.mg_in_the_grid_2p import Items
+from jaxmarl.environments.storm.storm_2p import Items
 
 action = 1
 render_agent_view = True
@@ -13,7 +13,7 @@ num_inner_steps = 152
 
 rng = jax.random.PRNGKey(0)
 
-env = make('mg_in_the_grid_2p', 
+env = make('storm_2p', 
         num_inner_steps=num_inner_steps, 
         num_outer_steps=num_outer_steps, 
         fixed_coin_location=True,

@@ -88,10 +88,10 @@ def make(env_id: str, **env_kwargs):
         env = Walker2d(**env_kwargs)
 
     # 5. InTheGrid
-    elif env_id == "mg_in_the_grid":
+    elif env_id == "storm":
         env = InTheGrid(**env_kwargs)
     # 5. InTheGrid
-    elif env_id == "mg_in_the_grid_2p":
+    elif env_id == "storm_2p":
         env = InTheGrid_2p(**env_kwargs)
     
     # 6. Hanabi
@@ -131,8 +131,8 @@ registered_envs = [
     "hopper_3x1",
     "humanoid_9|8",
     "walker2d_2x3",
-    "mg_in_the_grid",
-    "mg_in_the_grid_2p",
+    "storm",
+    "storm_2p",
     "hanabi",
     "overcooked",
     "coin_game",

@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 
 from jaxmarl import make
-from jaxmarl.environments.storm.mg_in_the_grid_env import Items
+from jaxmarl.environments.storm.storm_env import Items
 
 action=1
 render_agent_view = False
@@ -15,7 +15,7 @@ num_agents=2
 num_inner_steps=152
 
 rng = jax.random.PRNGKey(18)
-env = make('mg_in_the_grid', 
+env = make('storm', 
         num_inner_steps=num_inner_steps, 
         num_outer_steps=num_outer_steps, 
         num_agents=num_agents, 
