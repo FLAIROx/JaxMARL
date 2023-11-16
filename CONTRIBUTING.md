@@ -6,7 +6,7 @@ Please help build JaxMARL into the best possible tool for the MARL community.
 
 We actively welcome your contributions!
  - If adding an environment or algorithm, check with us that it is the right fit for the repo.
- - Fork the repo and create your branch from master.
+ - Fork the repo and create your branch from main.
  - Add tests, or show proof that the environment/algorithm works.
  - Add a README explaining your environment/algorithm.
 
