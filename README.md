@@ -1,6 +1,10 @@
 <h1 align="center">JaxMARL</h1>
 
 <p align="center">
+       <a href="https://pypi.python.org/pypi/jaxmarl">
+        <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg?style=flat-square" /></a>
+       <a href= "https://badge.fury.io/py/jaxmarl">
+        <img src="https://badge.fury.io/py/jaxmarl.svg" /></a>
        <a href= "https://github.com/FLAIROx/JaxMARL/blob/main/LICENSE">
         <img src="https://img.shields.io/badge/license-Apache2.0-blue.svg" /></a>
 </p>
@@ -10,10 +14,10 @@
 
 <div class="collage">
     <div class="row" align="centre">
-        <img src="docs/imgs/cramped_room.gif" alt="Overcooked" width="20%">
-        <img src="docs/imgs/qmix_MPE_simple_tag_v3.gif" alt="MPE" width="20%">
-        <img src="docs/imgs/storm.gif" alt="STORM" width="20%">
-        <img src="docs/imgs/smax.gif" alt="SMAX" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/cramped_room.gif?raw=true" alt="Overcooked" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true" alt="MPE" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/storm.gif?raw=true" alt="STORM" width="20%">
+        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true" alt="SMAX" width="20%">
     </div>
 </div>
 
