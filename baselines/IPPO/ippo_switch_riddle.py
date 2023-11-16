@@ -288,7 +288,7 @@ def make_train(config):
     return train
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="ippo_switch_riddle")
+@hydra.main(version_base=None, config_path="config", config_name="ippo_switch_riddle")
 def main(config): 
 
     config = OmegaConf.to_container(config) 

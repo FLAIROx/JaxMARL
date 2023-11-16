@@ -320,7 +320,7 @@ def make_train(config):
 
     return train
 
-@hydra.main(version_base=None, config_path="../config", config_name="ippo_ff_hanabi")
+@hydra.main(version_base=None, config_path="config", config_name="ippo_ff_hanabi")
 def main(config):
     config = OmegaConf.to_container(config) 
 
