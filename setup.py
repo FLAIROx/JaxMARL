@@ -29,6 +29,7 @@ setup(
     name="jaxmarl",
     version=verstr,
     author="Foerster Lab for AI Research",
+    author_email="arutherford@robots.ox.ac.uk",
     description="Multi-Agent Reinforcement Learning with JAX",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -41,5 +42,16 @@ setup(
     extras_require={
         "dev": _parse_requirements("requirements/requirements-dev.txt"),
     },
-    
+    classifiers=[
+        "Intended Audience :: Science/Research",
+        "Intended Audience :: Developers",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "License :: OSI Approved :: Apache Software License",
+    ],
+    include_package_data=True,
+    zip_safe=False,
 )
