@@ -16,6 +16,7 @@
 "ANNEAL_LR": True
 "SEED": 30
 
-"ENTITY": "amacrutherford"
-"PROJECT": "mpe-jaxmarl"
-"WANDB_MODE" : "online"
+# WandB Params
+"ENTITY": ""
+"PROJECT": "jaxmarl-mpe"
+"WANDB_MODE" : "disabled"

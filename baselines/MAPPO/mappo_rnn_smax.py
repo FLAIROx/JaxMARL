@@ -1,11 +1,5 @@
 """
 Based on PureJaxRL Implementation of IPPO, with changes to give a centralised critic.
-
-Doing homogenous first with continuous actions. Also terminate synchronously
-
-jax 4.7
-flax 0.7.4
-
 """
 
 import jax
@@ -571,11 +565,11 @@ def make_train(config):
 
     return train
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_jaxmarl")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_homogenous_rnn_smax")
 def main(config):
 
     config = OmegaConf.to_container(config)
-    jax.default_device(jax.devices()[config["DEVICE"]])
+
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
@@ -584,9 +578,8 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
-    #rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    with jax.disable_jit(config["DISABLE_JIT"]):
-        train_jit = jax.jit(make_train(config)) #  device=jax.devices()[config["DEVICE"]]
+    with jax.disable_jit(False):
+        train_jit = jax.jit(make_train(config)) 
         out = train_jit(rng)
 
     

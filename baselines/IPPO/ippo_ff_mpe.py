@@ -298,7 +298,7 @@ def make_train(config):
     return train
 
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_mpe")
+@hydra.main(version_base=None, config_path="config", config_name="ippo_ff_mpe")
 def main(config):
     config = OmegaConf.to_container(config) 
 
@@ -314,11 +314,16 @@ def main(config):
     rngs = jax.random.split(rng, config["NUM_SEEDS"])    
     train_jit = jax.jit(make_train(config))
     out = jax.vmap(train_jit)(rngs)
+
+    plt.plot(out["metrics"]["returned_episode_returns"].mean(axis=0))
+    plt.savefig(f"ippo_ff_{config['ENV_NAME']}.png")
+    plt.xlabel("Updates")
+    plt.ylabel("Returns")
+    plt.title(f"IPPO-FF={config['ENV_NAME']}")
     
-    updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    '''updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
     loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
     loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
-    print('shape', out["metrics"]["returned_episode_returns"][0].shape)
     updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
     returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
@@ -330,7 +335,7 @@ def main(config):
         "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
         "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
         "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
-    })
+    })'''
 
 
 if __name__ == "__main__":

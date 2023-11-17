@@ -1,8 +1,5 @@
 """
 Based on PureJaxRL Implementation of PPO
-
-doing homogenous first with continuous actions. Also terminate synchronously
-
 """
 
 import jax
@@ -129,7 +126,6 @@ def make_train(config):
         else config["CLIP_EPS"]
     )
 
-    # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
     env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
@@ -144,7 +140,6 @@ def make_train(config):
         # INIT NETWORK
         network = ActorCriticRNN(env.action_space(env.agents[0]).n, config=config)
         rng, _rng = jax.random.split(rng)
-        print('action num', env.action_space(env.agents[0]).n)
         init_x = (
             jnp.zeros(
                 (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])

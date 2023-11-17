@@ -16,10 +16,9 @@
 "SEED": 30
 "NUM_SEEDS": 2
 "ENV_KWARGS": {}
-
-"DISABLE_JIT": False
-"WANDB_MODE": "disabled"
 "ANNEAL_LR": True
+
+# WandB Params
+"WANDB_MODE": "disabled"
 "ENTITY": "amacrutherford"
 "PROJECT": "mpe-rnn"
-"DEVICE": 0

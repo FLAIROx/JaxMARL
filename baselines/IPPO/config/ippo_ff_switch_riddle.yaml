@@ -17,6 +17,6 @@
 "ANNEAL_LR": True
 "DISABLE_JIT": False
 "DEVICE": 0
-"ENTITY": "amacrutherford"
+"ENTITY": ""
 "PROJECT": "jaxmarl-switch-riddle"
 "WANDB_MODE": "disabled"

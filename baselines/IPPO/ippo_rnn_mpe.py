@@ -1,9 +1,5 @@
 """
 Based on PureJaxRL Implementation of PPO
-
-doing homogenous first with continuous actions. Also terminate synchronously
-
-NOTE: currently implemented using the gymnax to jaxmarl wrapper
 """
 
 import jax
@@ -186,11 +182,7 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
                 avail_actions = jnp.ones(
                     (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
-                )
-                '''avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
-                avail_actions = jax.lax.stop_gradient(
-                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
-                )'''
+                )  # NOTE not used, could be removed
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],

@@ -16,11 +16,9 @@
 "SEED": 30
 "NUM_SEEDS": 2
 "ENV_KWARGS": {}
-
-
-"DISABLE_JIT": False
-"WANDB_MODE": "online"
 "ANNEAL_LR": True
-"ENTITY": "amacrutherford"
-"PROJECT": "hanabi-rnn"
-"DEVICE": 0
+
+# WandB Params
+"WANDB_MODE": "disabled"
+"ENTITY": ""
+"PROJECT": "jaxmarl-hanabi"

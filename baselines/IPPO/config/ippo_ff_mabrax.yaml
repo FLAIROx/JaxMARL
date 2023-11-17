@@ -17,6 +17,8 @@
 "ANNEAL_LR": True
 "DEVICE": 0
 "DISABLE_JIT": False
-"ENTITY": "amacrutherford"
+
+# WandB Params
+"ENTITY": "" 
 "PROJECT": "jaxmarl-mabrax"
 "WANDB_MODE": "disabled"

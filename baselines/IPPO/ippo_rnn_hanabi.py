@@ -1,9 +1,5 @@
 """
 Based on PureJaxRL Implementation of PPO
-
-doing homogenous first with continuous actions. Also terminate synchronously
-
-NOTE: currently implemented using the gymnax to jaxmarl wrapper
 """
 
 import jax
@@ -175,8 +171,10 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-                legal_moves = env_state.env_state.legal_moves
-                avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+                avail_actions = jax.vmap(env.get_legal_moves)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
                 hstate, pi, value = network.apply(train_state.params, hstate, ac_in)
@@ -214,7 +212,9 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, last_done, hstate, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            avail_actions = jnp.ones((config["NUM_ACTORS"], env.action_space(env.agents[0]).n))
+            avail_actions = jnp.ones(
+                (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
+            )
             ac_in = (last_obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
             _, _, last_val = network.apply(train_state.params, hstate, ac_in)
             last_val = last_val.squeeze()
@@ -373,7 +373,7 @@ def main(config):
     )
 
     rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config), device=jax.devices()[0])
+    train_jit = jax.jit(make_train(config))
     out = train_jit(rng)
 
 if __name__ == "__main__":

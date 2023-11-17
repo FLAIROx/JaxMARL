@@ -10,11 +10,11 @@
 "ENT_COEF": 0.01
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
-#"ACTIVATION": "tanh"
 "ENV_NAME": "hanabi"
 "ENV_KWARGS": {}
 "ANNEAL_LR": False
 
-"WANDB_MODE": "online"
-"ENTITY": "amacrutherford"
-"PROJECT": "hanabi-rnn"
+# WandB Params
+"WANDB_MODE": "disabled"
+"ENTITY": ""
+"PROJECT": "jaxmarl-hanabi"

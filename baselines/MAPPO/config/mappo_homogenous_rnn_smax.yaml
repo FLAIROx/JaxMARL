@@ -1,4 +1,4 @@
-"LR": 2e-3
+"LR": 0.002
 "NUM_ENVS": 64 # must be a multiple of 8
 "NUM_STEPS": 128 # must be 128
 "TOTAL_TIMESTEPS": 1e7
@@ -16,15 +16,13 @@
 "ENV_NAME": "HeuristicEnemySMAX"
 "MAP_NAME": "27m_vs_30m"
 "SEED": 0
-#"NUM_SEEDS": 2
 "ENV_KWARGS": 
   "see_enemy_actions": True
   "walls_cause_death": True
   "attack_mode": "closest"
 "ANNEAL_LR": True
 
-"DISABLE_JIT": False
-"WANDB_MODE": "online"
-"ENTITY": "amacrutherford"
-"PROJECT": "jaxmarl-rnn"
-"DEVICE": 0
+# WandB Params
+"WANDB_MODE": "disabled"
+"ENTITY": ""
+"PROJECT": "jaxmarl-smax"

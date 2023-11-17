@@ -17,7 +17,7 @@
 "NUM_FC_LAYERS": 2
 "LAYER_WIDTH": 512
 
-"WANDB_MODE": "online"
-"ENTITY": "amacrutherford"
-"PROJECT": "hanabi-rnn"
-"DEVICE": 0
+# WandB Params
+"WANDB_MODE": "disabled"
+"ENTITY": ""
+"PROJECT": "jaxmarl-hanabi"

@@ -1,11 +1,5 @@
 """
 Based on PureJaxRL Implementation of IPPO, with changes to give a centralised critic.
-
-Doing homogenous first with continuous actions. Also terminate synchronously
-
-jax 4.7
-flax 0.7.4
-
 """
 
 import jax
@@ -51,9 +45,6 @@ class HanabiWorldStateWrapper(JaxMARLWrapper):
             key, state, action
         )
         obs["world_state"] = self.world_state(obs, state)
-        #reward = jax.tree_map(lambda x: x * self._env.num_agents, reward)
-        #print('reward', reward)
-        #reward["world_reward"] = self.world_reward(reward)
         return obs, env_state, reward, done, info
 
     @partial(jax.jit, static_argnums=0)
@@ -112,7 +103,6 @@ class ActorRNN(nn.Module):
         embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
-        print('actor rnn in', rnn_in)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
         actor_mean = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
@@ -141,7 +131,6 @@ class CriticRNN(nn.Module):
         embedding = nn.relu(embedding)
         
         rnn_in = (embedding, dones)
-        print('critic rnn in', rnn_in)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
         
         critic = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
@@ -211,17 +200,13 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
         )
         ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
-        print('ac init x', ac_init_x)
-        print('ac init hstate', ac_init_hstate)
         actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
         
         cr_init_x = (
-            jnp.zeros((1, config["NUM_ENVS"], env.world_state_size(),)),  #  + env.observation_space(env.agents[0]).shape[0]
+            jnp.zeros((1, config["NUM_ENVS"], env.world_state_size(),)), 
             jnp.zeros((1, config["NUM_ENVS"])),
         )
         cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
-        print('cr_init_hstate', cr_init_hstate)
-        print('cr_init_x', cr_init_x)
         critic_network_params = critic_network.init(_rng_critic, cr_init_hstate, cr_init_x)
         
         if config["ANNEAL_LR"]:
@@ -269,30 +254,26 @@ def make_train(config):
                 train_states, env_state, last_obs, last_done, hstates, rng = runner_state
 
                 # SELECT ACTION
-                # NOTE avail actions not used, could be removed.
                 rng, _rng = jax.random.split(rng)
-                legal_moves = env_state.env_state.legal_moves
-                avail_actions = legal_moves.reshape(-1, legal_moves.shape[-1])
+                avail_actions = jax.vmap(env.get_legal_moves)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents, config["NUM_ACTORS"])
+                )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],
                     last_done[np.newaxis, :],
                     avail_actions,
                 )
-                print('env step ac in', ac_in)
                 ac_hstate, pi = actor_network.apply(train_states[0].params, hstates[0], ac_in)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(
                     action, env.agents, config["NUM_ENVS"], env.num_agents
                 )
-                #env_act = {k: v.squeeze() for k, v in env_act.items()}
 
                 # VALUE
-                #world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-                #world_state = jnp.repeat(world_state, env.num_agents, axis=1) 
                 world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
-                #world_state = jnp.concatenate((obs_batch, world_state), axis=1)
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
@@ -330,10 +311,7 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
       
-            #last_world_state = jnp.expand_dims(last_obs["world_state"], axis=1)
-            #last_world_state = jnp.repeat(last_world_state, env.num_agents, axis=1)
             last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
-            #last_world_state = jnp.concatenate((last_obs_batch, last_world_state), axis=1)
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
@@ -399,7 +377,6 @@ def make_train(config):
                         entropy = pi.entropy().mean(where=(1 - traj_batch.done))
                         actor_loss = (
                             loss_actor
-                            #+ config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
                         return actor_loss, (loss_actor, entropy)
@@ -482,7 +459,6 @@ def make_train(config):
                     shuffled_batch,
                 )
 
-                #train_states = (actor_train_state, critic_train_state)
                 train_states, loss_info = jax.lax.scan(
                     _update_minbatch, train_states, minibatches
                 )
@@ -518,7 +494,6 @@ def make_train(config):
 
             def callback(metric):
                 
-                #print('metric shape', metric["returned_episode_returns"].shape)
                 wandb.log(
                     {
                         "returns": metric["returned_episode_returns"][-1, :].mean(),
@@ -529,10 +504,6 @@ def make_train(config):
                 )
                 
             
-            #metric = {k: v.mean() for k, v in metric.items()}
-            #metric = {**metric, **loss_info}
-            #jax.debug.print('m sh {s}', s=metric["returned_episode_returns"].shape)
-            #jax.debug.print('m sh {s}', s=metric["returned_episode"].shape)
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric)
             update_steps = update_steps + 1
@@ -559,7 +530,6 @@ def make_train(config):
 def main(config):
 
     config = OmegaConf.to_container(config)
-    jax.default_device(jax.devices()[config["DEVICE"]])
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
@@ -568,9 +538,8 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
-    #rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    with jax.disable_jit(config["DISABLE_JIT"]):
-        train_jit = jax.jit(make_train(config)) #  device=jax.devices()[config["DEVICE"]]
+    with jax.disable_jit(False):
+        train_jit = jax.jit(make_train(config)) 
         out = train_jit(rng)
 
     

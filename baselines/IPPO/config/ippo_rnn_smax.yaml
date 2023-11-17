@@ -19,8 +19,9 @@
   "see_enemy_actions": True
   "walls_cause_death": True
   "attack_mode": "closest"
-
 "ANNEAL_LR": True
-"ENTITY": "benellis3"
-"PROJECT": "smax-rnn"
+
+# WandB Params
+"ENTITY": ""
+"PROJECT": "jaxmarl-smax"
 "WANDB_MODE" : "disabled"
