@@ -3,10 +3,13 @@
 <p align="center">
        <a href="https://pypi.python.org/pypi/jaxmarl">
         <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg" /></a>
-       <a href= "https://badge.fury.io/py/jaxmarl">
-        <img src="https://badge.fury.io/py/jaxmarl.svg" /></a>
        <a href= "https://github.com/FLAIROx/JaxMARL/blob/main/LICENSE">
         <img src="https://img.shields.io/badge/license-Apache2.0-blue.svg" /></a>
+       <a href= "https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb">
+        <img src="https://colab.research.google.com/assets/colab-badge.svg" /></a>
+       <a href= "https://arxiv.org/abs/2311.10090">
+        <img src="https://img.shields.io/badge/arXiv-2311.10090-b31b1b.svg" /></a>
+       
 </p>
 
 [**Installation**](#install) | [**Quick Start**](#start) | [**Environments**](#environments) | [**Algorithms**](#algorithms) | [**Citation**](#cite)
@@ -25,7 +28,7 @@
 
 JaxMARL combines ease-of-use with GPU enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplifed version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
-For more details, take a look at our blog post or this notebook walks through the basic usage. LINKS TODO
+For more details, take a look at our blog post or our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb) walks through the basic usage.
 
 <h2 name="environments" id="environments">Environments 🌍 </h2>
 
@@ -75,7 +78,7 @@ pip install -r requirements/requirements-dev.txt
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
 
-We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. You can try out training an agent on XX in this Colab TODO. Further introduction scripts can be found [here](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/tutorials).
+We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/PettingZoo) and [Gymnax](https://github.com/RobertTLange/gymnax) interfaces. You can try out training an agent in our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb). Further introduction scripts can be found [here](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/tutorials).
 
 ### Basic JaxMARL API  Usage 🖥️
 
@@ -109,7 +112,14 @@ Please contribute! Please take a look at our [contributing guide](https://github
 If you use JaxMARL in your work, please cite us as follows:
 
 ```
-TODO
+@misc{rutherford2023jaxmarl,
+      title={JaxMARL: Multi-Agent RL Environments in JAX}, 
+      author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gardar Ingvarsson and Timon Willi and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rocktaschel and Chris Lu and Jakob Nicolaus Foerster},
+      year={2023},
+      eprint={2311.10090},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
 ```
 
 ## See Also 🙌
