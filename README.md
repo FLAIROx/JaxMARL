@@ -112,14 +112,12 @@ Please contribute! Please take a look at our [contributing guide](https://github
 If you use JaxMARL in your work, please cite us as follows:
 
 ```
-@misc{rutherford2023jaxmarl,
-      title={JaxMARL: Multi-Agent RL Environments in JAX}, 
-      author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gardar Ingvarsson and Timon Willi and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rocktaschel and Chris Lu and Jakob Nicolaus Foerster},
-      year={2023},
-      eprint={2311.10090},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
-}
+@article{flair2023jaxmarl,
+      title={JaxMARL: Multi-Agent RL Environments in JAX},
+      author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gardar Ingvarsson and Timon Willi and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rocktaschel and Chris Lu and Jakob Nicolaus Foerster}
+      journal={arXiv preprint arXiv:2311.10090},
+      year={2023}
+    }
 ```
 
 ## See Also 🙌
