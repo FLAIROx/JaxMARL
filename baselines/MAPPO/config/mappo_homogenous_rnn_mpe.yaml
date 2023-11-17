@@ -1,5 +1,5 @@
 "LR": 4e-4
-"NUM_ENVS": 16 # must be a multiple of 8
+"NUM_ENVS": 16 
 "NUM_STEPS": 128 # must be 128
 "TOTAL_TIMESTEPS": 2e6
 "UPDATE_EPOCHS": 4
@@ -20,5 +20,5 @@
 
 # WandB Params
 "WANDB_MODE": "disabled"
-"ENTITY": "amacrutherford"
-"PROJECT": "mpe-rnn"
+"ENTITY": ""
+"PROJECT": "jaxmarl-mpe"
