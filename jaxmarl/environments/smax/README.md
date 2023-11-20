@@ -2,7 +2,7 @@
 ## Description
 SMAX is a purely JAX SMAC-like environment. It, like SMAC, focuses on decentralised unit micromanagement across a range of scenarios. Each scenario features fixed teams. 
 
-## Scenarios (Aspirational ATM)
+## Scenarios
 
 | Name         | Ally Units             | Enemy Units            |
 |--------------|------------------------|------------------------|
@@ -14,6 +14,9 @@ SMAX is a purely JAX SMAC-like environment. It, like SMAC, focuses on decentrali
 | 3s5z_vs_3s6z | 3 stalkers & 5 zealots | 3 stalkers & 6 zealots |
 | 3s_vs_5z     | 3 stalkers             | 5 zealots              |
 | 6h_vs_8z     | 6 hydralisks           | 8 zealots              |
+| smacv2_5_units | 5 randomly chosen    | 5 randomly chosen      |
+| smacv2_10_units | 10 randomly chosen  | 10 randomly chosen     |
+| smacv2_20_units | 20 randomly chosen  | 20 randomly chosen     |
 
 ## Visualisation
 You can see the example `smax_introduction.py` in the tutorials folder for an introduction to SMAX, including example visualisation. SMAX environments tick at 8 times faster than each step of the agent. This means that when visualising, we have to expand the state sequence to encompass all ticks. This is why the `state_seq` for SMAX consists of a sequence of `(key, state, actions)` -- we must have not only the state and actions, but also the exact key passed to the step function to interpolate between the different states correctly. This process means visualisation can be time consuming if done for a large number of steps.
