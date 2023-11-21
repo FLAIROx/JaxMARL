@@ -3,7 +3,7 @@
 *Pure Jax implementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network), and **QMix**. These implementations follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase.*
 
 ```
-⚠️ The implementations were tested with Python 3.8 and Jax 0.4.8 -> 0.4.11. 
+⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
 With Jax 0.4.13, you could experience a degradation of performance.
 ```
 
