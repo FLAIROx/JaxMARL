@@ -5,6 +5,7 @@
 ```
 ⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
 With Jax 0.4.13, you could experience a degradation of performance.
+For smoother developing, install the requirements file here. 
 ```
 
 ```
@@ -90,7 +91,7 @@ config = {
     "TD_LAMBDA": 0.6,
     "GAMMA": 0.9,
     "VERBOSE": False,
-    "WANDB_ONLINE_REPORT": True,
+    "WANDB_ONLINE_REPORT": False,
     "NUM_TEST_EPISODES": 32,
     "TEST_INTERVAL": 50000,
 }
