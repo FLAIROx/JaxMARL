@@ -1,5 +1,5 @@
 "LR": 0.002
-"NUM_ENVS": 64 # must be a multiple of 8
+"NUM_ENVS": 64
 "NUM_STEPS": 128 # must be 128
 "TOTAL_TIMESTEPS": 1e7
 "UPDATE_EPOCHS": 4

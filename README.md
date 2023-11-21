@@ -3,6 +3,8 @@
 <p align="center">
        <a href="https://pypi.python.org/pypi/jaxmarl">
         <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg" /></a>
+       <a href="https://badge.fury.io/py/jaxmarl">
+        <img src="https://badge.fury.io/py/jaxmarl.svg" /></a>
        <a href= "https://github.com/FLAIROx/JaxMARL/blob/main/LICENSE">
         <img src="https://img.shields.io/badge/license-Apache2.0-blue.svg" /></a>
        <a href= "https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb">
@@ -28,7 +30,7 @@
 
 JaxMARL combines ease-of-use with GPU-enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplified version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
-For more details, take a look at our blog post or our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb) walks through the basic usage.
+For more details, take a look at our [blog post](https://blog.foersterlab.com/jaxmarl/) or our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb), which walks through the basic usage.
 
 <h2 name="environments" id="environments">Environments 🌍 </h2>
 
@@ -46,7 +48,7 @@ For more details, take a look at our blog post or our [Colab notebook](https://c
  
 <h2 name="algorithms" id="algorithms">Baseline Algorithms 🦉 </h2>
 
-We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory.
+We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory. We use Hydra to manage our config files, with specifics explained in each algorithm's README. Most files include `wandb` logging code, this is disabled by default but can be enabled within the file's config.
 
 | Algorithm | Reference | README | 
 | --- | --- | --- | 
@@ -129,6 +131,6 @@ JAX-native algorithms:
 
 JAX-native environments:
 - [Gymnax](https://github.com/RobertTLange/gymnax): Implementations of classic RL tasks including classic control, bsuite and MinAtar.
-- [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatoral problems.
+- [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatorial problems.
 - [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
 - [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks.

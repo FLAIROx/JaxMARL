@@ -11,9 +11,6 @@ from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
 import distrax
-from gymnax.wrappers.purerl import LogWrapper
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import LogWrapper
 from jaxmarl.wrappers.baselines import LogWrapper
 import jaxmarl
 import wandb
@@ -23,7 +20,7 @@ import hydra
 from omegaconf import OmegaConf
 
 
-class ActorCriticMLP(nn.Module):
+class ActorCritic(nn.Module):
     action_dim: Sequence[int]
     config: Dict
 
@@ -44,7 +41,7 @@ class ActorCriticMLP(nn.Module):
         )(actor_mean)
         unavail_actions = 1 - avail_actions
         action_logits = actor_mean - (unavail_actions * 1e10)
-        pi = distrax.Categorical(logits=actor_mean)
+        pi = distrax.Categorical(logits=action_logits)
 
         critic = nn.Dense(512, kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
@@ -94,7 +91,7 @@ def make_train(config):
     def train(rng):
 
         # INIT NETWORK
-        network = ActorCriticMLP(env.action_space(env.agents[0]).n, config=config)
+        network = ActorCritic(env.action_space(env.agents[0]).n, config=config)
         rng, _rng = jax.random.split(rng)
         init_x = (
             jnp.zeros(
@@ -103,7 +100,6 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n))
         )
-        init_mask = jnp.zeros(env.action_space(env.agents[0]).n)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -137,7 +133,7 @@ def make_train(config):
                     batchify(avail_actions, env.agents, config["NUM_ACTORS"])
                 )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
+                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions[np.newaxis, :])
                 pi, value = network.apply(train_state.params, ac_in)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
@@ -160,7 +156,6 @@ def make_train(config):
                     obs_batch,
                     info,
                     avail_actions
-
                 )
                 runner_state = (train_state, env_state, obsv, done_batch, rng)
                 return runner_state, transition
@@ -212,7 +207,6 @@ def make_train(config):
 
                     def _loss_fn(params, traj_batch, gae, targets):
                         # RERUN NETWORK
-                        act_mask = jnp.ones((traj_batch.obs.shape[0], env.action_space(env.agents[0]).n))
                         pi, value = network.apply(params,
                                                   (traj_batch.obs, traj_batch.done, traj_batch.avail_actions))
                         log_prob = pi.log_prob(traj_batch.action)

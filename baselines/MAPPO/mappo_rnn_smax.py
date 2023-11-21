@@ -21,7 +21,7 @@ from functools import partial
 from jaxmarl.wrappers.baselines import SMAXLogWrapper, JaxMARLWrapper
 from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
 
-class JaxMARLWorldStateWrapper(JaxMARLWrapper):
+class SMAXWorldStateWrapper(JaxMARLWrapper):
     """
     Provides a `"world_state"` observation for the centralised critic.
     world state observation of dimension: (num_agents, world_state_size)    
@@ -200,7 +200,7 @@ def make_train(config):
         else config["CLIP_EPS"]
     )
 
-    env = JaxMARLWorldStateWrapper(env, config["OBS_WITH_AGENT_ID"])
+    env = SMAXWorldStateWrapper(env, config["OBS_WITH_AGENT_ID"])
     env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
