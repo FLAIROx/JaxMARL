@@ -41,6 +41,7 @@ setup(
     install_requires=_parse_requirements("requirements/requirements.txt"),
     extras_require={
         "dev": _parse_requirements("requirements/requirements-dev.txt"),
+        "qlearning": _parse_requirements("requirements/requirements-qlearning.txt"),
     },
     classifiers=[
         "Intended Audience :: Science/Research",

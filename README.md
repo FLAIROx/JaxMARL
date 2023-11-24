@@ -68,12 +68,20 @@ pip install jaxmarl
 
 If you would like to also run the algorithms, install the source code as follows:
 
-```
-git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
-pip install -e .
-```
+1. Clone the repository:
+    ```
+    git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
+    ```
+2. The requirements for IPPO & MAPPO can be installed with:
+    ``` 
+    pip install -e .
+    ```
+3. If you would also like to run the Q-learning algorithms, Python 3.9 is required along with additional dependencies:
+    ``` 
+    pip install -e '.[qlearning]'
+    ```
 
-We have tested JaxMARL on Python 3.8 and 3.9. To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
+To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
 pip install -r requirements/requirements-dev.txt 
 ```

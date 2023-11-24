@@ -4,8 +4,12 @@
 
 ```
 ⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
-With Jax 0.4.13, you could experience a degradation of performance.
-For smoother developing, install the requirements file here. 
+With Jax 0.4.13, you could experience a degradation of performance. 
+```
+
+We use [`flashbax`](https://github.com/instadeepai/flashbax) to provide our replay buffers, this requires Python 3.9 and the dependency can be installed with:
+``` 
+pip install -r requirements/requirements-qlearning.txt 
 ```
 
 ```
