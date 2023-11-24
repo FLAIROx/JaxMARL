@@ -3,8 +3,9 @@
 *Pure Jax implementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network), and **QMix**. These implementations follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase.*
 
 ```
-⚠️ The implementations were tested with Python 3.8 and Jax 0.4.8 -> 0.4.11. 
+⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
 With Jax 0.4.13, you could experience a degradation of performance.
+For smoother developing, install the requirements file here. 
 ```
 
 ```
@@ -28,7 +29,7 @@ General features:
 - Trained with a team reward (reward['__all__']).
 - At the moment, last_actions are not included in the agents' observations.
 
-All the algorithms use the `CTRolloutManager` environment wrapper (found in utils.py), which is used to:
+All the algorithms take advantage of the `CTRolloutManager` environment wrapper (found in `jaxmarl.wrappers.baselines`), which is used to:
 
 - Batchify the step and reset functions to run parallel environments.
 - Add a global observation (`obs["__all__"]`) and a global reward (`rewards["__all__"]`) to the returns of `env.step` for centralized training.
@@ -90,12 +91,12 @@ config = {
     "TD_LAMBDA": 0.6,
     "GAMMA": 0.9,
     "VERBOSE": False,
-    "WANDB_ONLINE_REPORT": True,
+    "WANDB_ONLINE_REPORT": False,
     "NUM_TEST_EPISODES": 32,
     "TEST_INTERVAL": 50000,
 }
 
 rng = jax.random.PRNGKey(42)
 train_vjit = jax.jit(make_train(config, env))
-outs_iql = train_vjit(rng)
+outs = train_vjit(rng)
 ```
