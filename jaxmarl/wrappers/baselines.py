@@ -213,7 +213,7 @@ class CTRolloutManager(JaxMARLWrapper):
     - global_reward is the sum of all agents' rewards.
     """
 
-    def __init__(self, env: MultiAgentEnv, batch_size:int, training_agents:List=None):
+    def __init__(self, env: MultiAgentEnv, batch_size:int, training_agents:List=None, preprocess_obs:bool=True):
         
         super().__init__(env)
         
@@ -221,7 +221,8 @@ class CTRolloutManager(JaxMARLWrapper):
 
         # the agents to train could differ from the total trainable agents in the env (f.i. if using pretrained agents)
         # it's important to know it in order to compute properly the default global rewards and state
-        self.training_agents = self.agents if training_agents is None else training_agents    
+        self.training_agents = self.agents if training_agents is None else training_agents  
+        self.preprocess_obs = preprocess_obs  
 
         # TOREMOVE: this is because overcooked doesn't follow other envs conventions
         if len(env.observation_spaces) == 0:
@@ -261,15 +262,21 @@ class CTRolloutManager(JaxMARLWrapper):
     @partial(jax.jit, static_argnums=0)
     def wrapped_reset(self, key):
         obs_, state = self._env.reset(key)
-        obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
+        if self.preprocess_obs:
+            obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
+        else:
+            obs = obs_
         obs["__all__"] = self.global_state(obs_, state)
         return obs, state
 
     @partial(jax.jit, static_argnums=0)
     def wrapped_step(self, key, state, actions):
         obs_, state, reward, done, infos = self._env.step(key, state, actions)
-        obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
-        obs = jax.tree_util.tree_map(lambda d, o: jnp.where(d, 0., o), {agent:done[agent] for agent in self.agents}, obs) # ensure that the obs are 0s for done agents
+        if self.preprocess_obs:
+            obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
+            obs = jax.tree_util.tree_map(lambda d, o: jnp.where(d, 0., o), {agent:done[agent] for agent in self.agents}, obs) # ensure that the obs are 0s for done agents
+        else:
+            obs = obs_
         obs["__all__"] = self.global_state(obs_, state)
         reward["__all__"] = self.global_reward(reward)
         return obs, state, reward, done, infos
