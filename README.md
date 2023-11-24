@@ -60,13 +60,13 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 <h2 name="install" id="install">Installation 🧗 </h2>
 
-Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. The JaxMARL environments can be installed directly from PyPi:
+**Environments** - Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. The JaxMARL environments can be installed directly from PyPi:
 
 ```
 pip install jaxmarl 
 ```
 
-If you would like to also run the algorithms, install the source code as follows:
+**Algorithms** - If you would like to also run the algorithms, install the source code as follows:
 
 1. Clone the repository:
     ```
@@ -81,7 +81,7 @@ If you would like to also run the algorithms, install the source code as follows
     pip install -e '.[qlearning]'
     ```
 
-To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
+**Test Scripts** - To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
 pip install -r requirements/requirements-dev.txt 
 ```
