@@ -29,7 +29,7 @@ General features:
 - Trained with a team reward (reward['__all__']).
 - At the moment, last_actions are not included in the agents' observations.
 
-All the algorithms use the `CTRolloutManager` environment wrapper (found in utils.py), which is used to:
+All the algorithms take advantage of the `CTRolloutManager` environment wrapper (found in `jaxmarl.wrappers.baselines`), which is used to:
 
 - Batchify the step and reset functions to run parallel environments.
 - Add a global observation (`obs["__all__"]`) and a global reward (`rewards["__all__"]`) to the returns of `env.step` for centralized training.
@@ -98,5 +98,5 @@ config = {
 
 rng = jax.random.PRNGKey(42)
 train_vjit = jax.jit(make_train(config, env))
-outs_iql = train_vjit(rng)
+outs = train_vjit(rng)
 ```
