@@ -1,5 +1,5 @@
 """
-End-to-End JAX Implementation of QMix.
+End-to-End JAX Implementation of SHAQ.
 
 Notice:
 - Agents are controlled by a single RNN architecture.
@@ -13,7 +13,7 @@ Notice:
 - Trained with a team reward (reward['__all__'])
 - At the moment, last_actions are not included in the agents' observations.
 
-The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
+The implementation closely follows the original SHAQ repo implemented by Pymarl framework: https://github.com/hsvgbkhgbv/shapley-q-learning
 """
 import os
 import jax
@@ -76,7 +76,7 @@ class AlphaEstimate(nn.Module):
     hypernet_hidden_dim: int
     init_scale: float
     rng_key: jnp.ndarray
-
+    
     def sample_grandcoalitions(self, batch_size, n_agents):
         """
         E.g., batch_size = 2, sample_size = 1, n_agents = 3:
@@ -86,40 +86,45 @@ class AlphaEstimate(nn.Module):
 
             >>> subcoalition_map
             tensor([[[[1., 1., 1.],
-                      [1., 0., 0.],
-                      [1., 1., 0.]]],
+                        [1., 0., 0.],
+                        [1., 1., 0.]]],
 
                     [[[1., 1., 0.],
-                      [1., 1., 1.],
-                      [1., 0., 0.]]]])
+                        [1., 1., 1.],
+                        [1., 0., 0.]]]])
 
             >>> individual_map
             tensor([[[[0., 0., 1.],
-                      [1., 0., 0.],
-                      [0., 1., 0.]]],
+                        [1., 0., 0.],
+                        [0., 1., 0.]]],
 
                     [[[0., 1., 0.],
-                      [0., 0., 1.],
-                      [1., 0., 0.]]]])
+                        [0., 0., 1.],
+                        [1., 0., 0.]]]])
         """
         seq_set = jnp.tril(jnp.ones((n_agents, n_agents)), 0)
         rng_keys = jax.random.split(self.rng_key, num=batch_size*self.sample_size)
-        grand_coalitions_pos = jnp.array(
-            [jax.random.choice(rng_keys[k], jnp.arange(0, n_agents), axis=-1, replace=False, shape=(n_agents,)) for k in range(batch_size*self.sample_size)]
+        _, grand_coalitions_pos = jax.lax.scan(
+            lambda i, k: (i, jax.random.choice(rng_keys[k], jnp.arange(0, n_agents), axis=0, replace=False, shape=(n_agents,))),
+            0,
+            jnp.arange(0, batch_size*self.sample_size)
         ) # shape = (batch_size*sample_size, n_agents)
-        individual_map                = jnp.zeros((batch_size*self.sample_size*n_agents, n_agents))
-        grand_coalitions_pos_reshaped = grand_coalitions_pos.reshape(-1, 1)
-        individual_map   = individual_map.at[(jnp.arange(individual_map.shape[0]), grand_coalitions_pos_reshaped[:, 0])].set(1)
-        individual_map   = individual_map.reshape(batch_size, self.sample_size, n_agents, n_agents)
-        subcoalition_map = jnp.matmul(individual_map, seq_set)
 
-        # NOTE: Construct the grand coalition (in sequence by agent_idx) from the grand_coalitions_pos (e.g., pos_idx <- grand_coalitions_pos[agent_idx])
-        # grand_coalitions = []
-        # for grand_coalition_pos in grand_coalitions_pos:
-        #     grand_coalition = jnp.zeros_like(grand_coalition_pos)
-        #     for agent, pos in enumerate(grand_coalition_pos):
-        #         grand_coalition[pos] = agent
-        #     grand_coalitions.append(grand_coalition)
+        grand_coalitions_pos_reshaped = grand_coalitions_pos.reshape(-1, 1)
+        individual_map_init = jnp.zeros((batch_size*self.sample_size*n_agents, n_agents))
+        individual_map                = individual_map_init.at[(jnp.arange(batch_size*self.sample_size*n_agents), grand_coalitions_pos_reshaped[:, 0])].set(1)
+        individual_map                = individual_map.reshape(batch_size, self.sample_size, n_agents, n_agents)
+        subcoalition_map              = jnp.matmul(individual_map, seq_set)
+
+        """
+        Construct the grand coalition (in sequence by agent_idx) from the grand_coalitions_pos (e.g., pos_idx <- grand_coalitions_pos[agent_idx])
+        grand_coalitions = []
+        for grand_coalition_pos in grand_coalitions_pos:
+            grand_coalition = jnp.zeros_like(grand_coalition_pos)
+            for agent, pos in enumerate(grand_coalition_pos):
+                grand_coalition[pos] = agent
+            grand_coalitions.append(grand_coalition)
+        """
         offset                     = (jnp.arange(batch_size*self.sample_size)*n_agents).reshape(-1, 1)
         grand_coalitions_pos_alter = grand_coalitions_pos + offset
         grand_coalitions           = jnp.zeros_like(grand_coalitions_pos_alter.flatten())
@@ -154,8 +159,8 @@ class AlphaEstimate(nn.Module):
 
         # get actions vector of its coalition members for each agent, shape = (time_steps*batch_size, sample_size, n_agents, 1)
         subcoalition_map_no_i_sum   = subcoalition_map_no_i.sum(axis=-2)
-        subcoalition_map_no_i_sum   = subcoalition_map_no_i_sum.at[(subcoalition_map_no_i.sum(axis=-2)==0).astype(int)].set(1)
-        agent_qs_coalition_norm_vec = agent_qs_coalition.sum(axis=-2) / subcoalition_map_no_i_sum  
+        subcoalition_map_no_i_sum   = subcoalition_map_no_i_sum + (subcoalition_map_no_i_sum==0)
+        agent_qs_coalition_norm_vec = agent_qs_coalition.sum(axis=-2) / subcoalition_map_no_i_sum
 
         # get action vector of each agent, shape = (time_steps*batch_size, sample_size, n_agents, 1)
         agent_qs_individual         = jnp.tile(jnp.expand_dims(agent_qs, 1), (1, self.sample_size, 1, 1))
@@ -285,22 +290,33 @@ def make_train(config, env):
         mixer_params = mixer.init(_rng, init_x, init_state, init_x, False, config["MANUAL_ALPHA_ESTIMATES"])
 
         # init optimizer
-        network_params = frozen_dict.freeze({'agent':agent_params, 'mixer':mixer_params})
         def linear_schedule(count):
             frac = 1.0 - (count / config["NUM_UPDATES"])
             return config["LR"] * frac
-        lr = linear_schedule if config.get('LR_LINEAR_DECAY', False) else config['LR']
-        tx = optax.chain(
+        lr       = linear_schedule if config.get('LR_LINEAR_DECAY', False) else config['LR']
+        lr_alpha = linear_schedule if config.get('LR_LINEAR_DECAY', False) else config['LR_ALPHA']
+        tx       = optax.chain(
             optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
             optax.adamw(learning_rate=lr, eps=config['EPS_ADAM'], weight_decay=config['WEIGHT_DECAY_ADAM']),
         )
-        train_state = TrainState.create(
+        tx_alpha = optax.chain(
+            optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
+            optax.adamw(learning_rate=lr_alpha, eps=config['EPS_ADAM'], weight_decay=config['WEIGHT_DECAY_ADAM']),
+        )
+        train_state_agent = TrainState.create(
             apply_fn=None,
-            params=network_params,
+            params=agent_params,
             tx=tx,
         )
+        train_state_mixer = TrainState.create(
+            apply_fn=None,
+            params=mixer_params,
+            tx=tx_alpha,
+        )
+
         # target network params
-        target_network_params = jax.tree_map(lambda x: jnp.copy(x), train_state.params)
+        target_network_params_agent = jax.tree_map(lambda x: jnp.copy(x), train_state_agent.params)
+        target_network_params_mixer = jax.tree_map(lambda x: jnp.copy(x), train_state_mixer.params)
 
         # INIT EXPLORATION STRATEGY
         explorer = EpsilonGreedy(
@@ -340,7 +356,7 @@ def make_train(config, env):
         # TRAINING LOOP
         def _update_step(runner_state, unused):
 
-            train_state, target_network_params, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng = runner_state
+            train_state_agent, train_state_mixer, target_network_params_agent, target_network_params_mixer, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng = runner_state
 
             # EPISODE STEP
             def _env_step(step_state, unused):
@@ -378,7 +394,7 @@ def make_train(config, env):
                 hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["NUM_ENVS"]) # (n_agents, n_envs, hs_size)
 
             step_state = (
-                train_state.params['agent'],
+                train_state_agent.params,
                 env_state,
                 init_obs,
                 init_dones,
@@ -401,15 +417,15 @@ def make_train(config, env):
                 return jnp.squeeze(q_u, axis=-1)
 
             def get_max_filter(q, u):
-                max_u = jnp.argmax(jax.lax.stop_gradient(q), axis=-1, keepdims=True)
+                max_u = jnp.argmax(q, axis=-1, keepdims=True)
                 max_filter = jnp.squeeze(jnp.expand_dims(u, axis=-1)==max_u, axis=-1)
                 return max_filter
 
-            def _loss_fn(params, target_network_params, init_hstate, learn_traj):
+            def _loss_fn(params_agent, params_mixer, target_network_params_agent, target_network_params_mixer, init_hstate, learn_traj):
 
                 obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
-                _, q_vals = homogeneous_pass(params['agent'], init_hstate, obs_, learn_traj.dones)
-                _, target_q_vals = homogeneous_pass(target_network_params['agent'], init_hstate, obs_, learn_traj.dones)
+                _, q_vals = homogeneous_pass(params_agent, init_hstate, obs_, learn_traj.dones)
+                _, target_q_vals = homogeneous_pass(target_network_params_agent, init_hstate, obs_, learn_traj.dones)
 
                 # get the q_vals of the taken actions (with exploration) for each agent
                 chosen_action_qvals = jax.tree_map(
@@ -435,7 +451,7 @@ def make_train(config, env):
 
                 # compute q_tot with the mixer network
                 chosen_action_qvals_mix = mixer.apply(
-                    params['mixer'],
+                    params_mixer,
                     jnp.stack(list(chosen_action_qvals.values())),
                     learn_traj.obs['__all__'][:-1],
                     jnp.stack(list(max_filters.values())),
@@ -444,7 +460,7 @@ def make_train(config, env):
                 )
 
                 target_max_qvals_mix = mixer.apply(
-                    target_network_params['mixer'],
+                    target_network_params_mixer,
                     jnp.stack(list(target_max_qvals.values())),
                     learn_traj.obs['__all__'][1:],
                     jnp.stack(list(max_filters.values())),
@@ -495,9 +511,10 @@ def make_train(config, env):
                 init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["BUFFER_BATCH_SIZE"]) # (n_agents, batch_size, hs_size)
 
             # compute loss and optimize grad
-            grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)
-            loss, grads = grad_fn(train_state.params, target_network_params, init_hs, learn_traj)
-            train_state = train_state.apply_gradients(grads=grads)
+            grad_fn = jax.value_and_grad(_loss_fn, argnums=(0,1), has_aux=False)
+            loss, (grads_agent, grads_mixer) = grad_fn(train_state_agent.params, train_state_mixer.params, target_network_params_agent, target_network_params_mixer, init_hs, learn_traj)
+            train_state_agent = train_state_agent.apply_gradients(grads=grads_agent)
+            train_state_mixer = train_state_mixer.apply_gradients(grads=grads_mixer)
 
 
             # UPDATE THE VARIABLES AND RETURN
@@ -511,10 +528,16 @@ def make_train(config, env):
             time_state['updates']   = time_state['updates'] + 1
 
             # update the target network if necessary
-            target_network_params = jax.lax.cond(
+            target_network_params_agent = jax.lax.cond(
                 time_state['updates'] % config['TARGET_UPDATE_INTERVAL'] == 0,
-                lambda _: jax.tree_map(lambda x: jnp.copy(x), train_state.params),
-                lambda _: target_network_params,
+                lambda _: jax.tree_map(lambda x: jnp.copy(x), train_state_agent.params),
+                lambda _: target_network_params_agent,
+                operand=None
+            )
+            target_network_params_mixer = jax.lax.cond(
+                time_state['updates'] % config['TARGET_UPDATE_INTERVAL'] == 0,
+                lambda _: jax.tree_map(lambda x: jnp.copy(x), train_state_mixer.params),
+                lambda _: target_network_params_mixer,
                 operand=None
             )
 
@@ -522,7 +545,7 @@ def make_train(config, env):
             rng, _rng = jax.random.split(rng)
             test_metrics = jax.lax.cond(
                 time_state['updates'] % (config["TEST_INTERVAL"] // config["NUM_STEPS"] // config["NUM_ENVS"]) == 0,
-                lambda _: get_greedy_metrics(_rng, train_state.params['agent'], time_state),
+                lambda _: get_greedy_metrics(_rng, train_state_agent.params, time_state),
                 lambda _: test_metrics,
                 operand=None
             )
@@ -550,8 +573,10 @@ def make_train(config, env):
                 jax.debug.callback(callback, metrics)
 
             runner_state = (
-                train_state,
-                target_network_params,
+                train_state_agent,
+                train_state_mixer,
+                target_network_params_agent,
+                target_network_params_mixer,
                 env_state,
                 buffer_state,
                 time_state,
@@ -616,13 +641,15 @@ def make_train(config, env):
             'updates':  jnp.array(0)
         }
         rng, _rng = jax.random.split(rng)
-        test_metrics = get_greedy_metrics(_rng, train_state.params['agent'],time_state) # initial greedy metrics
+        test_metrics = get_greedy_metrics(_rng, train_state_agent.params, time_state) # initial greedy metrics
 
         # train
         rng, _rng = jax.random.split(rng)
         runner_state = (
-            train_state,
-            target_network_params,
+            train_state_agent,
+            train_state_mixer,
+            target_network_params_agent,
+            target_network_params_mixer,
             env_state,
             buffer_state,
             time_state,
