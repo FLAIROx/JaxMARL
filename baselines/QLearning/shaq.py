@@ -104,11 +104,9 @@ class AlphaEstimate(nn.Module):
         """
         seq_set = jnp.tril(jnp.ones((n_agents, n_agents)), 0)
         rng_keys = jax.random.split(self.rng_key, num=batch_size*self.sample_size)
-        _, grand_coalitions_pos = jax.lax.scan(
-            lambda i, k: (i, jax.random.choice(rng_keys[k], jnp.arange(0, n_agents), axis=0, replace=False, shape=(n_agents,))),
-            0,
-            jnp.arange(0, batch_size*self.sample_size)
-        ) # shape = (batch_size*sample_size, n_agents)
+        agent_seq = jnp.arange(0, n_agents)
+        vectorized_grand_coalitions_pos_gen = jax.vmap(lambda k: jax.random.choice(rng_keys[k], agent_seq, axis=0, replace=False, shape=(n_agents,)))
+        grand_coalitions_pos = vectorized_grand_coalitions_pos_gen(jnp.arange(0, batch_size*self.sample_size)) # shape = (batch_size*sample_size, n_agents)
 
         grand_coalitions_pos_reshaped = grand_coalitions_pos.reshape(-1, 1)
         individual_map_init = jnp.zeros((batch_size*self.sample_size*n_agents, n_agents))
