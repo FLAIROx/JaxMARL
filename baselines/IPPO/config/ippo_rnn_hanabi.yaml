@@ -16,6 +16,7 @@
 "ANNEAL_LR": True
 "NUM_FC_LAYERS": 2
 "LAYER_WIDTH": 512
+"SEED": 30
 
 # WandB Params
 "WANDB_MODE": "disabled"
