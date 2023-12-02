@@ -126,6 +126,7 @@ class Transition(NamedTuple):
     actions: dict
     rewards: dict
     dones: dict
+    infos: dict
 
 
 def make_train(config, env):
@@ -150,7 +151,7 @@ def make_train(config, env):
             key_a = jax.random.split(key_a, env.num_agents)
             actions = {agent: wrapped_env.batch_sample(key_a[i], agent) for i, agent in enumerate(env.agents)}
             obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
-            transition = Transition(obs, actions, rewards, dones)
+            transition = Transition(obs, actions, rewards, dones, infos)
             return env_state, transition
         _, sample_traj = jax.lax.scan(
             _env_sample_step, env_state, None, config["NUM_STEPS"]
@@ -262,7 +263,7 @@ def make_train(config, env):
 
                 # STEP ENV
                 obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
-                transition = Transition(last_obs, actions, rewards, dones)
+                transition = Transition(last_obs, actions, rewards, dones, infos)
 
                 step_state = (params, env_state, obs, dones, hstate, rng, t+1)
                 return step_state, transition
@@ -404,22 +405,27 @@ def make_train(config, env):
                 'timesteps': time_state['timesteps']*config['NUM_ENVS'],
                 'updates' : time_state['updates'],
                 'loss': loss,
-                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards) # sum of timesteps, mean of envs
+                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards),
             }
             metrics['test_metrics'] = test_metrics # add the test metrics dictionary
 
             if config.get('WANDB_ONLINE_REPORT', False):
-                def callback(metrics):
+                def callback(metrics, infos):
+                    info_metrics = {
+                        k:v[...,0][infos["returned_episode"][..., 0]].mean()
+                        for k,v in infos.items() if k!="returned_episode"
+                    }
                     wandb.log(
                         {
                             "returns": metrics['rewards']['__all__'].mean(),
                             "timestep": metrics['timesteps'],
                             "updates": metrics['updates'],
                             "loss": metrics['loss'],
+                            **info_metrics,
                             **{k:v.mean() for k, v in metrics['test_metrics'].items()}
                         }
                     )
-                jax.debug.callback(callback, metrics)
+                jax.debug.callback(callback, metrics, traj_batch.infos)
 
             runner_state = (
                 train_state,
@@ -477,7 +483,7 @@ def make_train(config, env):
             first_infos   = jax.tree_map(lambda i: jax.vmap(first_episode_returns, in_axes=1)(i[..., 0], all_dones), infos)
             metrics = {
                 'test_returns': first_returns['__all__'],# episode returns
-                **first_infos
+                **{'test_'+k:v for k,v in first_infos.items()}
             }
             if config.get('VERBOSE', False):
                 def callback(timestep, val):
