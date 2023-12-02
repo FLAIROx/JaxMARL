@@ -12,6 +12,10 @@ Notice:
 - The environment is reset at the end of each episode.
 - Trained with a team reward (reward['__all__'])
 - At the moment, last_actions are not included in the agents' observations.
+- The \hat{\alpha} in the paper is alpha_estimates in the code.
+- You can manually choose the alpha of fixed values by manually setting MANUAL_ALPHA_ESTIMATES in configs (to reproduce the experiments in Appendix C.4 of the paper).
+- About the setting of LR_ALPHA, you can refer to README of https://github.com/hsvgbkhgbv/shapley-q-learning or the results shown in Appendix C.4 of the paper.
+- Right now, we have tested this SHAQ version implemented in JAX on MPE and SMAX.
 
 The implementation closely follows the original SHAQ repo implemented by Pymarl framework: https://github.com/hsvgbkhgbv/shapley-q-learning
 """
