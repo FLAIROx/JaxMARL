@@ -1,3 +1,4 @@
 pytest
+pygame
 pettingzoo>=1.23.1
 tqdm>=4.65.0
