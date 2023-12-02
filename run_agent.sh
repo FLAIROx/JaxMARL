@@ -17,8 +17,8 @@ for gpu in $gpus; do
         -v $(pwd):/home/duser/SMAXbaselines \
         --name SMAXbaselines_${user}_${gpu} \
         --user $(id -u) \
-        -d \
         --rm \
+	-d \
         -t smaxbaselines:benlis_minismac \
         /bin/bash -c "$script_and_args"
 done
