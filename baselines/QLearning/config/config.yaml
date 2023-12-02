@@ -1,3 +1,7 @@
+defaults:
+  - env: ???
+  - alg: ???
+  - _self_
 # experiment params
 "NUM_SEEDS": 2
 "SEED": 30
