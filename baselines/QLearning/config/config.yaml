@@ -1,10 +1,10 @@
 # experiment params
-"NUM_SEEDS": 10
+"NUM_SEEDS": 2
 "SEED": 30
 
 # wandb params
-"ENTITY": ""
-"PROJECT": "jaxMARL"
+"ENTITY": "mttga"
+"PROJECT": "smax"
 "WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)
