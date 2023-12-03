@@ -8,7 +8,7 @@ include = ['jaxmarl*']
 [tool.setuptools.dynamic]
 version = {attr = "jaxmarl.__version__"}
 dependencies = {file = ["requirements/requirements.txt"]}
-optional-dependencies = {dev = { file = ["requirements/requirements-dev.txt"] }, qlearning = { file = ["requirements-qlearning.txt"] }}
+optional-dependencies = {dev = { file = ["requirements/requirements-dev.txt"] }, qlearning = { file = ["requirements/requirements-qlearning.txt"] }}
 
 [project]
 name = "jaxmarl"
