@@ -537,7 +537,7 @@ def main(config):
         env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
         env = LogWrapper(env)
 
-    config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
+    #config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
     
     wandb.init(
         entity=config["ENTITY"],

@@ -248,6 +248,8 @@ class CTRolloutManager(JaxMARLWrapper):
         if 'smax' in env.name.lower():
             self.global_state = lambda obs, state: obs['world_state']
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
+        elif 'hanabi' in env.name.lower():
+            self.global_state = self.hanabi_world_state
     
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key):
@@ -271,6 +273,8 @@ class CTRolloutManager(JaxMARLWrapper):
 
     @partial(jax.jit, static_argnums=0)
     def wrapped_step(self, key, state, actions):
+        if 'hanabi' in self._env.name.lower():
+            actions = jax.tree_util.tree_map(lambda x:jnp.expand_dims(x, 0), actions)
         obs_, state, reward, done, infos = self._env.step(key, state, actions)
         if self.preprocess_obs:
             obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
@@ -302,3 +306,12 @@ class CTRolloutManager(JaxMARLWrapper):
         # concatenate the extra features
         arr = jnp.concatenate((arr, extra_features), axis=-1)
         return arr
+    
+    @partial(jax.jit, static_argnums=0)
+    def hanabi_world_state(self, obs, state):
+        """ 
+        For each agent: [agent obs, own hand]
+        """
+        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
+        hands = state.env_state.player_hands.reshape((self._env.num_agents, -1))
+        return jnp.concatenate((all_obs, hands), axis=1).ravel()

@@ -50,8 +50,11 @@ If you have cloned JaxMARL and you are in the repository root, you can run the a
 python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 # VDN with MPE spread
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
+python baselines/QLearning/qmix.py +alg=qmix_mpe +env=mpe_spread
 # QMix with SMAX
 python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
+# QMix with hanabi
+python baselines/QLearning/qmix.py +alg=qmix_hanabi +env=hanabi
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
 ```

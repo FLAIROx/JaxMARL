@@ -124,7 +124,7 @@ class MixingNetwork(nn.Module):
         w_2 = HyperNetwork(hidden_dim=self.hypernet_hidden_dim, output_dim=self.embedding_dim, init_scale=self.init_scale)(states)
         b_2 = HyperNetwork(hidden_dim=self.embedding_dim, output_dim=1, init_scale=self.init_scale)(states)
         
-        # monotononicity and reshaping
+        # monotonicity and reshaping
         w_1 = jnp.abs(w_1.reshape(time_steps, batch_size, n_agents, self.embedding_dim))
         b_1 = b_1.reshape(time_steps, batch_size, 1, self.embedding_dim)
         w_2 = jnp.abs(w_2.reshape(time_steps, batch_size, self.embedding_dim, 1))
@@ -604,7 +604,7 @@ def main(config):
         env = LogWrapper(env)
 
 
-    config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
+    #config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
     
     wandb.init(
         entity=config["ENTITY"],
