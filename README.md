@@ -152,3 +152,4 @@ JAX-native environments:
 - [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatorial problems.
 - [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
 - [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks.
+- [XLand-MiniGrid](https://github.com/corl-team/xland-minigrid): Meta-RL gridworld environments inspired by XLand and MiniGrid.
