@@ -5,7 +5,7 @@
 # wandb params
 "ENTITY": ""
 "PROJECT": "jaxMARL"
-"WANDB_MODE": "online"
+"WANDB_MODE": "disabled"
 
 # where to save the params (if None, will not save)
 "SAVE_PATH": "baselines/QLearning/checkpoints"
