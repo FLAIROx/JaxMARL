@@ -125,7 +125,7 @@ obs, state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
 ## Contributing 🔨
-Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report.
+Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. Our roadmap also lives there.
 
 <h2 name="cite" id="cite">Citing JaxMARL 📜 </h2>
 If you use JaxMARL in your work, please cite us as follows:
