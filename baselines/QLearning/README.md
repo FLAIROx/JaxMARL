@@ -1,6 +1,13 @@
 # QLearning Baselines
 
-*Pure Jax implementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network), and **QMix**. These implementations follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase.*
+
+Pure JAX implementations of:
+* IQL (Independent Q-Learners)
+* VDN (Value Decomposition Network)
+* QMIX
+* SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)
+
+The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning)
 
 ```
 ⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
