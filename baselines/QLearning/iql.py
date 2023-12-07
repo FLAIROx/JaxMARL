@@ -39,6 +39,7 @@ from flax.traverse_util import flatten_dict
 from jaxmarl import make
 from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, CTRolloutManager
 from jaxmarl.environments.smax import map_name_to_scenario
+from jaxmarl.environments.overcooked import overcooked_layouts
 
 
 class ScannedRNN(nn.Module):
@@ -158,14 +159,15 @@ def make_train(config, env):
             _env_sample_step, env_state, None, config["NUM_STEPS"]
         )
         sample_traj_unbatched = jax.tree_map(lambda x: x[:, 0], sample_traj) # remove the NUM_ENV dim
-        buffer = fbx.make_flat_buffer(
-            max_length=config['BUFFER_SIZE'],
-            min_length=config['BUFFER_BATCH_SIZE'],
+        buffer = fbx.make_trajectory_buffer(
+            max_length_time_axis=config['BUFFER_SIZE']//config['NUM_ENVS'],
+            min_length_time_axis=config['BUFFER_BATCH_SIZE'],
             sample_batch_size=config['BUFFER_BATCH_SIZE'],
-            add_sequences=True,
-            add_batch_size=None,
+            add_batch_size=config['NUM_ENVS'],
+            sample_sequence_length=1,
+            period=1,
         )
-        buffer_state = buffer.init(sample_traj_unbatched)
+        buffer_state = buffer.init(sample_traj_unbatched) 
 
         # INIT NETWORK
         agent = AgentRNN(action_dim=wrapped_env.max_action_space, hidden_dim=config["AGENT_HIDDEN_DIM"], init_scale=config['AGENT_INIT_SCALE'])
@@ -293,7 +295,10 @@ def make_train(config, env):
             )
 
             # BUFFER UPDATE: save the collected trajectory in the buffer
-            buffer_traj_batch = jax.tree_util.tree_map(lambda x:jnp.swapaxes(x, 0, 1), traj_batch) # put the batch size (num envs) in first axis
+            buffer_traj_batch = jax.tree_util.tree_map(
+                lambda x:jnp.swapaxes(x, 0, 1)[:, np.newaxis], # put the batch dim first and add a dummy sequence dim
+                traj_batch
+            ) # (num_envs, 1, time_steps, ...)
             buffer_state = buffer.add(buffer_state, buffer_traj_batch)
 
             # LEARN PHASE
@@ -369,8 +374,11 @@ def make_train(config, env):
 
             # sample a batched trajectory from the buffer and set the time step dim in first axis
             rng, _rng = jax.random.split(rng)
-            learn_traj = buffer.sample(buffer_state, _rng).experience.first # (batch_size, max_time_steps, ...)
-            learn_traj = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), learn_traj) # (max_time_steps, batch_size, ...)
+            learn_traj = buffer.sample(buffer_state, _rng).experience # (batch_size, 1, max_time_steps, ...)
+            learn_traj = jax.tree_map(
+                lambda x: jnp.swapaxes(x[:, 0], 0, 1), # remove the dummy sequence dim (1) and swap batch and temporal dims
+                learn_traj
+            ) # (max_time_steps, batch_size, ...)
             
             # for iql the loss must be computed differently with or without parameters sharing
             if config.get('PARAMETERS_SHARING', True):
@@ -452,10 +460,10 @@ def make_train(config, env):
                     }
                     wandb.log(
                         {
-                            "returns": metrics['rewards']['__all__'].mean(),
                             "timestep": metrics['timesteps'],
                             "updates": metrics['updates'],
                             "loss": metrics['loss'],
+                            **{'return_'+k:v.mean() for k, v in metrics['rewards'].items()},
                             **info_metrics,
                             **{k:v.mean() for k, v in metrics['test_metrics'].items()}
                         }
@@ -517,7 +525,7 @@ def make_train(config, env):
             first_returns = jax.tree_map(lambda r: jax.vmap(first_episode_returns, in_axes=1)(r, all_dones), rewards)
             first_infos   = jax.tree_map(lambda i: jax.vmap(first_episode_returns, in_axes=1)(i[..., 0], all_dones), infos)
             metrics = {
-                'test_returns': first_returns['__all__'],# episode returns
+                **{'test_returns_'+k:v.mean() for k, v in first_returns.items()},
                 **{'test_'+k:v for k,v in first_infos.items()}
             }
             if config.get('VERBOSE', False):
@@ -568,6 +576,11 @@ def main(config):
         env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
         env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
         env = SMAXLogWrapper(env)
+    # overcooked needs a layout 
+    elif 'overcooked' in env_name.lower():
+        config['env']["ENV_KWARGS"]["layout"] = overcooked_layouts[config['env']["ENV_KWARGS"]["layout"]]
+        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        env = LogWrapper(env)
     else:
         env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
         env = LogWrapper(env)

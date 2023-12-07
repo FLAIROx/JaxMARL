@@ -250,6 +250,9 @@ class CTRolloutManager(JaxMARLWrapper):
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
         elif 'hanabi' in env.name.lower():
             self.global_state = self.hanabi_world_state
+        elif 'overcooked' in env.name.lower():
+            self.global_state = lambda obs, state:  jnp.concatenate([obs[agent].ravel() for agent in self.agents], axis=-1)
+            self.global_reward = lambda rewards: rewards[self.training_agents[0]]
     
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key):
@@ -294,7 +297,7 @@ class CTRolloutManager(JaxMARLWrapper):
         return jnp.stack([reward[agent] for agent in self.training_agents]).sum(axis=0) 
     
     def batch_sample(self, key, agent):
-        return self.batch_samplers[agent](jax.random.split(key, self.batch_size))
+        return self.batch_samplers[agent](jax.random.split(key, self.batch_size)).astype(int)
 
     @partial(jax.jit, static_argnums=0)
     def _preprocess_obs(self, arr, extra_features):
