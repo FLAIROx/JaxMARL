@@ -340,18 +340,27 @@ def main(config):
     config = OmegaConf.to_container(config) 
     config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
     rng = jax.random.PRNGKey(30)
+    num_seeds = 20
     with jax.disable_jit(False):
-        train_jit = jax.jit(make_train(config))
-        out = train_jit(rng)
-
+        train_jit = jax.jit(jax.vmap(make_train(config)))
+        rngs = jax.random.split(rng, num_seeds)
+        out = train_jit(rngs)
+    
+    print('** Saving Results **')
     filename = f'{config["ENV_NAME"]}_cramped_room_new'
-
-    plt.plot(out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1))
+    rewards = out["metrics"]["returned_episode_returns"].mean(-1).reshape((num_seeds, -1))
+    reward_mean = rewards.mean(0)  # mean 
+    reward_std = rewards.std(0) / np.sqrt(num_seeds)  # standard error
+    
+    plt.plot(reward_mean)
+    plt.fill_between(range(len(reward_mean)), reward_mean - reward_std, reward_mean + reward_std, alpha=0.2)
+    # compute standard error
     plt.xlabel("Update Step")
     plt.ylabel("Return")
     plt.savefig(f'{filename}.png')
 
-    train_state = out["runner_state"][0]
+    # animate first seed
+    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
     state_seq = get_rollout(train_state, config)
     viz = OvercookedVisualizer()
     # agent_view_size is hardcoded as it determines the padding around the layout.

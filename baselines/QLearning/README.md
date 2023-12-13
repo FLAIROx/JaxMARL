@@ -1,6 +1,13 @@
 # QLearning Baselines
 
-*Pure Jax implementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network), and **QMix**. These implementations follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase.*
+
+Pure JAX implementations of:
+* IQL (Independent Q-Learners)
+* VDN (Value Decomposition Network)
+* QMIX
+* SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)
+
+The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning)
 
 ```
 ⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
@@ -16,6 +23,7 @@ pip install -r requirements/requirements-qlearning.txt
 ❗The implementations were tested in the following environments:
 - MPE
 - SMAX
+- Hanabi
 ```
 
 ## 🔎 Implementation Details
@@ -52,6 +60,8 @@ python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
 # QMix with SMAX
 python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
+# QMix with hanabi
+python baselines/QLearning/qmix.py +alg=qmix_hanabi +env=hanabi
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
 # TransfQMix
