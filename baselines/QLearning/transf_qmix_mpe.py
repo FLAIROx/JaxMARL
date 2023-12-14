@@ -190,7 +190,7 @@ class ScannedTransformerHypernetwork(nn.Module):
 
         # hypernetwork pass
         hs_mixer = jnp.where(
-            done_global,
+            done_global[:, np.newaxis],
             TransformerAgent.initialize_carry(self.hidden_dim, *done_global.shape, 1),
             hs_mixer
         )
@@ -366,14 +366,15 @@ def make_train(config, env):
             _env_sample_step, env_state, None, config["NUM_STEPS"]
         )
         sample_traj_unbatched = jax.tree_map(lambda x: x[:, 0], sample_traj) # remove the NUM_ENV dim
-        buffer = fbx.make_flat_buffer(
-            max_length=config['BUFFER_SIZE'],
-            min_length=config['BUFFER_BATCH_SIZE'],
+        buffer = fbx.make_trajectory_buffer(
+            max_length_time_axis=config['BUFFER_SIZE']//config['NUM_ENVS'],
+            min_length_time_axis=config['BUFFER_BATCH_SIZE'],
             sample_batch_size=config['BUFFER_BATCH_SIZE'],
-            add_sequences=True,
-            add_batch_size=None,
+            add_batch_size=config['NUM_ENVS'],
+            sample_sequence_length=1,
+            period=1,
         )
-        buffer_state = buffer.init(sample_traj_unbatched)
+        buffer_state = buffer.init(sample_traj_unbatched) 
 
         # INIT NETWORK
         # init agent
@@ -547,7 +548,10 @@ def make_train(config, env):
             )
 
             # BUFFER UPDATE: save the collected trajectory in the buffer
-            buffer_traj_batch = jax.tree_util.tree_map(lambda x:jnp.swapaxes(x, 0, 1), traj_batch) # put the batch size (num envs) in first axis
+            buffer_traj_batch = jax.tree_util.tree_map(
+                lambda x:jnp.swapaxes(x, 0, 1)[:, np.newaxis], # put the batch dim first and add a dummy sequence dim
+                traj_batch
+            ) # (num_envs, 1, time_steps, ...)
             buffer_state = buffer.add(buffer_state, buffer_traj_batch)
 
             # LEARN PHASE
@@ -618,8 +622,11 @@ def make_train(config, env):
 
 
             # sample a batched trajectory from the buffer and set the time step dim in first axis
-            learn_traj = buffer.sample(buffer_state, _rng).experience.first # (batch_size, max_time_steps, ...)
-            learn_traj = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), learn_traj) # (max_time_steps, batch_size, ...)
+            learn_traj = buffer.sample(buffer_state, _rng).experience # (batch_size, 1, max_time_steps, ...)
+            learn_traj = jax.tree_map(
+                lambda x: jnp.swapaxes(x[:, 0], 0, 1), # remove the dummy sequence dim (1) and swap batch and temporal dims
+                learn_traj
+            ) # (max_time_steps, batch_size, ...)
             hs_agent = TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"], 1) # (n_agents*batch_size, hs_size)
             hs_mixer = TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], config["BUFFER_BATCH_SIZE"], 1) # (batch_size, hs_size)
             init_hs = (hs_agent, hs_mixer)
