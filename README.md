@@ -108,7 +108,7 @@ import jax
 from jaxmarl import make
 
 key = jax.random.PRNGKey(0)
-key, key_reset, key_act, key_step = jax.random.split(rng, 4)
+key, key_reset, key_act, key_step = jax.random.split(key, 4)
 
 # Initialise environment.
 env = make('MPE_simple_world_comm_v3')
