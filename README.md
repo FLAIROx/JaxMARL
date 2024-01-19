@@ -124,6 +124,16 @@ actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enu
 obs, state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
+### Dockerfile 🐋
+To help get experiments up and running we include a [Dockerfile](https://github.com/FLAIROx/JaxMARL/blob/main/Dockerfile) and its corresponding [Makefile](https://github.com/FLAIROx/JaxMARL/blob/main/Makefile). With Docker and the [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) installed, the container can be built with:
+```
+make build
+```
+The built container can then be run:
+```
+make run
+```
+
 ## Contributing 🔨
 Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. Our roadmap also lives there.
 
