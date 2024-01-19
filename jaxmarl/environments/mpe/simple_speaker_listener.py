@@ -126,7 +126,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
 
         u_act = action[LISTENER]
 
-        u_act = jnp.array([u_act[1] - u_act[2], u_act[3] - u_act[4]]) * self.accel[1]
+        u_act = jnp.array([u_act[2] - u_act[1], u_act[4] - u_act[3]]) * self.accel[1]
         u = u.at[1].set(u_act)
 
         return u, c

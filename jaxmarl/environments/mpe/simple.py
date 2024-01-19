@@ -329,8 +329,7 @@ class SimpleMPE(MultiAgentEnv):
     def _decode_continuous_action(
         self, a_idx: int, action: chex.Array
     ) -> Tuple[chex.Array, chex.Array]:
-        u = jnp.array([action[1] - action[2], action[3] - action[4]])
-
+        u = jnp.array([action[2] - action[1], action[4] - action[3]])
         u = u * self.accel[a_idx] * self.moveable[a_idx]
         c = action[5:]
         return u, c
