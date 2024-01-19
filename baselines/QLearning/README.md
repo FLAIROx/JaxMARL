@@ -23,6 +23,7 @@ pip install -r requirements/requirements-qlearning.txt
 ❗The implementations were tested in the following environments:
 - MPE
 - SMAX
+- Hanabi
 ```
 
 ## 🔎 Implementation Details
@@ -57,9 +58,11 @@ If you have cloned JaxMARL and you are in the repository root, you can run the a
 python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 # VDN with MPE spread
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
-# QMIX with SMAX
+# QMix with SMAX
 python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
-# QMIX against pretrained agents
+# QMix with hanabi
+python baselines/QLearning/qmix.py +alg=qmix_hanabi +env=hanabi
+# QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
 ```
 
