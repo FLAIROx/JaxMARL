@@ -88,10 +88,12 @@ def main():
     import itertools
     import wandb
 
-    train_script = '/app/JaxMARL/baselines/QLearning/vdn_transf.py'
+    train_script = '/app/JaxMARL/baselines/QLearning/transf_qmix_inef.py'
 
     env = make(
-        "MPE_simple_spread_v3"
+        "MPE_simple_spread_v3",
+        num_agents=5,
+        num_landmarks=5,
     )
     env = MPELogWrapper(env)
 
@@ -100,54 +102,49 @@ def main():
         "NUM_STEPS": 25,
         "BUFFER_SIZE": 5000,
         "BUFFER_BATCH_SIZE": 32,
-        "TOTAL_TIMESTEPS": 1550000,
-        "AGENT_EMB_INIT_SCALE": 2.,
-        "AGENT_TRANSF_INIT_SCALE": 2.,
-        "AGENT_Q_INIT_SCALE": 2.,
+        "TOTAL_TIMESTEPS": 1000000,
         "AGENT_HIDDEN_DIM": 32,
+        "AGENT_INIT_SCALE": 1.,
         "AGENT_TRANSF_NUM_LAYERS": 2,
-        "AGENT_TRANSF_NUM_HEADS": 4,
+        "AGENT_TRANSF_NUM_HEADS": 8,
         "AGENT_TRANSF_DIM_FF": 128,
+        "MIXER_INIT_SCALE": 0.00001,
+        "MIXER_TRANSF_NUM_LAYERS": 2,
+        "MIXER_TRANSF_NUM_HEADS": 8,
+        "MIXER_TRANSF_DIM_FF": 128,
         "PARAMETERS_SHARING": True,
         "EPSILON_START": 1.0,
         "EPSILON_FINISH": 0.05,
         "EPSILON_ANNEAL_TIME": 100000,
-        "MIXER_EMBEDDING_DIM": 32,
-        "MIXER_HYPERNET_HIDDEN_DIM": 64,
-        "MIXER_INIT_SCALE": 0.00001,
-        "MAX_GRAD_NORM": 25,
+        "MAX_GRAD_NORM": 1.,
         "TARGET_UPDATE_INTERVAL": 200,
         "LR": 0.005,
-        "LR_COSINE_WARMUP": False,
+        "LR_LINEAR_DECAY": False,
+        "LR_COSINE_WARMUP": True,
         "LR_WARMUP": 10,
-        "LR_LINEAR_DECAY": True,
         "EPS_ADAM": 0.001,
-        "WEIGHT_DECAY_ADAM": 0.00001,
         "TD_LAMBDA_LOSS": True,
         "TD_LAMBDA": 0.6,
         "GAMMA": 0.9,
-        "VERBOSE": True,
+        "VERBOSE": False,
         "WANDB_ONLINE_REPORT": False,
         "NUM_TEST_EPISODES": 32,
         "TEST_INTERVAL": 50000,
         "ENTITY": "mttga",
-        "PROJECT": "jaxMARL_mpe",
+        "PROJECT": "transf_qmix_tuning",
         "WANDB_MODE" : "online",
     }
 
     # not vmapped params
     static_param_space =  {
-        'AGENT_INIT_SCALE':[2, 1, 0.1],
-        'MAX_GRAD_NORM':[25, 1],
-        'LR_COSINE_WARMUP':[True, False],
-        'AGENT_HIDDEN_DIM':[32, 64],
-        'AGENT_TRANSF_DIM_FF':[64, 128],
-        'AGENT_TRANSF_NUM_HEADS':[4, 8],
+        'LR':[0.05, 0.005, 0.001, 0.0005],
+        'EPS_ADAM':[0.1, 0.001, 0.00001, 0.0000001],
+        'MIXER_INIT_SCALE':[0.01, 0.0001, 0.0000001],
     }
 
     # vmapped params
     hyper_param_space = {
-        'LR':jnp.array([0.005]),
+        'MAX_GRAD_NORM':jnp.array([10]),
     }
 
     # run the not-vmapped experiments
@@ -168,7 +165,7 @@ def main():
             hyper_param_space=hyper_param_space,
             env=env,
             rng=jax.random.PRNGKey(30),
-            seeds_per_exp=1,
+            seeds_per_exp=2,
         )
 
         # log the results as separate metrics
@@ -180,7 +177,7 @@ def main():
 
         for idx in itertools.product(*map(lambda x: list(range(len(x))), hyper_param_space.values())):
             label = "_".join(f'{k}={hyper_param_space[k][i]:.5f}' for i, k in zip(idx, hyper_param_space))
-            exp_name = f'transf_agent_vdn_{static_label}_{label}'
+            exp_name = f'transf_qmix_{static_label}_{label}'
 
             run = wandb.init(
                 entity=config["ENTITY"],
@@ -189,7 +186,7 @@ def main():
                 name=exp_name,
                 config=config,
                 mode=config["WANDB_MODE"],
-                group='vdn_transf_mpe_ht',
+                group='transf_qmix_spread_5v5_ht',
             )
 
             run_logs = jax.tree_util.tree_map(lambda x: x[idx].tolist(), log_metrics)

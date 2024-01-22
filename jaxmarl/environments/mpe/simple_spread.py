@@ -22,7 +22,10 @@ class SimpleSpreadMPE(SimpleMPE):
         agents = ["agent_{}".format(i) for i in range(num_agents)]
         landmarks = ["landmark {}".format(i) for i in range(num_landmarks)]
 
-        observation_spaces = {i: Box(-jnp.inf, jnp.inf, (18,)) for i in agents}
+        observation_spaces = {
+            i:Box(-jnp.inf, jnp.inf, (4+(num_agents-1)*4+(num_landmarks*2),)) 
+            for i in agents
+        }
 
         colour = [AGENT_COLOUR] * num_agents + [OBS_COLOUR] * num_landmarks
 

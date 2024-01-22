@@ -65,7 +65,7 @@ python baselines/QLearning/qmix.py +alg=qmix_hanabi +env=hanabi
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
 # TransfQMix
-python baselines/QLearning/transf_qmix_mpe.py +alg=transf_qmix_mpe +env=mpe_spread
+python baselines/QLearning/transf_qmix.py +alg=transf_qmix_smax +env=smax
 ```
 
 Notice that with Hydra, you can modify parameters on the go in this way:
