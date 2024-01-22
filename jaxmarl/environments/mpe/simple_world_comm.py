@@ -173,7 +173,7 @@ class SimpleWorldCommMPE(SimpleMPE):
     ) -> Tuple[chex.Array, chex.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def _set_u(a_idx, action):
-            u = jnp.array([action[1] - action[2], action[3] - action[4]])
+            u = jnp.array([action[2] - action[1], action[4] - action[3]])
             return u * self.accel[a_idx] * self.moveable[a_idx]
 
         lact = actions[self.leader]
