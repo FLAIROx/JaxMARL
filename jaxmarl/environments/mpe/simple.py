@@ -330,7 +330,6 @@ class SimpleMPE(MultiAgentEnv):
         self, a_idx: int, action: chex.Array
     ) -> Tuple[chex.Array, chex.Array]:
         u = jnp.array([action[2] - action[1], action[4] - action[3]])
-
         u = u * self.accel[a_idx] * self.moveable[a_idx]
         c = action[5:]
         return u, c
