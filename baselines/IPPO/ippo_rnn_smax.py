@@ -37,7 +37,7 @@ class ScannedRNN(nn.Module):
         ins, resets = x
         rnn_state = jnp.where(
             resets[:, np.newaxis],
-            self.initialize_carry(ins.shape[0], ins.shape[1]),
+            self.initialize_carry(*rnn_state.shape),
             rnn_state,
         )
         new_rnn_state, y = nn.GRUCell(features=ins.shape[1])(rnn_state, ins)
@@ -65,7 +65,7 @@ class ActorCriticRNN(nn.Module):
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
-        actor_mean = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
+        actor_mean = nn.Dense(self.config["GRU_HIDDEN_DIM"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
         )
         actor_mean = nn.relu(actor_mean)
@@ -147,7 +147,7 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
         )
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
         network_params = network.init(_rng, init_hstate, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -169,8 +169,7 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
-
+        init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"])
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
@@ -275,7 +274,7 @@ def make_train(config):
                         # RERUN NETWORK
                         _, pi, value = network.apply(
                             params,
-                            init_hstate.transpose(),
+                            init_hstate.squeeze(),
                             (traj_batch.obs, traj_batch.done, traj_batch.avail_actions),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
@@ -330,8 +329,9 @@ def make_train(config):
                 ) = update_state
                 rng, _rng = jax.random.split(rng)
 
+                # adding an additional "fake" dimensionality to perform minibatching correctly
                 init_hstate = jnp.reshape(
-                    init_hstate, (config["NUM_STEPS"], config["NUM_ACTORS"])
+                    init_hstate, (1, config["NUM_ACTORS"], -1)
                 )
                 batch = (
                     init_hstate,
@@ -363,7 +363,7 @@ def make_train(config):
                 )
                 update_state = (
                     train_state,
-                    init_hstate,
+                    init_hstate.squeeze(),
                     traj_batch,
                     advantages,
                     targets,
@@ -371,7 +371,6 @@ def make_train(config):
                 )
                 return update_state, total_loss
 
-            init_hstate = initial_hstate[None, :].squeeze().transpose()
             update_state = (
                 train_state,
                 init_hstate,
