@@ -10,7 +10,6 @@ import tqdm
 from jaxmarl import make
 import pytest
 
-from jaxmarl.environments.mpe import SimpleMPE, SimpleTagMPE, SimpleWorldCommMPE, SimpleSpreadMPE, SimpleCryptoMPE, SimplePushMPE, SimpleSpeakerListenerMPE, SimpleAdversaryMPE, SimpleReferenceMPE
 from jaxmarl.environments.mpe.default_params import DISCRETE_ACT, CONTINUOUS_ACT
 
 num_episodes, num_steps, tolerance = 500, 25, 1e-4
