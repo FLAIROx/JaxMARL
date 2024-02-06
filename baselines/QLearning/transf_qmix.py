@@ -43,6 +43,7 @@ from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.environments.overcooked import overcooked_layouts 
 
 from fast_attention import make_fast_generalized_attention
+from typing import Any
 
 
 class EncoderBlock(nn.Module):
@@ -50,27 +51,36 @@ class EncoderBlock(nn.Module):
     num_heads : int
     dim_feedforward : int
     init_scale: float
+    use_fast_attention: bool
     dropout_prob : float = 0.
 
     def setup(self):
         # Attention layer
-        raw_attention_fn = make_fast_generalized_attention(
-            self.hidden_dim // self.num_heads,
-            renormalize_attention=True,
-            nb_features=self.hidden_dim,
-            unidirectional=False
-        )
-        self.self_attn = nn.MultiHeadDotProductAttention(
-            num_heads=self.num_heads,
-            dropout_rate=self.dropout_prob,
-            attention_fn=raw_attention_fn,
-            kernel_init=orthogonal(self.init_scale),
-            bias_init=constant(0.0)
-        )
+        if self.use_fast_attention:
+            raw_attention_fn = make_fast_generalized_attention(
+                self.hidden_dim // self.num_heads,
+                renormalize_attention=True,
+                nb_features=self.hidden_dim,
+                unidirectional=False
+            )
+            self.self_attn = nn.MultiHeadDotProductAttention(
+                num_heads=self.num_heads,
+                dropout_rate=self.dropout_prob,
+                attention_fn=raw_attention_fn,
+                kernel_init=nn.initializers.xavier_uniform(),
+                use_bias=False,
+            )
+        else:
+            self.self_attn = nn.MultiHeadDotProductAttention(
+                num_heads=self.num_heads,
+                dropout_rate=self.dropout_prob,
+                kernel_init=nn.initializers.xavier_uniform(),
+                use_bias=False,
+            )
         # Two-layer MLP
         self.linear = [
-            nn.Dense(self.dim_feedforward, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.0)),
-            nn.Dense(self.hidden_dim, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.0))
+            nn.Dense(self.dim_feedforward, kernel_init=nn.initializers.xavier_uniform(), bias_init=constant(0.0)),
+            nn.Dense(self.hidden_dim, kernel_init=nn.initializers.xavier_uniform(), bias_init=constant(0.0))
         ]
         # Layers to apply in between the main layers
         self.norm1 = nn.LayerNorm()
@@ -80,7 +90,10 @@ class EncoderBlock(nn.Module):
     def __call__(self, x, mask=None, deterministic=True):
 
         # Attention part
-        attended = self.self_attn(inputs_q=x, inputs_kv=x, deterministic=deterministic)
+        if mask is not None and not self.use_fast_attention: # masking is not compatible with fast self attention
+            mask = jnp.repeat(nn.make_attention_mask(mask, mask), self.num_heads, axis=-3)
+        attended = self.self_attn(inputs_q=x, inputs_kv=x, mask=mask, deterministic=deterministic)
+
         x = self.norm1(attended + x)
         #x = x + self.dropout(x, deterministic=deterministic)
 
@@ -98,9 +111,75 @@ class EncoderBlock(nn.Module):
 class Embedder(nn.Module):
     hidden_dim: int
     init_scale: int
+    scale_inputs: bool = True
+    activation: bool = False
     @nn.compact
-    def __call__(self, x):
-        return nn.Dense(self.hidden_dim, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.0))(x)
+    def __call__(self, x, train:bool):
+        if self.scale_inputs:
+            x = nn.BatchNorm(use_running_average=not train)(x)
+        x = nn.Dense(self.hidden_dim, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.0))(x)
+        if self.activation:
+            x = nn.relu(x)
+        x = nn.BatchNorm(use_running_average=not train)(x)
+        return x
+
+class ScannedTransformer(nn.Module):
+    
+    hidden_dim: int
+    init_scale: float
+    transf_num_layers: int
+    transf_num_heads: int
+    transf_dim_feedforward: int
+    transf_dropout_prob: float = 0
+    deterministic: bool = True
+    return_embeddings: bool = False
+    use_fast_attention: bool = False
+
+    def setup(self):
+        self.encoders = [
+            EncoderBlock(
+                self.hidden_dim,
+                self.transf_num_heads,
+                self.transf_dim_feedforward,
+                self.init_scale,
+                self.use_fast_attention,
+                self.transf_dropout_prob,
+            ) for _ in range(self.transf_num_layers)
+        ]
+
+    @partial(
+        nn.scan,
+        variable_broadcast="params",
+        in_axes=0,
+        out_axes=0,
+        split_rngs={"params": False},
+    )
+    def __call__(self, carry, x):
+        hs = carry
+        embeddings, mask, done = x
+
+        hs = jnp.where(
+            done[:, np.newaxis, np.newaxis],
+            self.initialize_carry(self.hidden_dim, *done.shape, 1),
+            hs
+        )
+        embeddings = jnp.concatenate((
+            hs,
+            embeddings,
+        ), axis=-2)
+        for layer in self.encoders:
+            embeddings = layer(embeddings, mask=mask, deterministic=self.deterministic)
+        hs = embeddings[..., 0:1, :]
+
+        # as y return the entire embeddings if required (i.e. transformer mixer), otherwise only agents' hs embeddings
+        if self.return_embeddings:
+            return hs, embeddings
+        else:
+            return hs, hs
+
+    @staticmethod
+    def initialize_carry(hidden_size, *batch_size):
+        return jnp.zeros((*batch_size, hidden_size))
     
 
 class TransformerAgent(nn.Module):
@@ -114,97 +193,95 @@ class TransformerAgent(nn.Module):
     transf_dim_feedforward: int
     transf_dropout_prob: float
     deterministic: bool
+    use_fast_attention: bool = True
+    scale_inputs: bool = True
+    relu_emb: bool = True
 
-    def setup(self):
-        self.embedder = Embedder(self.hidden_dim, init_scale=self.init_scale_emb)
-        self.encoders = [
-            EncoderBlock(
-                self.hidden_dim,
-                self.transf_num_heads,
-                self.transf_dim_feedforward,
-                self.init_scale_transf,
-                self.transf_dropout_prob
-            ) for _ in range(self.transf_num_layers)
-        ]
-        self.q_proj = nn.Dense(self.action_dim, kernel_init=orthogonal(self.init_scale_q), bias_init=constant(0.0))
-
-    def __call__(self, hidden_state, x, embed=True):
-        # be careful when you jit this function embed must be concrete
-        ins, resets = x
-        if embed:
-            embeddings = self.embedder(ins)
-        else:
-            embeddings = ins
-
-        # reset the hidden state if done
-        hidden_state = jnp.where(
-            resets[:, np.newaxis, np.newaxis],
-            self.initialize_carry(self.hidden_dim, *resets.shape, 1),
-            hidden_state,
-        )
-        # add the reccurent hidden_state to the inputs and pass thorough the transformer encoders
-        x = jnp.concatenate((hidden_state, embeddings), axis=-2) # concatenate on the n_entities dim
-        for encoder in self.encoders:
-            x = encoder(x, mask=None, deterministic=self.deterministic) # TODO: dynamic masking
-        hidden_state = x[..., 0:1, :] # retrieve the hidden state from the stack
+    @nn.compact
+    def __call__(self, hs, x, train=True, return_all_hs=False):
         
-        q_vals = self.q_proj(hidden_state)
-        return hidden_state, q_vals
+        ins, resets = x
+        embeddings = Embedder(
+            self.hidden_dim,
+            init_scale=self.init_scale_emb,
+            scale_inputs=self.scale_inputs,
+            activation=self.relu_emb,
+        )(ins, train)
+        last_hs, hidden_states = ScannedTransformer(
+            hidden_dim=self.hidden_dim,
+            init_scale=self.init_scale_transf,
+            transf_num_layers=self.transf_num_layers,
+            transf_num_heads=self.transf_num_heads,
+            transf_dim_feedforward=self.transf_dim_feedforward,
+            use_fast_attention=self.use_fast_attention,
+            deterministic=True,
+            return_embeddings=False,
+        )(hs, (embeddings, None, resets))
+        q_vals = nn.Dense(self.action_dim, kernel_init=orthogonal(self.init_scale_q), bias_init=constant(0.0))(hidden_states)
 
-    
-    @staticmethod
-    def initialize_carry(hidden_size, *batch_size):
-        return jnp.zeros((*batch_size, hidden_size))
-    
+        if return_all_hs:
+            return last_hs, (hidden_states, q_vals)
+        else:
+            return last_hs, q_vals
+        
 
-class ScannedTransformerHypernetwork(nn.Module):
-    
+class TransformerAgentSmax(nn.Module):
+    action_dim: int
     hidden_dim: int
-    init_scale: float
+    init_scale_emb: float
+    init_scale_transf: float
+    init_scale_q: float
+    init_scale_q_attack: float
     transf_num_layers: int
     transf_num_heads: int
     transf_dim_feedforward: int
-    transf_dropout_prob: float = 0
+    transf_dropout_prob: float
     deterministic: bool = True
+    num_movement_actions: int = 5
+    use_fast_attention: bool = False
+    scale_inputs: bool = True
+    relu_emb: bool = True
 
-    def setup(self):
-        self.hypernetwork = [
-            EncoderBlock(
-                self.hidden_dim,
-                self.transf_num_heads,
-                self.transf_dim_feedforward,
-                self.init_scale,
-                self.transf_dropout_prob
-            ) for _ in range(self.transf_num_layers)
-        ] # the hypernetwork is a stack of transformer encoders
-
-    @partial(
-        nn.scan,
-        variable_broadcast="params",
-        in_axes=0,
-        out_axes=0,
-        split_rngs={"params": False},
-    )
-    def __call__(self, carry, x):
-        hs_mixer = carry
-        hs_agents, mixer_embedding, done = x
-
-        hs_mixer = jnp.where(
-            done[:, np.newaxis, np.newaxis],
-            TransformerAgent.initialize_carry(self.hidden_dim, *done.shape, 1),
-            hs_mixer
-        )
-
-        embeddings = jnp.concatenate((
-            hs_mixer,
-            mixer_embedding,
-            hs_agents,
-        ), axis=-2)
-        for layer in self.hypernetwork:
-            embeddings = layer(embeddings, mask=None, deterministic=self.deterministic)
-        hs_mixer = embeddings[..., 0:1, :]
+    @nn.compact
+    def __call__(self, hs, x, train=True, return_all_hs=False):
         
-        return hs_mixer, embeddings
+        ins, resets = x
+        # mask for the death/invisible agents, which are assumed to have obs==0
+        mask = jnp.all(ins==0, axis=-1).astype(bool) 
+        mask = jnp.concatenate((jnp.zeros((*mask.shape[:-1], 1)),mask), axis=-1) # add a positive mask for the agent internal hidden state that will be added later
+        embeddings = Embedder(
+            self.hidden_dim,
+            init_scale=self.init_scale_emb,
+            scale_inputs=self.scale_inputs,
+            activation=self.relu_emb,
+        )(ins, train)
+        last_hs, embeddings = ScannedTransformer(
+            hidden_dim=self.hidden_dim,
+            init_scale=self.init_scale_transf,
+            transf_num_layers=self.transf_num_layers,
+            transf_num_heads=self.transf_num_heads,
+            transf_dim_feedforward=self.transf_dim_feedforward,
+            use_fast_attention=self.use_fast_attention,
+            deterministic=True,
+            return_embeddings=True,
+        )(hs, (embeddings, mask, resets))
+        
+        # q_vals for the movement actions are computed from agents hidden states
+        hidden_states = embeddings[..., 0:1, :]
+        q_mov = nn.Dense(5, kernel_init=orthogonal(self.init_scale_q), bias_init=constant(0.0))(hidden_states) # time_step, batch_size, 1, 5
+        
+        # q_vals for attacking an enemy is computed from attacking that enemy
+        n_enemies = self.action_dim-self.num_movement_actions
+        enemy_embeddings = embeddings[..., -n_enemies-1:-1, :] # last embedding is 'self', just before are the enemies
+
+        q_attack = nn.Dense(1, kernel_init=orthogonal(self.init_scale_q_attack), bias_init=constant(0.0))(enemy_embeddings) # time_step, batch_size, n_enemies, 1
+        q_vals = jnp.concatenate((q_mov,jnp.swapaxes(q_attack, -1, -2)), axis=-1)
+        
+        if return_all_hs:
+            return last_hs, (hidden_states, q_vals)
+        else:
+            return last_hs, q_vals
+    
 
 class TransformerMixer(nn.Module):
     """
@@ -215,30 +292,43 @@ class TransformerMixer(nn.Module):
     transf_num_layers: int
     transf_num_heads: int
     transf_dim_feedforward: int
-
+    scale_inputs: bool = True
+    use_fast_attention: bool = True
+    relu_emb: bool = True
+    
     @nn.compact
-    def __call__(self, q_vals, hs_agents, states, done):
+    def __call__(self, q_vals, hs_agents, states, done, train=True):
         
         n_agents, time_steps, batch_size = q_vals.shape
         q_vals = jnp.transpose(q_vals, (1, 2, 0)) # (time_steps, batch_size, n_agents)
-        
-        # hypernetwork
+
+        # the embeddings consist in the state-matrix embeddings and the hidden state of the agents
         hs_agents = hs_agents.reshape(time_steps, batch_size, n_agents, self.hidden_dim)
-        mixer_embs = nn.Dense(self.hidden_dim, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.))(states)
-        hs_mixer = TransformerAgent.initialize_carry(self.hidden_dim, batch_size, 1)
-        hypernetwork_input = (hs_agents, mixer_embs, done)
-        _, hyp_emb = ScannedTransformerHypernetwork(
+        mixer_embs = Embedder(
+            self.hidden_dim,
+            init_scale=self.init_scale,
+            scale_inputs=self.scale_inputs,
+            activation=self.relu_emb,
+        )(states, train)
+        mixer_embs = jnp.concatenate((
+            mixer_embs,
+            hs_agents,
+        ), axis=-2)
+        hs_mixer = ScannedTransformer.initialize_carry(self.hidden_dim, batch_size, 1)
+        _, hyp_emb = ScannedTransformer(
             hidden_dim=self.hidden_dim,
             init_scale=self.init_scale,
             transf_num_layers=self.transf_num_layers,
             transf_num_heads=self.transf_num_heads,
             transf_dim_feedforward=self.transf_dim_feedforward,
             deterministic=True,
-        )(hs_mixer, hypernetwork_input)
+            return_embeddings=True,
+            use_fast_attention=self.use_fast_attention,
+        )(hs_mixer, (mixer_embs, None, done)) # for now the mixer doesn't mask the embeddings
         
         # monotonicity and reshaping
-        main_emb = hyp_emb[..., 0:1, :]
-        w_1 = jnp.abs(hyp_emb[..., -n_agents:, :].reshape(time_steps, batch_size, n_agents, self.hidden_dim))
+        main_emb = hyp_emb[..., 0:1, :] # main embedding is the hs of the mixer
+        w_1 = jnp.abs(hyp_emb[..., -n_agents:, :].reshape(time_steps, batch_size, n_agents, self.hidden_dim)) # w1 is a transformation of the agents' hs
         b_1 = main_emb.reshape(time_steps, batch_size, 1, self.hidden_dim)
         w_2 = jnp.abs(main_emb.reshape(time_steps, batch_size, self.hidden_dim, 1))
         b_2 = nn.Dense(1, kernel_init=orthogonal(self.init_scale), bias_init=constant(0.))(nn.relu(main_emb))
@@ -249,7 +339,7 @@ class TransformerMixer(nn.Module):
         q_tot  = jnp.matmul(hidden, w_2) + b_2
         
         return q_tot.squeeze() # (time_steps, batch_size)
-
+    
 
 class EpsilonGreedy:
     """Epsilon Greedy action selection"""
@@ -273,8 +363,8 @@ class EpsilonGreedy:
             greedy_actions = jnp.argmax(q, axis=-1) # get the greedy actions 
             random_actions = jax.random.randint(key_a, shape=greedy_actions.shape, minval=0, maxval=q.shape[-1]) # sample random actions
             pick_random    = jax.random.uniform(key_e, greedy_actions.shape)<eps # pick which actions should be random
-            chosed_actions = jnp.where(pick_random, random_actions, greedy_actions)
-            return chosed_actions
+            chosen_actions = jnp.where(pick_random, random_actions, greedy_actions)
+            return chosen_actions
         
         eps = self.get_epsilon(t)
         keys = dict(zip(q_vals.keys(), jax.random.split(rng, len(q_vals)))) # get a key for each agent
@@ -287,6 +377,12 @@ class Transition(NamedTuple):
     rewards: dict
     dones: dict
     infos: dict
+
+
+def tree_mean(tree):
+    return jnp.array(
+        jax.tree_util.tree_leaves(jax.tree_map(lambda x: x.mean(), tree))
+    ).mean()
 
 
 def make_train(config, env):
@@ -325,8 +421,8 @@ def make_train(config, env):
         CTRolloutManager._preprocess_obs = smax_obs_vec_to_matrix
         CTRolloutManager.global_state = smax_global_state
         CTRolloutManager.global_reward = lambda self, rewards: rewards[self.training_agents[0]]
-        env.name = 'wrapped_env'
-    elif env.name == 'MPE_simple_spread_v3':
+        env.name = 'custom_env'
+    elif 'spread' in env.name.lower():
         # For SPREAD it is simpler to build the obs from scratch as matrices
         def wrapped_get_obs(self, state):
             # relative position between agents and other entities
@@ -357,8 +453,11 @@ def make_train(config, env):
         preprocess_obs = False
         type(env._env).get_obs = wrapped_get_obs
         CTRolloutManager.global_state = lambda self, obs, state: obs['world_state']
+    elif 'utracking' in env.name.lower():
+        # utracking already gives the observations as matrices
+        preprocess_obs = False
     else:
-        raise NotImplementedError('This implemention currently supports only MPE_spread and SMAX')
+        raise NotImplementedError('This implemention currently supports only MPE_spread, UTracking and SMAX')
 
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -397,34 +496,64 @@ def make_train(config, env):
         buffer_state = buffer.init(sample_traj_unbatched) 
 
         # INIT NETWORK
-        agent = TransformerAgent(
-            action_dim=wrapped_env.max_action_space,
-            hidden_dim=config['AGENT_HIDDEN_DIM'],
-            init_scale_emb=config['AGENT_INIT_SCALE'],
-            init_scale_transf=config['AGENT_INIT_SCALE'],
-            init_scale_q=config['AGENT_INIT_SCALE'],
-            transf_num_layers=config['AGENT_TRANSF_NUM_LAYERS'],
-            transf_num_heads=config['AGENT_TRANSF_NUM_HEADS'],
-            transf_dim_feedforward=config['AGENT_TRANSF_DIM_FF'],
-            transf_dropout_prob=0.,
-            deterministic=True,
-        )
-        rng, _rng = jax.random.split(rng)
-        init_x = (
-            jnp.zeros((1, 1, 1, sample_traj.obs[env.agents[0]].shape[-1])), # (time_step, batch_size, n_entities, obs_size)
-            jnp.zeros((1, 1)) # (time_step, batch size)
-        )
-        init_hs = TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], 1, 1) # (batch_size, hidden_dim)
-        agent_params = agent.init(_rng, init_hs, init_x)
+        if env.name=='custom_env': # smax
+            n_entities = wrapped_env._env.num_allies+wrapped_env._env.num_enemies
+            agent = TransformerAgentSmax(
+                action_dim=wrapped_env.max_action_space,
+                hidden_dim=config['AGENT_HIDDEN_DIM'],
+                init_scale_emb=config['AGENT_INIT_SCALE'],
+                init_scale_transf=config['AGENT_INIT_SCALE'],
+                init_scale_q=config['AGENT_INIT_SCALE'],
+                init_scale_q_attack=config['AGENT_INIT_SCALE'],
+                transf_num_layers=config['AGENT_TRANSF_NUM_LAYERS'],
+                transf_num_heads=config['AGENT_TRANSF_NUM_HEADS'],
+                transf_dim_feedforward=config['AGENT_TRANSF_DIM_FF'],
+                use_fast_attention=config['USE_FAST_ATTENTION'],
+                scale_inputs=config['SCALE_INPUTS'],
+                relu_emb=config['EMBEDDER_USE_RELU'],
+                transf_dropout_prob=0.,
+                deterministic=True,
+            )
+            rng, _rng = jax.random.split(rng)
+            init_x = (
+                jnp.zeros((1, 1, n_entities, sample_traj.obs[env.agents[0]].shape[-1])), # (time_step, batch_size, n_entities, obs_size)
+                jnp.zeros((1, 1)) # (time_step, batch size)
+            )
+            init_hs = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], 1, 1) # (batch_size, hidden_dim)
+            agent_params = agent.init(_rng, init_hs, init_x, train=False)
+        else:
+            agent = TransformerAgent(
+                action_dim=wrapped_env.max_action_space,
+                hidden_dim=config['AGENT_HIDDEN_DIM'],
+                init_scale_emb=config['AGENT_INIT_SCALE'],
+                init_scale_transf=config['AGENT_INIT_SCALE'],
+                init_scale_q=config['AGENT_INIT_SCALE'],
+                transf_num_layers=config['AGENT_TRANSF_NUM_LAYERS'],
+                transf_num_heads=config['AGENT_TRANSF_NUM_HEADS'],
+                transf_dim_feedforward=config['AGENT_TRANSF_DIM_FF'],
+                use_fast_attention=config['USE_FAST_ATTENTION'],
+                scale_inputs=config['SCALE_INPUTS'],
+                relu_emb=config['EMBEDDER_USE_RELU'],
+                transf_dropout_prob=0.,
+                deterministic=True,
+            )
+            rng, _rng = jax.random.split(rng)
+            init_x = (
+                jnp.zeros((1, 1, 1, sample_traj.obs[env.agents[0]].shape[-1])), # (time_step, batch_size, n_entities, obs_size)
+                jnp.zeros((1, 1)) # (time_step, batch size)
+            )
+            init_hs = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], 1, 1) # (batch_size, hidden_dim)
+            agent_params = agent.init(_rng, init_hs, init_x, train=False)
 
         # init mixer
         rng, _rng = jax.random.split(rng)
         state_size = sample_traj.obs['__all__'].shape[-1]  # get the state shape from the buffer
         init_x = (
             jnp.zeros((len(env.agents), 1, 1)), # q_vals: n_agents, time_steps, batch_size
-            TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), 1), # hs_agents: time_step, n_agents*batch_size, hidden_dim
+            ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), 1), # hs_agents: time_step, n_agents*batch_size, hidden_dim
             jnp.zeros((1, 1, 1, state_size)), # states: time_step, batch_size, n_entities, state_size
             jnp.zeros((1, 1)), # done: (time_step, batch size)
+            False, # train
         )
         mixer = TransformerMixer(
             hidden_dim=config['AGENT_HIDDEN_DIM'],
@@ -432,11 +561,15 @@ def make_train(config, env):
             transf_num_layers=config['MIXER_TRANSF_NUM_LAYERS'],
             transf_num_heads=config['MIXER_TRANSF_NUM_HEADS'],
             transf_dim_feedforward=config['MIXER_TRANSF_DIM_FF'],
+            scale_inputs=config['SCALE_INPUTS'],
+            relu_emb=config['EMBEDDER_USE_RELU'],
+            use_fast_attention=config['USE_FAST_ATTENTION'],
         )
         mixer_params = mixer.init(_rng, *init_x)
 
         # init optimizer
-        network_params = frozen_dict.freeze({'agent':agent_params, 'mixer':mixer_params})
+        network_params = {'agent':agent_params['params'],'mixer':mixer_params['params']}
+        network_stats  = {'agent':agent_params['batch_stats'],'mixer':mixer_params['batch_stats']}
 
         # print number of params
         agent_params = sum(x.size for x in jax.tree_util.tree_leaves(network_params['agent']))
@@ -446,8 +579,10 @@ def make_train(config, env):
         
         # INIT TRAIN STATE AND OPTIMIZER
         def linear_schedule(count):
-            frac = 1.0 - (count / config["NUM_UPDATES"])
+            frac = 1.0 - (count / config["NUM_UPDATES"]*config['N_MINI_UPDATES'])
             return config["LR"] * frac
+        def exponential_schedule(count):
+            return config["LR"] * (1-config['LR_EXP_DECAY_RATE'])**count
         if config.get('LR_COSINE_WARMUP', False):
             lr = optax.warmup_cosine_decay_schedule(
                 init_value=0.0,
@@ -456,21 +591,30 @@ def make_train(config, env):
                 decay_steps=config["NUM_UPDATES"],
                 end_value=0.0
             )
+        elif config.get('LR_EXP_DECAY', True):
+            lr = exponential_schedule
         elif config.get('LR_LINEAR_DECAY', False):
-            lr = linear_schedule 
+            lr = linear_schedule
         else:
             lr = config['LR']
         tx = optax.chain(
             optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
             optax.adam(learning_rate=lr, eps=config['EPS_ADAM']),
         )
-        train_state = TrainState.create(
+
+        # to include the batch normalization stats
+        class TrainState_(TrainState):
+            batch_stats: Any
+
+        train_state = TrainState_.create(
             apply_fn=agent.apply,
             params=network_params,
+            batch_stats=network_stats,
             tx=tx,
         )
         # target network params
-        target_network_params = jax.tree_map(lambda x: jnp.copy(x), train_state.params)
+        copy_tree = lambda tree: jax.tree_map(lambda x: jnp.copy(x), tree)
+        target_network_state = {'params':copy_tree(train_state.params), 'batch_stats':copy_tree(train_state.batch_stats)}
 
         # INIT EXPLORATION STRATEGY
         explorer = EpsilonGreedy(
@@ -479,11 +623,7 @@ def make_train(config, env):
             duration=config["EPSILON_ANNEAL_TIME"]
         )
 
-        # depending if using parameters sharing or not, q-values are computed using one or multiple parameters
-        def homogeneous_pass(params, hidden_state, obs, dones):
-            def agent_pass(hstate, x):
-                hstate, qvals = agent.apply(params, hstate, x)
-                return hstate, qvals
+        def homogeneous_pass(params, batch_stats, hidden_state, obs, dones, return_all_hs=False, train=True):
 
             # concatenate agents and parallel envs to process them in one batch
             agents, flatten_agents_obs = zip(*obs.items())
@@ -492,20 +632,52 @@ def make_train(config, env):
                 jnp.concatenate(flatten_agents_obs, axis=1), # (time_step, n_agents*n_envs, n_entities, obs_size)
                 jnp.concatenate([dones[agent] for agent in agents], axis=1), # ensure to not pass other keys (like __all__)
             )
-            hidden_state, q_vals = jax.lax.scan(agent_pass, hidden_state, batched_input)
+            
+            # if train, the outs contain the update of the batch norm
+            if train:
+                outs, batch_norm_update = agent.apply(
+                    {'params':params,'batch_stats':batch_stats},
+                    hidden_state,
+                    batched_input,
+                    return_all_hs=return_all_hs,
+                    train=True,
+                    mutable=['batch_stats']
+                )
+            else:
+                batch_norm_update = None
+                outs = agent.apply(
+                    {'params':params,'batch_stats':batch_stats},
+                    hidden_state,
+                    batched_input,
+                    return_all_hs=return_all_hs,
+                    train=False
+                )
+
+            # if return all hs, the outs contain all the hidden states of the agents per each time-step
+            if return_all_hs:
+                hidden_state, (h_states, q_vals) = outs
+            else:
+                hidden_state, q_vals = outs
+
             q_vals = q_vals.reshape(original_shape[0], len(agents), *original_shape[1:-2], -1) # (time_steps, n_agents, n_envs, action_dim)
             q_vals = {a:q_vals[:,i] for i,a in enumerate(agents)}
-            return hidden_state, q_vals
+
+            if return_all_hs:
+                return batch_norm_update, hidden_state, h_states, q_vals
+            else:
+                return batch_norm_update, hidden_state, q_vals
 
         # TRAINING LOOP
         def _update_step(runner_state, unused):
 
-            train_state, target_network_params, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng = runner_state
+            train_state, target_network_state, env_state, buffer_state, time_state, init_obs, init_dones, test_metrics, rng = runner_state
 
             # EPISODE STEP
+            env_params = train_state.params['agent']
+            env_batch_norm = train_state.batch_stats['agent']
             def _env_step(step_state, unused):
 
-                params, env_state, last_obs, last_dones, hstate, rng, t = step_state
+                env_state, last_obs, last_dones, hstate, rng, t = step_state
 
                 # prepare rngs for actions and step
                 rng, key_a, key_s = jax.random.split(rng, 3)
@@ -516,7 +688,7 @@ def make_train(config, env):
                 obs_   = jax.tree_map(lambda x: x[np.newaxis, :], obs_)
                 dones_ = jax.tree_map(lambda x: x[np.newaxis, :], last_dones)
                 # get the q_values from the agent netwoek
-                hstate, q_vals = homogeneous_pass(params, hstate, obs_, dones_)
+                _, hstate, q_vals = homogeneous_pass(env_params, env_batch_norm, hstate, obs_, dones_, train=False)
                 # remove the dummy time_step dimension and index qs by the valid actions of each agent 
                 valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, wrapped_env.valid_actions)
                 # explore with epsilon greedy_exploration
@@ -526,16 +698,15 @@ def make_train(config, env):
                 obs, env_state, rewards, dones, infos = wrapped_env.batch_step(key_s, env_state, actions)
                 transition = Transition(last_obs, actions, rewards, dones, infos)
 
-                step_state = (params, env_state, obs, dones, hstate, rng, t+1)
+                step_state = (env_state, obs, dones, hstate, rng, t+1)
                 return step_state, transition
 
 
             # prepare the step state and collect the episode trajectory
             rng, _rng = jax.random.split(rng)
-            hstate = TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_ENVS"], 1) # (n_agents*n_envs, hs_size)
+            hstate = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_ENVS"], 1) # (n_agents*n_envs, hs_size)
 
             step_state = (
-                train_state.params['agent'],
                 env_state,
                 init_obs,
                 init_dones,
@@ -560,111 +731,135 @@ def make_train(config, env):
                 """index the q_values with action indices"""
                 q_u = jnp.take_along_axis(q, jnp.expand_dims(u, axis=-1), axis=-1)
                 return jnp.squeeze(q_u, axis=-1)
+            
 
-            def homogeneous_pass_returing_hs(params, hidden_state, obs, dones):
-                def agent_pass(hstate, x):
-                    hstate, qvals = agent.apply(params, hstate, x)
-                    return hstate, (hstate, qvals)
+            def _update_epoch(carry, unused):
 
-                # concatenate agents and parallel envs to process them in one batch
-                agents, flatten_agents_obs = zip(*obs.items())
-                original_shape = flatten_agents_obs[0].shape # assumes obs shape is the same for all agents
-                batched_input = (
-                    jnp.concatenate(flatten_agents_obs, axis=1), # (time_step, n_agents*n_envs, n_entities, obs_size)
-                    jnp.concatenate([dones[agent] for agent in agents], axis=1), # ensure to not pass other keys (like __all__)
-                )
-                hidden_state, (h_states, q_vals) = jax.lax.scan(agent_pass, hidden_state, batched_input)
-                q_vals = q_vals.reshape(original_shape[0], len(agents), *original_shape[1:-2], -1) # (time_steps, n_agents, n_envs, action_dim)
-                q_vals = {a:q_vals[:,i] for i,a in enumerate(agents)}
-                return hidden_state, h_states, q_vals
+                train_state, rng = carry
 
-            def _loss_fn(params, target_network_params, init_hs, learn_traj):
+                # sample a batched trajectory from the buffer and set the time step dim in first axis
+                rng, _rng = jax.random.split(rng)
+                learn_traj = buffer.sample(buffer_state, _rng).experience # (batch_size, 1, max_time_steps, ...)
+                learn_traj = jax.tree_map(
+                    lambda x: jnp.swapaxes(x[:, 0], 0, 1), # remove the dummy sequence dim (1) and swap batch and temporal dims
+                    learn_traj
+                ) # (max_time_steps, batch_size, ...)
+                init_hs = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"], 1) # (n_agents*batch_size, hs_size)
 
-                obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
-                _, hs_agents, q_vals = homogeneous_pass_returing_hs(params['agent'], init_hs, obs_, learn_traj.dones)
-                _, hs_target_agents, target_q_vals = homogeneous_pass_returing_hs(target_network_params['agent'], init_hs, obs_, learn_traj.dones)
+                def _loss_fn(params, init_hs, learn_traj):
 
-                # stop the gradient from passing with the hidden states between agents and mixer
-                hs_agents = jax.lax.stop_gradient(hs_agents)
-                hs_target_agents = jax.lax.stop_gradient(hs_target_agents)
+                    obs_ = {a:learn_traj.obs[a] for a in env.agents} # ensure to not pass the global state (obs["__all__"]) to the network
+                    
+                    updates_agent, _, hs_agents, q_vals = homogeneous_pass(
+                        params['agent'],
+                        train_state.batch_stats['agent'],
+                        init_hs,
+                        obs_,
+                        learn_traj.dones,
+                        return_all_hs=True,
+                        train=True
+                    )
+                    _, _, hs_target_agents, target_q_vals = homogeneous_pass(
+                        target_network_state['params']['agent'],
+                        train_state.batch_stats['agent'],
+                        init_hs,
+                        obs_,
+                        learn_traj.dones,
+                        return_all_hs=True,
+                        train=False
+                    )
 
-                # get the q_vals of the taken actions (with exploration) for each agent
-                chosen_action_qvals = jax.tree_map(
-                    lambda q, u: q_of_action(q, u)[:-1], # avoid last timestep
-                    q_vals,
-                    learn_traj.actions
-                )
+                    # stop the gradient from passing with the hidden states between agents and mixer
+                    hs_agents = jax.lax.stop_gradient(hs_agents)
+                    hs_target_agents = jax.lax.stop_gradient(hs_target_agents)
 
-                # get the target q value of the greedy actions for each agent
-                valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
-                target_max_qvals = jax.tree_map(
-                    lambda t_q, q: q_of_action(t_q, jnp.argmax(q, axis=-1))[1:], # avoid first timestep
-                    target_q_vals,
-                    jax.lax.stop_gradient(valid_q_vals)
-                )
+                    # get the q_vals of the taken actions (with exploration) for each agent
+                    chosen_action_qvals = jax.tree_map(
+                        lambda q, u: q_of_action(q, u)[:-1], # avoid last timestep
+                        q_vals,
+                        learn_traj.actions
+                    )
 
-                # compute q_tot with the mixer network
-                chosen_action_qvals_mix = mixer.apply(
-                    params['mixer'], 
-                    jnp.stack(list(chosen_action_qvals.values())),
-                    hs_agents[:-1], # hs of agents, avoiding last timestep
-                    learn_traj.obs['__all__'][:-1], # avoid last timestep
-                    learn_traj.dones['__all__'][:-1], # avoid last timestep 
-                )
-                target_max_qvals_mix = mixer.apply(
-                    target_network_params['mixer'], 
-                    jnp.stack(list(target_max_qvals.values())),
-                    hs_target_agents[1:], # hs of target agents, avoiding last timestep
-                    learn_traj.obs['__all__'][1:], # avoid first timestep
-                    learn_traj.dones['__all__'][1:], # avoid last timestep 
-                )
+                    # get the target q value of the greedy actions for each agent
+                    valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
+                    target_max_qvals = jax.tree_map(
+                        lambda t_q, q: q_of_action(t_q, jnp.argmax(q, axis=-1))[1:], # avoid first timestep
+                        target_q_vals,
+                        jax.lax.stop_gradient(valid_q_vals)
+                    )
 
-                # compute target
-                if config.get('TD_LAMBDA_LOSS', True):
-                    # time difference loss
-                    def _td_lambda_target(ret, values):
-                        reward, done, target_qs = values
-                        ret = jnp.where(
-                            done,
-                            target_qs,
-                            ret*config['TD_LAMBDA']*config['GAMMA']
-                            + reward
-                            + (1-config['TD_LAMBDA'])*config['GAMMA']*(1-done)*target_qs
+                    # compute q_tot with the mixer network
+                    chosen_action_qvals_mix, updates_mixer = mixer.apply(
+                        {'params':params['mixer'],'batch_stats':train_state.batch_stats['mixer']}, 
+                        jnp.stack(list(chosen_action_qvals.values())),
+                        hs_agents[:-1], # hs of agents, avoiding last timestep
+                        learn_traj.obs['__all__'][:-1], # avoid last timestep
+                        learn_traj.dones['__all__'][:-1], # avoid last timestep
+                        train=True,
+                        mutable=['batch_stats'],
+                    )
+                    target_max_qvals_mix = mixer.apply(
+                        {'params':target_network_state['params']['mixer'],'batch_stats':train_state.batch_stats['mixer']}, 
+                        jnp.stack(list(target_max_qvals.values())),
+                        hs_target_agents[1:], # hs of target agents, avoiding first timestep
+                        learn_traj.obs['__all__'][1:], # avoid first timestep
+                        learn_traj.dones['__all__'][1:], # avoid last timestep
+                        train=False,
+                    )
+
+                    # compute target
+                    if config.get('TD_LAMBDA_LOSS', True):
+                        # time difference loss
+                        def _td_lambda_target(ret, values):
+                            reward, done, target_qs = values
+                            ret = jnp.where(
+                                done,
+                                target_qs,
+                                ret*config['TD_LAMBDA']*config['GAMMA']
+                                + reward
+                                + (1-config['TD_LAMBDA'])*config['GAMMA']*(1-done)*target_qs
+                            )
+                            return ret, ret
+
+                        ret = target_max_qvals_mix[-1] * (1-learn_traj.dones['__all__'][-1])
+                        ret, td_targets = jax.lax.scan(
+                            _td_lambda_target,
+                            ret,
+                            (learn_traj.rewards['__all__'][-2::-1], learn_traj.dones['__all__'][-2::-1], target_max_qvals_mix[-1::-1])
                         )
-                        return ret, ret
+                        targets = td_targets[::-1]
+                        loss = jnp.mean(0.5*((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2))
+                    else:
+                        # standard DQN loss
+                        targets = (
+                            learn_traj.rewards['__all__'][:-1]
+                            + config['GAMMA']*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_mix
+                        )
+                        loss = jnp.mean((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2)
+                    
+                    batch_norm_update = {'agent':updates_agent['batch_stats'], 'mixer':updates_mixer['batch_stats']}
+                    return loss, (targets, batch_norm_update)
 
-                    ret = target_max_qvals_mix[-1] * (1-learn_traj.dones['__all__'][-1])
-                    ret, td_targets = jax.lax.scan(
-                        _td_lambda_target,
-                        ret,
-                        (learn_traj.rewards['__all__'][-2::-1], learn_traj.dones['__all__'][-2::-1], target_max_qvals_mix[-1::-1])
-                    )
-                    targets = td_targets[::-1]
-                    loss = jnp.mean(0.5*((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2))
-                else:
-                    # standard DQN loss
-                    targets = (
-                        learn_traj.rewards['__all__'][:-1]
-                        + config['GAMMA']*(1-learn_traj.dones['__all__'][:-1])*target_max_qvals_mix
-                    )
-                    loss = jnp.mean((chosen_action_qvals_mix - jax.lax.stop_gradient(targets))**2)
-                
-                return loss
+                # compute loss and optimize grad
+                grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
+                (loss, (targets, batch_norm_update)), grads = grad_fn(train_state.params, init_hs, learn_traj)
+                train_state = train_state.apply_gradients(grads=grads)
+                train_state = train_state.replace(batch_stats=batch_norm_update)
 
+                update_info = {'loss':loss, 'targets':targets.mean(), 'grad':tree_mean(grads)}
 
-            # sample a batched trajectory from the buffer and set the time step dim in first axis
+                return (train_state, rng), update_info
+
+            # perform n updates over the network
             rng, _rng = jax.random.split(rng)
-            learn_traj = buffer.sample(buffer_state, _rng).experience # (batch_size, 1, max_time_steps, ...)
-            learn_traj = jax.tree_map(
-                lambda x: jnp.swapaxes(x[:, 0], 0, 1), # remove the dummy sequence dim (1) and swap batch and temporal dims
-                learn_traj
-            ) # (max_time_steps, batch_size, ...)
-            init_hs = TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["BUFFER_BATCH_SIZE"], 1) # (n_agents*batch_size, hs_size)
-
-            # compute loss and optimize grad
-            grad_fn = jax.value_and_grad(_loss_fn, has_aux=False)
-            loss, grads = grad_fn(train_state.params, target_network_params, init_hs, learn_traj)
-            train_state = train_state.apply_gradients(grads=grads)
+            update_info_zero = dict(zip(['loss', 'targets', 'grad'], [jnp.zeros(config['N_MINI_UPDATES'])]*3)) # default update info when cannot sample
+            (train_state, rng), update_info = jax.lax.cond(
+                buffer.can_sample(buffer_state),
+                lambda train_state, rng: jax.lax.scan(_update_epoch, (train_state, rng), None, config['N_MINI_UPDATES']),
+                lambda train_state, rng: ((train_state, rng), update_info_zero), # do nothing
+                train_state,
+                _rng
+            )
 
 
             # UPDATE THE VARIABLES AND RETURN
@@ -678,10 +873,10 @@ def make_train(config, env):
             time_state['updates']   = time_state['updates'] + 1
 
             # update the target network if necessary
-            target_network_params = jax.lax.cond(
+            target_network_state = jax.lax.cond(
                 time_state['updates'] % config['TARGET_UPDATE_INTERVAL'] == 0,
-                lambda _: jax.tree_map(lambda x: jnp.copy(x), train_state.params),
-                lambda _: target_network_params,
+                lambda _: {'params':copy_tree(train_state.params), 'batch_stats':copy_tree(train_state.batch_stats)},
+                lambda _: target_network_state,
                 operand=None
             )
 
@@ -689,19 +884,25 @@ def make_train(config, env):
             rng, _rng = jax.random.split(rng)
             test_metrics = jax.lax.cond(
                 time_state['updates'] % (config["TEST_INTERVAL"] // config["NUM_STEPS"] // config["NUM_ENVS"]) == 0,
-                lambda _: get_greedy_metrics(_rng, train_state.params['agent'], time_state),
+                lambda _: get_greedy_metrics(_rng, train_state, time_state),
                 lambda _: test_metrics,
                 operand=None
             )
 
             # update the returning metrics
             metrics = {
-                'timesteps': time_state['timesteps']*config['NUM_ENVS'],
-                'updates' : time_state['updates'],
-                'loss': loss,
-                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards),
+                'running_metrics':{
+                    'timesteps': time_state['timesteps']*config['NUM_ENVS'],
+                    'updates' : time_state['updates'],
+                    'loss': update_info['loss'].mean(),
+                    'returns': traj_batch.rewards['__all__'].sum(axis=0).mean(), # mean of sum accross timesteps
+                    'targets_mean': update_info['targets'].mean(),
+                    'grad_mean':update_info['grad'].mean(),
+                    'params_agent_mean':tree_mean(train_state.params['agent']),
+                    'params_mixer_mean':tree_mean(train_state.params['mixer']),
+                }, 
+                'test_metrics': test_metrics
             }
-            metrics['test_metrics'] = test_metrics # add the test metrics dictionary
 
             if config.get('WANDB_ONLINE_REPORT', False):
                 def callback(metrics, infos):
@@ -711,10 +912,7 @@ def make_train(config, env):
                     }
                     wandb.log(
                         {
-                            "returns": metrics['rewards']['__all__'].mean(),
-                            "timestep": metrics['timesteps'],
-                            "updates": metrics['updates'],
-                            "loss": metrics['loss'],
+                            **metrics['running_metrics'],
                             **info_metrics,
                             **{k:v.mean() for k, v in metrics['test_metrics'].items()}
                         }
@@ -723,7 +921,7 @@ def make_train(config, env):
 
             runner_state = (
                 train_state,
-                target_network_params,
+                target_network_state,
                 env_state,
                 buffer_state,
                 time_state,
@@ -733,28 +931,29 @@ def make_train(config, env):
                 rng
             )
 
-            return runner_state, metrics
+            return runner_state, None #metrics # don't return metrics by default to save memory
 
-        def get_greedy_metrics(rng, params, time_state):
+        def get_greedy_metrics(rng, train_state, time_state):
             """Help function to test greedy policy during training"""
+            env_params = train_state.params['agent']
+            env_batch_norm = train_state.batch_stats['agent']
             def _greedy_env_step(step_state, unused):
-                params, env_state, last_obs, last_dones, hstate, rng = step_state
+                env_state, last_obs, last_dones, hstate, rng = step_state
                 rng, key_s = jax.random.split(rng)
                 obs_   = {a:last_obs[a] for a in env.agents}
                 obs_   = jax.tree_map(lambda x: x[np.newaxis, :], obs_)
                 dones_ = jax.tree_map(lambda x: x[np.newaxis, :], last_dones)
-                hstate, q_vals = homogeneous_pass(params, hstate, obs_, dones_)
+                _, hstate, q_vals = homogeneous_pass(env_params, env_batch_norm, hstate, obs_, dones_, train=False)
                 actions = jax.tree_util.tree_map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, test_env.valid_actions)
                 obs, env_state, rewards, dones, infos = test_env.batch_step(key_s, env_state, actions)
-                step_state = (params, env_state, obs, dones, hstate, rng)
+                step_state = (env_state, obs, dones, hstate, rng)
                 return step_state, (rewards, dones, infos)
             rng, _rng = jax.random.split(rng)
             init_obs, env_state = test_env.batch_reset(_rng)
             init_dones = {agent:jnp.zeros((config["NUM_TEST_EPISODES"]), dtype=bool) for agent in env.agents+['__all__']}
             rng, _rng = jax.random.split(rng)
-            hstate = TransformerAgent.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_TEST_EPISODES"], 1) # (n_agents*n_envs, hs_size)
+            hstate = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_TEST_EPISODES"], 1) # (n_agents*n_envs, hs_size)
             step_state = (
-                params,
                 env_state,
                 init_obs,
                 init_dones,
@@ -787,13 +986,13 @@ def make_train(config, env):
             'updates':  jnp.array(0)
         }
         rng, _rng = jax.random.split(rng)
-        test_metrics = get_greedy_metrics(_rng, train_state.params['agent'], time_state) # initial greedy metrics
+        test_metrics = get_greedy_metrics(_rng, train_state, time_state) # initial greedy metrics
         
         # train
         rng, _rng = jax.random.split(rng)
         runner_state = (
             train_state,
-            target_network_params,
+            target_network_state,
             env_state,
             buffer_state,
             time_state,
@@ -809,14 +1008,13 @@ def make_train(config, env):
     
     return train
 
-@hydra.main(version_base=None, config_path="./config", config_name="config")
-def main(config):
+def signle_run(config):
     config = OmegaConf.to_container(config)
 
     print('Config:\n', OmegaConf.to_yaml(config))
 
     env_name = config["env"]["ENV_NAME"]
-    alg_name = f'qmix_transf'
+    alg_name = f'transf_qmix_smax'
     
     # smac init neeeds a scenario
     if 'smax' in env_name.lower():
@@ -870,6 +1068,75 @@ def main(config):
         print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
 
 
+def tune(default_config):
+
+    import copy
+
+    """sweep hyperparam tuning with wandb"""
+
+    default_config = OmegaConf.to_container(default_config)
+
+    print('Config:\n', OmegaConf.to_yaml(default_config))
+
+    def wrapped_make_train():
+
+        wandb.init(project=default_config['PROJECT'])
+        # update the default params
+        config = copy.deepcopy(default_config)
+        for k, v in dict(wandb.config).items():
+            config['alg'][k] = v
+            
+        print('running experiment with params:', config)
+        
+        env_name = config["env"]["ENV_NAME"]
+        # smac init neeeds a scenario
+        if 'smax' in env_name.lower():
+            config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
+            env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
+            env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+            env = SMAXLogWrapper(env)
+        # overcooked needs a layout 
+        elif 'overcooked' in env_name.lower():
+            config['env']["ENV_KWARGS"]["layout"] = overcooked_layouts[config['env']["ENV_KWARGS"]["layout"]]
+            env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+            env = LogWrapper(env)
+        else:
+            env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+            env = LogWrapper(env)
+
+        rng = jax.random.PRNGKey(config["SEED"])
+        rngs = jax.random.split(rng, config["NUM_SEEDS"])
+        train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
+        outs = jax.block_until_ready(train_vjit(rngs))
+
+    n_updates = (
+        default_config["alg"]["TOTAL_TIMESTEPS"] // default_config["alg"]["NUM_STEPS"] // default_config["alg"]["NUM_ENVS"]
+    )*default_config["NUM_SEEDS"] # 2 seeds will log double, 3 seeds will log triple and so on
+    sweep_config = {
+        'method': 'bayes',
+        'metric': {
+            'name': 'test_returns',
+            'goal': 'maximize',
+        },
+        'parameters':{
+            'LR':{'values':[0.01, 0.005, 0.001, 0.0005]},
+            'LR_EXP_DECAY_RATE':{'values':[0.02, 0.002, 0.0002, 0.00002]},
+            'EPS_ADAM':{'values':[0.0001, 0.0000001, 0.0000000001]},
+            'NUM_ENVS':{'values':[16, 32]},
+            'N_MINI_UPDATES':{'values':[2, 4, 8]},
+            'LR_LINEAR_DECAY':{'values':[True, False]},
+        },
+    }
+
+    wandb.login()
+    sweep_id = wandb.sweep(sweep_config, entity=default_config['ENTITY'],project=default_config['PROJECT'])
+    wandb.agent(sweep_id, wrapped_make_train, count=100)
+    #wandb.agent('mttga/transf_qmix_tuning/36fywloe', wrapped_make_train, count=100)
+
+@hydra.main(version_base=None, config_path="./config", config_name="config")
+def main(config):
+    #tune(config)
+    signle_run(config)
+
 if __name__ == "__main__":
     main()
-    
