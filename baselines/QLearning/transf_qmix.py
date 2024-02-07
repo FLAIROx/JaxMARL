@@ -1,19 +1,12 @@
 """
-End-to-End JAX Implementation of VDN.
+End-to-End JAX Implementation of TransfQMix.
 
-Notice:
-- Agents are controlled by a single RNN architecture.
-- You can choose if sharing parameters between agents or not.
-- Works also with non-homogenous agents (different obs/action spaces)
-- Experience replay is a simple buffer with uniform sampling.
-- Uses Double Q-Learning with a target agent network (hard-updated).
-- You can use TD Loss (pymarl2) or DDQN loss (pymarl)
-- Adam optimizer is used instead of RMSPROP.
-- The environment is reset at the end of each episode.
-- Trained with a team reward (reward['__all__'])
-- At the moment, last_actions are not included in the agents' observations.
+The implementation closely follows the original one https://github.com/mttga/pymarl_transformers with some additional features:
+- The embeddings can be normalized with batch norm in order to stabilize the self-attention gradients.
+- It's added the possibility to perform $n$ training updates of the network at each update step. 
 
-The implementation closely follows the original Pymarl: https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py
+Currently supports only MPE_spread and SMAX. Remember that to use the transformers in your environment you need 
+to reshape the observations and states into matrices. See: jaxmarl.wrappers.transformers
 """
 
 import os
@@ -30,7 +23,6 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 import flashbax as fbx
-from flax.core import frozen_dict
 import wandb
 import hydra
 from omegaconf import OmegaConf
@@ -38,11 +30,11 @@ from safetensors.flax import save_file
 from flax.traverse_util import flatten_dict
 
 from jaxmarl import make
-from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, CTRolloutManager
+from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper
+from jaxmarl.wrappers.transformers import TransformersCTRolloutManager
 from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.environments.overcooked import overcooked_layouts 
 
-from fast_attention import make_fast_generalized_attention
 from typing import Any
 
 
@@ -57,6 +49,7 @@ class EncoderBlock(nn.Module):
     def setup(self):
         # Attention layer
         if self.use_fast_attention:
+            from utils.fast_attention import make_fast_generalized_attention
             raw_attention_fn = make_fast_generalized_attention(
                 self.hidden_dim // self.num_heads,
                 renormalize_attention=True,
@@ -95,7 +88,7 @@ class EncoderBlock(nn.Module):
         attended = self.self_attn(inputs_q=x, inputs_kv=x, mask=mask, deterministic=deterministic)
 
         x = self.norm1(attended + x)
-        #x = x + self.dropout(x, deterministic=deterministic)
+        x = x + self.dropout(x, deterministic=deterministic)
 
         # MLP part
         feedforward = self.linear[0](x)
@@ -103,14 +96,14 @@ class EncoderBlock(nn.Module):
         feedforward = self.linear[1](feedforward)
 
         x = self.norm2(feedforward+x)
-        #x = x + self.dropout(x, deterministic=deterministic)
+        x = x + self.dropout(x, deterministic=deterministic)
 
         return x
 
 
 class Embedder(nn.Module):
     hidden_dim: int
-    init_scale: int
+    init_scale: float
     scale_inputs: bool = True
     activation: bool = False
     @nn.compact
@@ -226,12 +219,13 @@ class TransformerAgent(nn.Module):
         
 
 class TransformerAgentSmax(nn.Module):
+    # variation of transformer agent which uses policy decomposition to
+    # compute the q-values of attacking an enemy from the embedding of that enemy
     action_dim: int
     hidden_dim: int
     init_scale_emb: float
     init_scale_transf: float
     init_scale_q: float
-    init_scale_q_attack: float
     transf_num_layers: int
     transf_num_heads: int
     transf_dim_feedforward: int
@@ -268,13 +262,21 @@ class TransformerAgentSmax(nn.Module):
         
         # q_vals for the movement actions are computed from agents hidden states
         hidden_states = embeddings[..., 0:1, :]
-        q_mov = nn.Dense(5, kernel_init=orthogonal(self.init_scale_q), bias_init=constant(0.0))(hidden_states) # time_step, batch_size, 1, 5
+        q_mov = nn.Dense(
+            self.num_movement_actions,
+            kernel_init=orthogonal(self.init_scale_q),
+            bias_init=constant(0.0),
+        )(hidden_states) # time_step, batch_size, 1, 5
         
         # q_vals for attacking an enemy is computed from attacking that enemy
         n_enemies = self.action_dim-self.num_movement_actions
         enemy_embeddings = embeddings[..., -n_enemies-1:-1, :] # last embedding is 'self', just before are the enemies
 
-        q_attack = nn.Dense(1, kernel_init=orthogonal(self.init_scale_q_attack), bias_init=constant(0.0))(enemy_embeddings) # time_step, batch_size, n_enemies, 1
+        q_attack = nn.Dense(
+            1,
+            kernel_init=orthogonal(self.init_scale_q),
+            bias_init=constant(0.0)
+        )(enemy_embeddings) # time_step, batch_size, n_enemies, 1
         q_vals = jnp.concatenate((q_mov,jnp.swapaxes(q_attack, -1, -2)), axis=-1)
         
         if return_all_hs:
@@ -284,9 +286,7 @@ class TransformerAgentSmax(nn.Module):
     
 
 class TransformerMixer(nn.Module):
-    """
-    Mixing network for projecting individual agent Q-values into Q_tot. Follows the original QMix implementation.
-    """
+
     hidden_dim: int
     init_scale: float
     transf_num_layers: int
@@ -371,6 +371,7 @@ class EpsilonGreedy:
         chosen_actions = jax.tree_map(lambda q, k: explore(q, eps, k), q_vals, keys)
         return chosen_actions
 
+
 class Transition(NamedTuple):
     obs: dict
     actions: dict
@@ -387,78 +388,6 @@ def tree_mean(tree):
 
 def make_train(config, env):
 
-    # WRAP THE ENV FOR TRANSFORMERS (currently supports only MPE and SMAX)
-    if 'smax' in env.name.lower():
-        # For SMAX the simplest approach is to post-process the obs
-        def smax_obs_vec_to_matrix(self, obs, extra_feats):
-            # extract the features relative to others and self and make a matrix
-            others_feats = obs[:(self._env.obs_size-len(self._env.own_features))].reshape(-1, len(self._env.unit_features))
-            self_feats = obs[-len(self._env.own_features):]
-            pad_width = [(0, max(0, others_feats.shape[-1] - self_feats.shape[-1]))]
-            self_feats = jnp.pad(self_feats, pad_width, mode='constant', constant_values=0)
-            rel_feats = jnp.concatenate((others_feats, self_feats[np.newaxis, :]), axis=0)
-            # the last obs vector refers to self
-            is_self_feat = jnp.zeros(self.num_allies+self.num_enemies).at[-1].set(1)
-            # first are teamates, then enemies and finally the self
-            is_agent_feat = jnp.concatenate((jnp.ones(self._env.num_allies-1), jnp.zeros(self._env.num_enemies), jnp.ones(1)))
-            feats = jnp.concatenate((
-                rel_feats,
-                is_agent_feat[:, None],
-                is_self_feat[:, None],
-            ), axis=1)
-            return feats
-        def smax_global_state(self, obs, state):
-            # extract the main feats that are defined for all the entities
-            main_feats = obs['world_state'][:len(self._env.own_features)*(self._env.num_allies+self._env.num_enemies)]
-            main_feats = main_feats.reshape(self._env.num_allies+self._env.num_enemies, -1)
-            
-            # the other feats are is_agent and unit_type, defined for each entity
-            other_feats = obs['world_state'][len(self._env.own_features)*(self._env.num_allies+self._env.num_enemies):]
-            other_feats = jnp.swapaxes(other_feats.reshape(-1, self._env.num_allies+self._env.num_enemies), 0,1)
-            
-            return jnp.concatenate((main_feats, other_feats), axis=1)
-        preprocess_obs = True
-        CTRolloutManager._preprocess_obs = smax_obs_vec_to_matrix
-        CTRolloutManager.global_state = smax_global_state
-        CTRolloutManager.global_reward = lambda self, rewards: rewards[self.training_agents[0]]
-        env.name = 'custom_env'
-    elif 'spread' in env.name.lower():
-        # For SPREAD it is simpler to build the obs from scratch as matrices
-        def wrapped_get_obs(self, state):
-            # relative position between agents and other entities
-            rel_pos = state.p_pos - state.p_pos[:self.num_agents, None, :]
-            is_self_feat  = (jnp.arange(self.num_entities) == jnp.arange(self.num_agents)[:, np.newaxis])
-            is_agent_feat = jnp.tile(
-                jnp.concatenate((jnp.ones(self.num_agents), jnp.zeros(self.num_landmarks))),
-                (self.num_agents, 1)
-            )
-            feats = jnp.concatenate((
-                rel_pos,
-                is_self_feat[:, :, None],
-                is_agent_feat[:, :, None],
-            ), axis=2)
-
-            obs = {
-                a:feats[i]
-                for i, a in enumerate(self.agents)
-            }
-            
-            obs['world_state'] = jnp.concatenate((
-                state.p_pos,
-                state.p_vel,
-                is_agent_feat[0][:, None]
-            ), axis=1)
-            
-            return obs
-        preprocess_obs = False
-        type(env._env).get_obs = wrapped_get_obs
-        CTRolloutManager.global_state = lambda self, obs, state: obs['world_state']
-    elif 'utracking' in env.name.lower():
-        # utracking already gives the observations as matrices
-        preprocess_obs = False
-    else:
-        raise NotImplementedError('This implemention currently supports only MPE_spread, UTracking and SMAX')
-
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
@@ -467,8 +396,8 @@ def make_train(config, env):
 
         # INIT ENV
         rng, _rng = jax.random.split(rng)
-        wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"], preprocess_obs=preprocess_obs)
-        test_env = CTRolloutManager(env, batch_size=config["NUM_TEST_EPISODES"], preprocess_obs=preprocess_obs) # batched env for testing (has different batch size)
+        wrapped_env = TransformersCTRolloutManager(env, batch_size=config["NUM_ENVS"])
+        test_env = TransformersCTRolloutManager(env, batch_size=config["NUM_TEST_EPISODES"]) # batched env for testing (has different batch size)
         init_obs, env_state = wrapped_env.batch_reset(_rng)
         init_dones = {agent:jnp.zeros((config["NUM_ENVS"]), dtype=bool) for agent in env.agents+['__all__']}
 
@@ -496,54 +425,38 @@ def make_train(config, env):
         buffer_state = buffer.init(sample_traj_unbatched) 
 
         # INIT NETWORK
-        if env.name=='custom_env': # smax
-            n_entities = wrapped_env._env.num_allies+wrapped_env._env.num_enemies
-            agent = TransformerAgentSmax(
-                action_dim=wrapped_env.max_action_space,
-                hidden_dim=config['AGENT_HIDDEN_DIM'],
-                init_scale_emb=config['AGENT_INIT_SCALE'],
-                init_scale_transf=config['AGENT_INIT_SCALE'],
-                init_scale_q=config['AGENT_INIT_SCALE'],
-                init_scale_q_attack=config['AGENT_INIT_SCALE'],
-                transf_num_layers=config['AGENT_TRANSF_NUM_LAYERS'],
-                transf_num_heads=config['AGENT_TRANSF_NUM_HEADS'],
-                transf_dim_feedforward=config['AGENT_TRANSF_DIM_FF'],
-                use_fast_attention=config['USE_FAST_ATTENTION'],
-                scale_inputs=config['SCALE_INPUTS'],
-                relu_emb=config['EMBEDDER_USE_RELU'],
-                transf_dropout_prob=0.,
-                deterministic=True,
-            )
-            rng, _rng = jax.random.split(rng)
+        # init agent
+        if env.name=='smax': # smax agent 
+            agent_class = TransformerAgentSmax
+            n_entities = wrapped_env._env.num_allies+wrapped_env._env.num_enemies # must be explicit for the n_entities if using policy decoupling
             init_x = (
                 jnp.zeros((1, 1, n_entities, sample_traj.obs[env.agents[0]].shape[-1])), # (time_step, batch_size, n_entities, obs_size)
                 jnp.zeros((1, 1)) # (time_step, batch size)
             )
-            init_hs = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], 1, 1) # (batch_size, hidden_dim)
-            agent_params = agent.init(_rng, init_hs, init_x, train=False)
         else:
-            agent = TransformerAgent(
-                action_dim=wrapped_env.max_action_space,
-                hidden_dim=config['AGENT_HIDDEN_DIM'],
-                init_scale_emb=config['AGENT_INIT_SCALE'],
-                init_scale_transf=config['AGENT_INIT_SCALE'],
-                init_scale_q=config['AGENT_INIT_SCALE'],
-                transf_num_layers=config['AGENT_TRANSF_NUM_LAYERS'],
-                transf_num_heads=config['AGENT_TRANSF_NUM_HEADS'],
-                transf_dim_feedforward=config['AGENT_TRANSF_DIM_FF'],
-                use_fast_attention=config['USE_FAST_ATTENTION'],
-                scale_inputs=config['SCALE_INPUTS'],
-                relu_emb=config['EMBEDDER_USE_RELU'],
-                transf_dropout_prob=0.,
-                deterministic=True,
-            )
-            rng, _rng = jax.random.split(rng)
+            agent_class = TransformerAgent
             init_x = (
                 jnp.zeros((1, 1, 1, sample_traj.obs[env.agents[0]].shape[-1])), # (time_step, batch_size, n_entities, obs_size)
                 jnp.zeros((1, 1)) # (time_step, batch size)
             )
-            init_hs = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], 1, 1) # (batch_size, hidden_dim)
-            agent_params = agent.init(_rng, init_hs, init_x, train=False)
+        agent = agent_class(
+            action_dim=wrapped_env.max_action_space,
+            hidden_dim=config['AGENT_HIDDEN_DIM'],
+            init_scale_emb=config['AGENT_INIT_SCALE'],
+            init_scale_transf=config['AGENT_INIT_SCALE'],
+            init_scale_q=config['AGENT_INIT_SCALE'],
+            transf_num_layers=config['AGENT_TRANSF_NUM_LAYERS'],
+            transf_num_heads=config['AGENT_TRANSF_NUM_HEADS'],
+            transf_dim_feedforward=config['AGENT_TRANSF_DIM_FF'],
+            use_fast_attention=config['USE_FAST_ATTENTION'],
+            scale_inputs=config['SCALE_INPUTS'],
+            relu_emb=config['EMBEDDER_USE_RELU'],
+            transf_dropout_prob=0.,
+            deterministic=True,
+        )
+        rng, _rng = jax.random.split(rng)
+        init_hs = ScannedTransformer.initialize_carry(config['AGENT_HIDDEN_DIM'], 1, 1) # (batch_size, hidden_dim)
+        agent_params = agent.init(_rng, init_hs, init_x, train=False)
 
         # init mixer
         rng, _rng = jax.random.split(rng)
@@ -583,7 +496,10 @@ def make_train(config, env):
             return config["LR"] * frac
         def exponential_schedule(count):
             return config["LR"] * (1-config['LR_EXP_DECAY_RATE'])**count
-        if config.get('LR_COSINE_WARMUP', False):
+        
+        decay_type = config.get('LR_DECAY_TYPE', False)
+
+        if decay_type == 'cos':
             lr = optax.warmup_cosine_decay_schedule(
                 init_value=0.0,
                 peak_value=config["LR"],
@@ -591,12 +507,13 @@ def make_train(config, env):
                 decay_steps=config["NUM_UPDATES"],
                 end_value=0.0
             )
-        elif config.get('LR_EXP_DECAY', True):
+        elif decay_type == 'exp':
             lr = exponential_schedule
-        elif config.get('LR_LINEAR_DECAY', False):
+        elif 'linear':
             lr = linear_schedule
         else:
             lr = config['LR']
+
         tx = optax.chain(
             optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
             optax.adam(learning_rate=lr, eps=config['EPS_ADAM']),
@@ -733,7 +650,7 @@ def make_train(config, env):
                 return jnp.squeeze(q_u, axis=-1)
             
 
-            def _update_epoch(carry, unused):
+            def _network_update(carry, unused):
 
                 train_state, rng = carry
 
@@ -855,12 +772,11 @@ def make_train(config, env):
             update_info_zero = dict(zip(['loss', 'targets', 'grad'], [jnp.zeros(config['N_MINI_UPDATES'])]*3)) # default update info when cannot sample
             (train_state, rng), update_info = jax.lax.cond(
                 buffer.can_sample(buffer_state),
-                lambda train_state, rng: jax.lax.scan(_update_epoch, (train_state, rng), None, config['N_MINI_UPDATES']),
+                lambda train_state, rng: jax.lax.scan(_network_update, (train_state, rng), None, config['N_MINI_UPDATES']),
                 lambda train_state, rng: ((train_state, rng), update_info_zero), # do nothing
                 train_state,
                 _rng
             )
-
 
             # UPDATE THE VARIABLES AND RETURN
             # reset the environment
@@ -931,7 +847,10 @@ def make_train(config, env):
                 rng
             )
 
-            return runner_state, None #metrics # don't return metrics by default to save memory
+            if config.get('WANDB_ONLINE_REPORT', False):
+                return runner_state, None # don't return metrics if you're using wandb to save memory
+            else:
+                return runner_state, metrics
 
         def get_greedy_metrics(rng, train_state, time_state):
             """Help function to test greedy policy during training"""
@@ -1008,15 +927,17 @@ def make_train(config, env):
     
     return train
 
+
 def signle_run(config):
+    """Perform a single run with multiple parallel seeds in one env."""
     config = OmegaConf.to_container(config)
 
     print('Config:\n', OmegaConf.to_yaml(config))
 
     env_name = config["env"]["ENV_NAME"]
-    alg_name = f'transf_qmix_smax'
+    alg_name = f'transf_qmix'
     
-    # smac init neeeds a scenario
+    # smax init neeeds a scenario
     if 'smax' in env_name.lower():
         config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
         env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
@@ -1039,8 +960,6 @@ def signle_run(config):
         tags=[
             alg_name.upper(),
             env_name.upper(),
-            "RNN",
-            "TD_LOSS" if config["alg"].get("TD_LAMBDA_LOSS", True) else "DQN_LOSS",
             f"jax_{jax.__version__}",
         ],
         name=f'{alg_name}_{env_name}',
@@ -1069,10 +988,8 @@ def signle_run(config):
 
 
 def tune(default_config):
-
+    """Hyperparameter sweep with wandb."""
     import copy
-
-    """sweep hyperparam tuning with wandb"""
 
     default_config = OmegaConf.to_container(default_config)
 
@@ -1124,18 +1041,16 @@ def tune(default_config):
             'EPS_ADAM':{'values':[0.0001, 0.0000001, 0.0000000001]},
             'NUM_ENVS':{'values':[16, 32]},
             'N_MINI_UPDATES':{'values':[2, 4, 8]},
-            'LR_LINEAR_DECAY':{'values':[True, False]},
         },
     }
 
     wandb.login()
     sweep_id = wandb.sweep(sweep_config, entity=default_config['ENTITY'],project=default_config['PROJECT'])
     wandb.agent(sweep_id, wrapped_make_train, count=100)
-    #wandb.agent('mttga/transf_qmix_tuning/36fywloe', wrapped_make_train, count=100)
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
 def main(config):
-    #tune(config)
+    #tune(config) # uncomment to run hypertuning
     signle_run(config)
 
 if __name__ == "__main__":

@@ -253,6 +253,10 @@ class CTRolloutManager(JaxMARLWrapper):
         elif 'overcooked' in env.name.lower():
             self.global_state = lambda obs, state:  jnp.concatenate([obs[agent].ravel() for agent in self.agents], axis=-1)
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
+        elif 'utracking' in env.name.lower():
+            self.global_state = lambda obs, state: obs['world_state'].ravel() if preprocess_obs else obs['world_state']
+            self.global_reward = lambda rewards: rewards[self.training_agents[0]]
+
     
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key):
