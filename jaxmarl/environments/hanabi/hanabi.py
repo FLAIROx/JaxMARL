@@ -30,6 +30,7 @@ class State:
     last_round_count: int
     bombed: bool
     remaining_deck_size: chex.Array
+    turn: int
 
 
 class HanabiGame(MultiAgentEnv):
@@ -243,7 +244,8 @@ class HanabiGame(MultiAgentEnv):
             out_of_lives=out_of_lives,
             last_round_count=last_round_count,
             bombed=bombed,
-            remaining_deck_size=remaining_deck_size
+            remaining_deck_size=remaining_deck_size,
+            turn=0,
         )
 
         return self.get_obs(state), state
@@ -532,7 +534,8 @@ class HanabiGame(MultiAgentEnv):
                              cur_player_idx=cur_player_idx,
                              out_of_lives=out_of_lives,
                              last_round_count=last_round_count,
-                             bombed=bombed
+                             bombed=bombed,
+                             turn=state.turn+1,
                              ), reward
 
     def terminal(self, state: State) -> bool:

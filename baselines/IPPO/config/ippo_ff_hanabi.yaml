@@ -15,6 +15,6 @@
 "ANNEAL_LR": False
 
 # WandB Params
-"WANDB_MODE": "disabled"
-"ENTITY": ""
-"PROJECT": "jaxmarl-hanabi"
+"WANDB_MODE": "online"
+"ENTITY": "mttga"
+"PROJECT": "hanabi"
