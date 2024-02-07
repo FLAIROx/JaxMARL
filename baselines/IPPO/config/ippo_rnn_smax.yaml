@@ -1,6 +1,7 @@
 "LR": 0.004
 "NUM_ENVS": 128
 "NUM_STEPS": 128
+"GRU_HIDDEN_DIM": 256
 "TOTAL_TIMESTEPS": 1e7
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
@@ -22,6 +23,6 @@
 "ANNEAL_LR": True
 
 # WandB Params
-"ENTITY": ""
+"ENTITY": ${oc.env:WANDB_ENTITY}
 "PROJECT": "jaxmarl-smax"
 "WANDB_MODE" : "disabled"

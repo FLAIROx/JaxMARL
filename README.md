@@ -84,6 +84,7 @@ pip install jaxmarl
 2. The requirements for IPPO & MAPPO can be installed with:
     ``` 
     pip install -e .
+    export PYTHONPATH=./JaxMARL:$PYTHONPATH
     ```
 3. If you would also like to run the Q-learning algorithms, Python 3.9 is required along with additional dependencies:
     ``` 
