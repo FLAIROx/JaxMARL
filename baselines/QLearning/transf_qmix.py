@@ -426,7 +426,7 @@ def make_train(config, env):
 
         # INIT NETWORK
         # init agent
-        if env.name=='smax': # smax agent 
+        if 'smax' in env.name.lower(): # smax agent 
             agent_class = TransformerAgentSmax
             n_entities = wrapped_env._env.num_allies+wrapped_env._env.num_enemies # must be explicit for the n_entities if using policy decoupling
             init_x = (
