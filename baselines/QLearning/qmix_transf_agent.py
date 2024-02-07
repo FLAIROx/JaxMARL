@@ -42,7 +42,7 @@ from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, CTRolloutMana
 from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.environments.overcooked import overcooked_layouts 
 
-from fast_attention import make_fast_generalized_attention
+from utils.fast_attention import make_fast_generalized_attention
 
 
 class EncoderBlock(nn.Module):
