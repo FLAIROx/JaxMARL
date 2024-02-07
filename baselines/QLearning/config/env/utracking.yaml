@@ -1,0 +1,8 @@
+"ENV_NAME": "utracking"
+"ENV_KWARGS":
+  "num_agents": 3
+  "num_landmarks": 3
+  "dt": 30 # should be 30 or 60
+  "min_init_distance": 100
+  "max_init_distance": 300
+  "prop_range_landmark": [0, 5, 10]
