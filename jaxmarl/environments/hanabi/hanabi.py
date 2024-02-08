@@ -31,13 +31,27 @@ class State:
     bombed: bool
     remaining_deck_size: chex.Array
     turn: int
+    score: int
 
 
 class HanabiGame(MultiAgentEnv):
 
-    def __init__(self, num_agents=2, num_colors=5, num_ranks=5, hand_size=5, max_info_tokens=8, max_life_tokens=3,
-                 num_cards_of_rank=np.array([3, 2, 2, 2, 1]), agents=None, action_spaces=None, observation_spaces=None,
-                 obs_size=None, num_moves=None):
+    def __init__(
+        self,
+        num_agents=2,
+        num_colors=5,
+        num_ranks=5,
+        hand_size=5,
+        max_info_tokens=8,
+        max_life_tokens=3,
+        num_cards_of_rank=np.array([3, 2, 2, 2, 1]),
+        agents=None,
+        action_spaces=None,
+        observation_spaces=None,
+        obs_size=None,
+        num_moves=None,
+        color_map=['R', 'Y', 'G', 'W', 'B'],
+    ):
         super().__init__(num_agents)
 
         self.num_agents = num_agents
@@ -49,6 +63,7 @@ class HanabiGame(MultiAgentEnv):
         self.max_life_tokens = max_life_tokens
         self.num_cards_of_rank = num_cards_of_rank
         self.deck_size = jnp.sum(num_cards_of_rank) * num_colors
+        self.color_map = color_map
 
         if agents is None:
             self.agents = [f"agent_{i}" for i in range(num_agents)]
@@ -246,6 +261,7 @@ class HanabiGame(MultiAgentEnv):
             bombed=bombed,
             remaining_deck_size=remaining_deck_size,
             turn=0,
+            score=0,
         )
 
         return self.get_obs(state), state
@@ -384,12 +400,12 @@ class HanabiGame(MultiAgentEnv):
             # color hint knowledge removal
             player_colors_revealed = state.colors_revealed.at[aidx].get()
             player_colors_revealed = jnp.delete(player_colors_revealed, card_idx, axis=0, assume_unique_indices=True)
-            player_colors_revealed = jnp.append(player_colors_revealed, jnp.ones((1, self.num_colors)), axis=0)
+            player_colors_revealed = jnp.append(player_colors_revealed, jnp.zeros((1, self.num_colors)), axis=0)
             colors_revealed = state.colors_revealed.at[aidx].set(player_colors_revealed)
             # rank hint knowledge removal
             player_ranks_revealed = state.ranks_revealed.at[aidx].get()
             player_ranks_revealed = jnp.delete(player_ranks_revealed, card_idx, axis=0, assume_unique_indices=True)
-            player_ranks_revealed = jnp.append(player_ranks_revealed, jnp.ones((1, self.num_ranks)), axis=0)
+            player_ranks_revealed = jnp.append(player_ranks_revealed, jnp.zeros((1, self.num_ranks)), axis=0)
             ranks_revealed = state.ranks_revealed.at[aidx].set(player_ranks_revealed)
 
             # deal a new card
@@ -471,8 +487,13 @@ class HanabiGame(MultiAgentEnv):
             total_color_hint = color_hints + negative_color_hints
             total_rank_hint = rank_hints + negative_rank_hints
 
-            new_knowledge = (cur_knowledge - (is_color_hint * total_color_hint)).clip(min=0)
-            new_knowledge = (cur_knowledge - (is_rank_hint * total_rank_hint)).clip(min=0)
+            new_color_knowledge = (cur_knowledge - (is_color_hint * total_color_hint)).clip(min=0)
+            new_rank_knowledge = (cur_knowledge - (is_rank_hint * total_rank_hint)).clip(min=0)
+            new_knowledge = jnp.where(
+                is_color_hint,
+                new_color_knowledge,
+                new_rank_knowledge
+            )
             card_knowledge = state.card_knowledge.at[hint_player].set(new_knowledge)
 
             colors_revealed_player = jnp.outer(color_hint_matches, hint_color)
@@ -531,6 +552,7 @@ class HanabiGame(MultiAgentEnv):
                              last_round_count=last_round_count,
                              bombed=bombed,
                              turn=state.turn+1,
+                             score=state.score+reward.astype(int)
                              ), reward
 
     def terminal(self, state: State) -> bool:

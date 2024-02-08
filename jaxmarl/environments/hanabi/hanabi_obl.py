@@ -5,6 +5,7 @@ from jax import lax
 import chex
 from flax import struct
 from typing import Tuple, Dict
+import pprint
 from functools import partial
 from gymnax.environments.spaces import Discrete
 from .hanabi import HanabiGame, State
@@ -44,7 +45,7 @@ class HanabiOBL(HanabiGame):
             num_moves=num_moves
         )
 
-        self.debug = debug
+        self.debug = debug # assumes you're disabling jit
 
         # useful ranges to know the type of the action
         self.discard_action_range = jnp.arange(0, self.hand_size)
@@ -113,8 +114,13 @@ class HanabiOBL(HanabiGame):
 
         info = {}
 
+        obs = lax.stop_gradient(self.get_obs(new_state, old_state, action))
+
+        if self.debug:
+            self.render_obs(obs)
+
         return (
-            lax.stop_gradient(self.get_obs(old_state, new_state, action)),
+            obs,
             lax.stop_gradient(new_state),
             rewards,
             dones,
@@ -240,8 +246,8 @@ class HanabiOBL(HanabiGame):
         card_played_score = (new_state.fireworks.sum(axis=(0,1)) - old_state.fireworks.sum(axis=(0,1)))!=0
         added_info_tokens = new_state.info_tokens.sum() > old_state.info_tokens.sum()
 
-        if self.debug:
-            print({
+        if False:
+            feats = {
                 'acting_player_relative_index':acting_player_relative_index,
                 'move_type':move_type,
                 'target_player_relative_index':target_player_relative_index,
@@ -252,7 +258,9 @@ class HanabiOBL(HanabiGame):
                 'played_discarded_card':played_discarded_card.reshape(self.num_colors, self.num_ranks),
                 'card_played_score':card_played_score[np.newaxis], # scalar
                 'added_info_tokens':added_info_tokens[np.newaxis], # scalar 
-            })
+            }
+            print(f'Last Action Feats of agent_{aidx}')
+            pprint.pprint(feats)
         
         last_action = jnp.concatenate((
             acting_player_relative_index,
@@ -311,9 +319,9 @@ class HanabiOBL(HanabiGame):
             rel_pos(state.card_knowledge),
             rel_pos(state.colors_revealed),
             rel_pos(state.ranks_revealed),
-        ).ravel()
+        )
 
-        return belief
+        return belief.ravel()
 
     
     @partial(jax.jit, static_argnums=[0])
@@ -329,9 +337,110 @@ class HanabiOBL(HanabiGame):
             )
             return jnp.concatenate(tree)
 
-        return jax.vmap(binarize_ranks)(discard_pile.sum(axis=0)).ravel()
+        binarized_pile = jax.vmap(binarize_ranks)(discard_pile.sum(axis=0)).ravel()
+        
+        return binarized_pile
     
+    def render_obs(self, obs:dict):
+        # print the dictionary of agents observations
+        for i, (agent, obs) in enumerate(obs.items()):
+            print(f'Obs for {agent}')
+            j = 0
+            print('hand feats', obs[:self.hands_n_feats])
+            j+=self.hands_n_feats
+            print('board feats', obs[j:j+self.board_n_feats])
+            j+=self.board_n_feats
+            print('discard feats', obs[j:j+self.discards_n_feats])
+            j+=self.discards_n_feats
+            print('last action feats', obs[j:j+self.last_action_n_feats])
+            j+=self.last_action_n_feats
+            beliefs = obs[-self.v0_belief_n_feats:].reshape(self.num_agents, self.hand_size, -1)
+            for z, b in enumerate(beliefs):
+                b = b[:, :self.num_colors*self.num_ranks].reshape(-1, self.num_colors, self.num_ranks)
+                print(f'agent {i} representation of the belief of its {z}th-relative agent:', b)
 
+    def render(self, state:State, debug:bool=False):
+        # prints in console the state as string
+
+        def card_to_string(card:chex.Array)->str:
+            # transforms a card matrix to string
+            if ~card.any(): # empyt card
+                return ''
+            color = jnp.argmax(card.sum(axis=1), axis=0)
+            rank  = jnp.argmax(card.sum(axis=0), axis=0)
+            return f'{self.color_map[color]}{rank+1}'
+
+        def get_actor_hand_str(aidx:int)->str:
+            # get the index of an actor and returns its hand (with knowledge per card) as string
+            # TODO: missing the first numbers, don't know what they are
+
+            colors_revealed = np.array(state.colors_revealed[aidx])
+            ranks_revealed  = np.array(state.ranks_revealed[aidx])
+            knowledge = np.array(state.card_knowledge[aidx].reshape(self.hand_size, self.num_colors, self.num_ranks))
+            actor_hand = np.array(state.player_hands[aidx])
+
+            if debug:
+                #print(f'knowledge of player {aidx}', knowledge)
+                print(f'colors_revealed player {aidx}', colors_revealed)
+                print(f'ranks_revealed player {aidx}', ranks_revealed)
+        
+            def get_card_knowledge_str(card_idx:int)->str:
+                color_hint = colors_revealed[card_idx]
+                rank_hint  = ranks_revealed[card_idx]
+                card_hint = (
+                    f"{'X' if ~color_hint.any() else self.color_map[jnp.argmax(color_hint)]}"+
+                    f"{'X' if ~rank_hint.any() else jnp.argmax(rank_hint)+1}"
+                )
+            
+                color_knowledge = knowledge[card_idx].any(axis=1)
+                rank_knowledge = knowledge[card_idx].any(axis=0)
+                color_knowledge_str = ''.join(c for c, bool_idx in zip(self.color_map,color_knowledge) if bool_idx)
+                rank_knowledge_str = ''.join(str(r) for r in jnp.where(rank_knowledge)[0]+1)
+                card_knowledge = color_knowledge_str+rank_knowledge_str
+            
+                return f'{card_hint}|{card_knowledge}'
+        
+            
+            actor_hand_str = [
+                f"{card_to_string(actor_hand[card_idx])} || {get_card_knowledge_str(card_idx)}"
+                for card_idx in range(self.hand_size)
+            ]
+        
+            return actor_hand_str
+
+        keep_only_last_one = lambda x: jnp.where(
+            jnp.arange(x.size)<(x.size - 1 - jnp.argmax(jnp.flip(x))), # last argmax
+            0,
+            x
+        )
+        fireworks = jax.vmap(keep_only_last_one)(state.fireworks)
+        fireworks_cards = [
+            jnp.zeros((self.num_colors, self.num_ranks)).at[i].set(fireworks[i])
+            for i in range(self.num_colors)
+        ]
+        
+        board_info = {
+            'turn': state.turn,
+            'score': state.score,
+            'information': int(state.info_tokens.sum()),
+            'lives': int(state.life_tokens.sum()),
+            'deck': int(state.deck.sum()),
+            'discards':' '.join(card_to_string(card) for card in state.discard_pile),
+            'fireworks':' '.join(card_to_string(card) for card in fireworks_cards),
+        }
+        
+        for i, (k, v) in enumerate(board_info.items()):
+            print(f'{k.capitalize()}: {v}')
+            if i==0:
+                print()
+
+        current_player = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
+        for aidx in range(self.num_agents):
+            print(f'Actor {aidx} Hand:' + ('<-- current player' if aidx==current_player else ''))
+            for card_str in get_actor_hand_str(aidx):
+                print(card_str)
+        
+        print('---')
 
 
 
