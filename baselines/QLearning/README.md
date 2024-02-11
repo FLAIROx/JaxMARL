@@ -1,16 +1,29 @@
 # QLearning Baselines
 
-*Pure Jax implementation of **IQL** (Independent Q-Learners), **VDN** (Value Decomposition Network), and **QMix**. These implementations follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase.*
+
+Pure JAX implementations of:
+* IQL (Independent Q-Learners)
+* VDN (Value Decomposition Network)
+* QMIX
+* SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)
+
+The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning)
 
 ```
-⚠️ The implementations were tested with Python 3.8 and Jax 0.4.8 -> 0.4.11. 
-With Jax 0.4.13, you could experience a degradation of performance.
+⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
+With Jax 0.4.13, you could experience a degradation of performance. 
+```
+
+We use [`flashbax`](https://github.com/instadeepai/flashbax) to provide our replay buffers, this requires Python 3.9 and the dependency can be installed with:
+``` 
+pip install -r requirements/requirements-qlearning.txt 
 ```
 
 ```
 ❗The implementations were tested in the following environments:
 - MPE
 - SMAX
+- Hanabi
 ```
 
 ## 🔎 Implementation Details
@@ -28,7 +41,7 @@ General features:
 - Trained with a team reward (reward['__all__']).
 - At the moment, last_actions are not included in the agents' observations.
 
-All the algorithms use the `CTRolloutManager` environment wrapper (found in utils.py), which is used to:
+All the algorithms take advantage of the `CTRolloutManager` environment wrapper (found in `jaxmarl.wrappers.baselines`), which is used to:
 
 - Batchify the step and reset functions to run parallel environments.
 - Add a global observation (`obs["__all__"]`) and a global reward (`rewards["__all__"]`) to the returns of `env.step` for centralized training.
@@ -47,8 +60,12 @@ python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
 # QMix with SMAX
 python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
+# QMix with hanabi
+python baselines/QLearning/qmix.py +alg=qmix_hanabi +env=hanabi
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
+# TransfQMix
+python baselines/QLearning/transf_qmix.py +alg=transf_qmix_smax +env=smax
 ```
 
 Notice that with Hydra, you can modify parameters on the go in this way:
@@ -90,12 +107,12 @@ config = {
     "TD_LAMBDA": 0.6,
     "GAMMA": 0.9,
     "VERBOSE": False,
-    "WANDB_ONLINE_REPORT": True,
+    "WANDB_ONLINE_REPORT": False,
     "NUM_TEST_EPISODES": 32,
     "TEST_INTERVAL": 50000,
 }
 
 rng = jax.random.PRNGKey(42)
 train_vjit = jax.jit(make_train(config, env))
-outs_iql = train_vjit(rng)
+outs = train_vjit(rng)
 ```

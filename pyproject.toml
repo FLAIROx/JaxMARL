@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ['jaxmarl*']
+
+[tool.setuptools.dynamic]
+version = {attr = "jaxmarl.__version__"}
+dependencies = {file = ["requirements/requirements.txt"]}
+optional-dependencies = {dev = { file = ["requirements/requirements-dev.txt"] }, qlearning = { file = ["requirements/requirements-qlearning.txt"] }}
+
+[project]
+name = "jaxmarl"
+readme = "README.md"
+description = "Multi-Agent Reinforcement Learning with JAX"
+authors = [
+    {name = "Foerster Lab for AI Research", email = "arutherford@robots.ox.ac.uk"},
+  ]
+dynamic = ["version", "dependencies", "optional-dependencies"]
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: Apache Software License",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/FLAIROx/JaxMARL"
+"Bug Tracker" = "https://github.com/FLAIROx/JaxMARL/issues"

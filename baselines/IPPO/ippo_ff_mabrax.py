@@ -77,7 +77,7 @@ def make_train(config):
     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
-        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]  # Q: NUM_ACTORS CORRECT?
+        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
     config["MINIBATCH_SIZE"] = (
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
@@ -301,7 +301,7 @@ def main(config):
         train_jit = jax.jit(make_train(config),  device=jax.devices()[config["DEVICE"]])
         out = train_jit(rng)
     
-    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].squeeze().shape[0])
+    '''updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].squeeze().shape[0])
     print('updates x', updates_x.shape)
     print('metrics shape', out["metrics"]["returned_episode_returns"].shape)
     returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(-1).squeeze()], axis=1)
@@ -309,14 +309,14 @@ def main(config):
     wandb.log({
         "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
         "returns": out["metrics"]["returned_episode_returns"].mean()
-    })
+    })'''
     
-    # mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
-    # x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
-    # plt.plot(x, mean_returns)
-    # plt.xlabel("Timestep")
-    # plt.ylabel("Return")
-    # plt.savefig(f'mabrax_ippo_ret.png')'''
+    mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
+    x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
+    plt.plot(x, mean_returns)
+    plt.xlabel("Timestep")
+    plt.ylabel("Return")
+    plt.savefig(f'mabrax_ippo_ret.png')
     
     # import pdb; pdb.set_trace()
 

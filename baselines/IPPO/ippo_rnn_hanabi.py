@@ -1,5 +1,9 @@
 """
 Based on PureJaxRL Implementation of PPO
+
+doing homogenous first with continuous actions. Also terminate synchronously
+
+NOTE: currently implemented using the gymnax to smax wrapper
 """
 
 import jax
@@ -10,17 +14,18 @@ import optax
 from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
+import orbax.checkpoint
+from flax.training import orbax_utils
 import distrax
-from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import LogWrapper
+import jaxmarl
 from jaxmarl.wrappers.baselines import LogWrapper
-from jaxmarl.environments.hanabi import HanabiGame
 import wandb
 import functools
 import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
+import os 
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -76,7 +81,6 @@ class ActorCriticRNN(nn.Module):
         )(actor_mean)
         unavail_actions = 1 - avail_actions
         action_logits = actor_mean - (unavail_actions * 1e10)
-
         pi = distrax.Categorical(logits=action_logits)
 
         critic = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
@@ -112,11 +116,12 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    # env, env_params = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    env = HanabiGame()
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    # env = GymnaxToSMAX(config["ENV_NAME"], **config["ENV_KWARGS"])
+    # env = HanabiGame()
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
-            config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ACTORS"]
+            config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
     config["MINIBATCH_SIZE"] = (
             config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
@@ -176,7 +181,7 @@ def make_train(config):
                     batchify(avail_actions, env.agents, config["NUM_ACTORS"])
                 )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions)
+                ac_in = (obs_batch[np.newaxis, :], last_done[np.newaxis, :], avail_actions[np.newaxis, :])
                 hstate, pi, value = network.apply(train_state.params, hstate, ac_in)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
@@ -199,7 +204,6 @@ def make_train(config):
                     obs_batch,
                     info,
                     avail_actions
-
                 )
                 runner_state = (train_state, env_state, obsv, done_batch, hstate, rng)
                 return runner_state, transition
@@ -372,9 +376,16 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
 
-    rng = jax.random.PRNGKey(30)
+    rng = jax.random.PRNGKey(config["SEED"])
     train_jit = jax.jit(make_train(config))
     out = train_jit(rng)
+
+    # checkpoint model for greedy eval
+    '''train_state = out['runner_state'][0]
+    save_args = orbax_utils.save_args_from_target(train_state)
+    orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    save_loc = 'tmp/orbax/checkpoint_rnn'
+    orbax_checkpointer.save(save_loc, train_state, save_args=save_args)'''
 
 if __name__ == "__main__":
     main()

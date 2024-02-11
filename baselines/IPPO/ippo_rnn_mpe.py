@@ -12,7 +12,7 @@ from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
 import distrax
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 import jaxmarl
 from jaxmarl.wrappers.baselines import MPELogWrapper
@@ -55,7 +55,7 @@ class ActorCriticRNN(nn.Module):
 
     @nn.compact
     def __call__(self, hidden, x):
-        obs, dones, avail_actions = x
+        obs, dones = x
         embedding = nn.Dense(
             128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
@@ -70,11 +70,9 @@ class ActorCriticRNN(nn.Module):
         actor_mean = nn.relu(actor_mean)
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
-        )(actor_mean)
-        unavail_actions = 1 - avail_actions
-        action_logits = actor_mean - (unavail_actions * 1e10)
+        )(actor_mean)        
 
-        pi = distrax.Categorical(logits=action_logits)
+        pi = distrax.Categorical(logits=actor_mean)
 
         critic = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
@@ -96,7 +94,6 @@ class Transition(NamedTuple):
     log_prob: jnp.ndarray
     obs: jnp.ndarray
     info: jnp.ndarray
-    avail_actions: jnp.ndarray
 
 
 def batchify(x: dict, agent_list, num_actors):
@@ -144,7 +141,6 @@ def make_train(config):
                 (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
-            jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
         )
         init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
         network_params = network.init(_rng, init_hstate, init_x)
@@ -180,14 +176,10 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-                avail_actions = jnp.ones(
-                    (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
-                )  # NOTE not used, could be removed
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],
                     last_done[np.newaxis, :],
-                    avail_actions,
                 )
                 hstate, pi, value = network.apply(train_state.params, hstate, ac_in)
                 action = pi.sample(seed=_rng)
@@ -214,7 +206,6 @@ def make_train(config):
                     log_prob.squeeze(),
                     obs_batch,
                     info,
-                    avail_actions,
                 )
                 runner_state = (train_state, env_state, obsv, done_batch, hstate, rng)
                 return runner_state, transition
@@ -227,13 +218,9 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, last_done, hstate, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            avail_actions = jnp.ones(
-                (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
-            )
             ac_in = (
                 last_obs_batch[np.newaxis, :],
                 last_done[np.newaxis, :],
-                avail_actions,
             )
             _, _, last_val = network.apply(train_state.params, hstate, ac_in)
             last_val = last_val.squeeze()
@@ -274,7 +261,7 @@ def make_train(config):
                         _, pi, value = network.apply(
                             params,
                             init_hstate.transpose(),
-                            (traj_batch.obs, traj_batch.done, traj_batch.avail_actions),
+                            (traj_batch.obs, traj_batch.done),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
 

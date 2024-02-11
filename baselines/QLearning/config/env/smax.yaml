@@ -1,5 +1,5 @@
 "ENV_NAME": "HeuristicEnemySMAX"
-"MAP_NAME": "3s_vs_5z"
+"MAP_NAME": "5m_vs_6m"
 "ENV_KWARGS":
   "see_enemy_actions": True
   "walls_cause_death": True

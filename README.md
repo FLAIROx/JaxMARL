@@ -3,6 +3,8 @@
 <p align="center">
        <a href="https://pypi.python.org/pypi/jaxmarl">
         <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg" /></a>
+       <a href="https://badge.fury.io/py/jaxmarl">
+        <img src="https://badge.fury.io/py/jaxmarl.svg" /></a>
        <a href= "https://github.com/FLAIROx/JaxMARL/blob/main/LICENSE">
         <img src="https://img.shields.io/badge/license-Apache2.0-blue.svg" /></a>
        <a href= "https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb">
@@ -16,11 +18,19 @@
 ---
 
 <div class="collage">
-    <div class="row" align="centre">
-        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/cramped_room.gif?raw=true" alt="Overcooked" width="20%">
-        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true" alt="MPE" width="20%">
-        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/storm.gif?raw=true" alt="STORM" width="20%">
-        <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true" alt="SMAX" width="20%">
+    <div class="column" align="centre">
+        <div class="row" align="centre">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/cramped_room.gif?raw=true" alt="Overcooked" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/mabrax.png?raw=true" alt="mabrax" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/storm.gif?raw=true" alt="STORM" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/hanabi.png?raw=true" alt="hanabi" width="20%">
+        </div>
+        <div class="row" align="centre">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/coin_game.png?raw=true" alt="coin_game" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true" alt="MPE" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/switch_riddle.png?raw=true" alt="switch_riddle" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true" alt="SMAX" width="20%">
+        </div>
     </div>
 </div>
 
@@ -28,7 +38,7 @@
 
 JaxMARL combines ease-of-use with GPU-enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplified version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
-For more details, take a look at our blog post or our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb) walks through the basic usage.
+For more details, take a look at our [blog post](https://blog.foersterlab.com/jaxmarl/) or our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb), which walks through the basic usage.
 
 <h2 name="environments" id="environments">Environments 🌍 </h2>
 
@@ -46,7 +56,7 @@ For more details, take a look at our blog post or our [Colab notebook](https://c
  
 <h2 name="algorithms" id="algorithms">Baseline Algorithms 🦉 </h2>
 
-We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory.
+We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory. We use Hydra to manage our config files, with specifics explained in each algorithm's README. Most files include `wandb` logging code, this is disabled by default but can be enabled within the file's config.
 
 | Algorithm | Reference | README | 
 | --- | --- | --- | 
@@ -55,23 +65,33 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 | IQL | [Paper](https://arxiv.org/abs/1312.5602v1) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) | 
 | VDN | [Paper](https://arxiv.org/abs/1706.05296)  | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 | QMIX | [Paper](https://arxiv.org/abs/1803.11485) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
+| SHAQ | [Paper](https://arxiv.org/abs/2105.15013) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 
 <h2 name="install" id="install">Installation 🧗 </h2>
 
-Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. The JaxMARL environments can be installed directly from PyPi:
+**Environments** - Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. The JaxMARL environments can be installed directly from PyPi:
 
 ```
 pip install jaxmarl 
 ```
 
-If you would like to also run the algorithms, install the source code as follows:
+**Algorithms** - If you would like to also run the algorithms, install the source code as follows:
 
-```
-git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
-pip install -e .
-```
+1. Clone the repository:
+    ```
+    git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
+    ```
+2. The requirements for IPPO & MAPPO can be installed with:
+    ``` 
+    pip install -e .
+    export PYTHONPATH=./JaxMARL:$PYTHONPATH
+    ```
+3. If you would also like to run the Q-learning algorithms, Python 3.9 is required along with additional dependencies:
+    ``` 
+    pip install -e '.[qlearning]'
+    ```
 
-We have tested JaxMARL on Python 3.8 and 3.9. To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
+**Test Scripts** - To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
 ```
 pip install -r requirements/requirements-dev.txt 
 ```
@@ -89,7 +109,7 @@ import jax
 from jaxmarl import make
 
 key = jax.random.PRNGKey(0)
-key, key_reset, key_act, key_step = jax.random.split(rng, 4)
+key, key_reset, key_act, key_step = jax.random.split(key, 4)
 
 # Initialise environment.
 env = make('MPE_simple_world_comm_v3')
@@ -105,8 +125,18 @@ actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enu
 obs, state, reward, done, infos = env.step(key_step, state, actions)
 ```
 
+### Dockerfile 🐋
+To help get experiments up and running we include a [Dockerfile](https://github.com/FLAIROx/JaxMARL/blob/main/Dockerfile) and its corresponding [Makefile](https://github.com/FLAIROx/JaxMARL/blob/main/Makefile). With Docker and the [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) installed, the container can be built with:
+```
+make build
+```
+The built container can then be run:
+```
+make run
+```
+
 ## Contributing 🔨
-Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report.
+Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. Our roadmap also lives there.
 
 <h2 name="cite" id="cite">Citing JaxMARL 📜 </h2>
 If you use JaxMARL in your work, please cite us as follows:
@@ -114,7 +144,7 @@ If you use JaxMARL in your work, please cite us as follows:
 ```
 @article{flair2023jaxmarl,
       title={JaxMARL: Multi-Agent RL Environments in JAX},
-      author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gardar Ingvarsson and Timon Willi and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rocktaschel and Chris Lu and Jakob Nicolaus Foerster}
+      author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gardar Ingvarsson and Timon Willi and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rocktaschel and Chris Lu and Jakob Nicolaus Foerster},
       journal={arXiv preprint arXiv:2311.10090},
       year={2023}
     }
@@ -126,9 +156,11 @@ There are a number of other libraries which inspired this work, we encourage you
 JAX-native algorithms:
 - [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
 - [PureJaxRL](https://github.com/luchris429/purejaxrl): JAX implementation of PPO, and demonstration of end-to-end JAX-based RL training.
+- [Minimax](https://github.com/facebookresearch/minimax/): JAX implementations of autocurricula baselines for RL.
 
 JAX-native environments:
 - [Gymnax](https://github.com/RobertTLange/gymnax): Implementations of classic RL tasks including classic control, bsuite and MinAtar.
-- [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatoral problems.
+- [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatorial problems.
 - [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
 - [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks.
+- [XLand-MiniGrid](https://github.com/corl-team/xland-minigrid): Meta-RL gridworld environments inspired by XLand and MiniGrid.

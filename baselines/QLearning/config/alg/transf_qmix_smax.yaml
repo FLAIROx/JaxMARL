@@ -1,0 +1,39 @@
+# Since it's more expensive to step a transformer than a rnn in an env, 
+# more parallel environments, together with more network updates per episode to balance
+# the training. The total number of timesteps is decreased so that the total number of network updates
+# is the same of qmix.
+"NUM_ENVS": 16
+"N_MINI_UPDATES": 4
+"NUM_STEPS": 128
+"BUFFER_SIZE": 3000
+"BUFFER_BATCH_SIZE": 32
+"TOTAL_TIMESTEPS": 1.e+7
+"AGENT_INIT_SCALE": 1.
+"AGENT_HIDDEN_DIM": 32
+"AGENT_TRANSF_NUM_LAYERS": 2
+"AGENT_TRANSF_NUM_HEADS": 8
+"AGENT_TRANSF_DIM_FF": 128
+"MIXER_INIT_SCALE": 1.
+"MIXER_TRANSF_NUM_LAYERS": 2
+"MIXER_TRANSF_NUM_HEADS": 8
+"MIXER_TRANSF_DIM_FF": 128
+"USE_FAST_ATTENTION": True # assumes you have a fast_attention.py file accesible by the training script
+"SCALE_INPUTS": True # applies batch normalization to the obs vectors
+"EMBEDDER_USE_RELU": True # applies relu on the embeddings
+"EPSILON_START": 1.0
+"EPSILON_FINISH": 0.05
+"EPSILON_ANNEAL_TIME": 100000
+"MAX_GRAD_NORM": 1.
+"TARGET_UPDATE_INTERVAL": 10
+"LR": 0.005
+"LR_DECAY_TYPE": 'exp' # can be exp (exponential), cos (cosine), linear (linear) or None (static)
+"LR_EXP_DECAY_RATE": 0.00002 # applies only to exponential decay
+"LR_WARMUP": 10 # applies only to cosine decay
+"EPS_ADAM": 0.0000000001
+"TD_LAMBDA_LOSS": False
+"TD_LAMBDA": 0.6
+"GAMMA": 0.99
+"VERBOSE": False
+"WANDB_ONLINE_REPORT": True
+"NUM_TEST_EPISODES": 32
+"TEST_INTERVAL": 100000

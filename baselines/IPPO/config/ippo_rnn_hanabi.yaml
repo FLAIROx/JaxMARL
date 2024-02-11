@@ -11,11 +11,12 @@
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
-"ENV_NAME": "Hanabi"
+"ENV_NAME": "hanabi"
 "ENV_KWARGS": {}
 "ANNEAL_LR": True
 "NUM_FC_LAYERS": 2
-"LAYER_WIDTH": 512
+"LAYER_WIDTH": 128
+"SEED": 30
 
 # WandB Params
 "WANDB_MODE": "disabled"

@@ -12,20 +12,56 @@ import os
 import jax
 import jax.numpy as jnp
 import numpy as np
+from functools import partial
+from typing import NamedTuple, Dict, Union
 
+import chex
 import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.core import frozen_dict
+import flashbax as fbx
 import wandb
 import hydra
 from omegaconf import OmegaConf
+from safetensors.flax import save_file, load_file
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from jaxmarl import make
+from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, CTRolloutManager
 from jaxmarl.environments.smax import map_name_to_scenario
-from baselines.QLearning.utils import CTRolloutManager, EpsilonGreedy, Transition, UniformBuffer, ScannedRNN, load_params, save_params
 
+
+class ScannedRNN(nn.Module):
+
+    @partial(
+        nn.scan,
+        variable_broadcast="params",
+        in_axes=0,
+        out_axes=0,
+        split_rngs={"params": False},
+    )
+    @nn.compact
+    def __call__(self, carry, x):
+        """Applies the module."""
+        rnn_state = carry
+        ins, resets = x
+        hidden_size = ins.shape[-1]
+        rnn_state = jnp.where(
+            resets[:, np.newaxis],
+            self.initialize_carry(hidden_size, *ins.shape[:-1]),
+            rnn_state,
+        )
+        new_rnn_state, y = nn.GRUCell(hidden_size)(rnn_state, ins)
+        return new_rnn_state, y
+
+    @staticmethod
+    def initialize_carry(hidden_size, *batch_size):
+        # Use a dummy key since the default state init fn is just zeros.
+        return nn.GRUCell(hidden_size, parent=None).initialize_carry(
+            jax.random.PRNGKey(0), (*batch_size, hidden_size)
+        )
     
 class AgentRNN(nn.Module):
     # homogenous agent for parameters sharing, assumes all agents have same obs and action dim
@@ -93,6 +129,43 @@ class MixingNetwork(nn.Module):
         return q_tot.squeeze() # (time_steps, batch_size)
 
 
+class EpsilonGreedy:
+    """Epsilon Greedy action selection"""
+
+    def __init__(self, start_e: float, end_e: float, duration: int):
+        self.start_e  = start_e
+        self.end_e    = end_e
+        self.duration = duration
+        self.slope    = (end_e - start_e) / duration
+        
+    @partial(jax.jit, static_argnums=0)
+    def get_epsilon(self, t: int):
+        e = self.slope*t + self.start_e
+        return jnp.clip(e, self.end_e)
+    
+    @partial(jax.jit, static_argnums=0)
+    def choose_actions(self, q_vals: dict, t: int, rng: chex.PRNGKey):
+        
+        def explore(q, eps, key):
+            key_a, key_e   = jax.random.split(key, 2) # a key for sampling random actions and one for picking
+            greedy_actions = jnp.argmax(q, axis=-1) # get the greedy actions 
+            random_actions = jax.random.randint(key_a, shape=greedy_actions.shape, minval=0, maxval=q.shape[-1]) # sample random actions
+            pick_random    = jax.random.uniform(key_e, greedy_actions.shape)<eps # pick which actions should be random
+            chosed_actions = jnp.where(pick_random, random_actions, greedy_actions)
+            return chosed_actions
+        
+        eps = self.get_epsilon(t)
+        keys = dict(zip(q_vals.keys(), jax.random.split(rng, len(q_vals)))) # get a key for each agent
+        chosen_actions = jax.tree_map(lambda q, k: explore(q, eps, k), q_vals, keys)
+        return chosen_actions
+
+class Transition(NamedTuple):
+    obs: dict
+    actions: dict
+    rewards: dict
+    dones: dict
+
+
 def make_train(config, env, pretrained_agents:dict):
 
     config["NUM_UPDATES"] = (
@@ -125,8 +198,14 @@ def make_train(config, env, pretrained_agents:dict):
             _env_sample_step, env_state, None, config["NUM_STEPS"]
         )
         sample_traj_unbatched = jax.tree_map(lambda x: x[:, 0], sample_traj) # remove the NUM_ENV dim
-        buffer = UniformBuffer(parallel_envs=config["NUM_ENVS"], batch_size=config["BUFFER_BATCH_SIZE"], max_size=config["BUFFER_SIZE"])
-        buffer_state = buffer.reset(sample_traj_unbatched)
+        buffer = fbx.make_flat_buffer(
+            max_length=config['BUFFER_SIZE'],
+            min_length=config['BUFFER_BATCH_SIZE'],
+            sample_batch_size=config['BUFFER_BATCH_SIZE'],
+            add_sequences=True,
+            add_batch_size=None,
+        )
+        buffer_state = buffer.init(sample_traj_unbatched)
 
         # INIT NETWORK
         # init agent
@@ -274,7 +353,8 @@ def make_train(config, env, pretrained_agents:dict):
             )
 
             # BUFFER UPDATE: save the collected trajectory in the buffer
-            buffer_state = buffer.add(buffer_state, traj_batch)
+            buffer_traj_batch = jax.tree_util.tree_map(lambda x:jnp.swapaxes(x, 0, 1), traj_batch) # put the batch size (num envs) in first axis
+            buffer_state = buffer.add(buffer_state, buffer_traj_batch)
 
             # LEARN PHASE
             def q_of_action(q, u):
@@ -350,7 +430,7 @@ def make_train(config, env, pretrained_agents:dict):
 
             # sample a batched trajectory from the buffer and set the time step dim in first axis
             rng, _rng = jax.random.split(rng)
-            _, learn_traj = buffer.sample(buffer_state, _rng) # (batch_size, max_time_steps, ...)
+            learn_traj = buffer.sample(buffer_state, _rng).experience.first # (batch_size, max_time_steps, ...)
             learn_traj = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), learn_traj) # (max_time_steps, batch_size, ...)
             if config["PARAMETERS_SHARING"]:
                 init_hs = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(agents)*config["BUFFER_BATCH_SIZE"]) # (n_agents*batch_size, hs_size)
@@ -391,23 +471,17 @@ def make_train(config, env, pretrained_agents:dict):
             )
 
             # update the returning metrics
-            metrics = {
-                'timesteps': time_state['timesteps']*config['NUM_ENVS'],
-                'updates' : time_state['updates'],
-                'loss': loss,
-                'rewards': jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0).mean(), traj_batch.rewards)
-            }
-            metrics.update(test_metrics) # add the test metrics dictionary
+            metrics['test_metrics'] = test_metrics # add the test metrics dictionary
 
             if config.get('WANDB_ONLINE_REPORT', False):
                 def callback(metrics):
                     wandb.log(
                         {
                             "returns": metrics['rewards']['__all__'].mean(),
-                            "test_returns": metrics['test_returns']['__all__'].mean(),
                             "timestep": metrics['timesteps'],
                             "updates": metrics['updates'],
                             "loss": metrics['loss'],
+                            **{k:v.mean() for k, v in metrics['test_metrics'].items()}
                         }
                     )
                 jax.debug.callback(callback, metrics)
@@ -429,57 +503,51 @@ def make_train(config, env, pretrained_agents:dict):
         def get_greedy_metrics(rng, params, time_state):
             """Help function to test greedy policy during training"""
             def _greedy_env_step(step_state, unused):
-                params, env_state, last_obs, last_dones, hstate, hstate_pretrained, rng = step_state
+                params, env_state, last_obs, last_dones, hstate, rng = step_state
                 rng, key_s = jax.random.split(rng)
+                obs_   = {a:last_obs[a] for a in env.agents}
+                obs_   = jax.tree_map(lambda x: x[np.newaxis, :], obs_)
                 dones_ = jax.tree_map(lambda x: x[np.newaxis, :], last_dones)
-                timed_obs = jax.tree_map(lambda x: x[np.newaxis, :], last_obs)
-                hstate, q_vals = homogeneous_pass(params, hstate, {a:timed_obs[a] for a in agents}, dones_)
-                trainable_actions = jax.tree_util.tree_map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, valid_actions)
-                # add actions from pretrained agents
-                outs  = {a:agent.apply(pretrained_agents[a], hstate_pretrained[i], (timed_obs[a], dones_[a])) for i, a in enumerate(pretrained_agents)}
-                q_vals = {k:o[1] for k, o in outs.items()}
-                hstate_pretrained = jnp.stack([o[0] for o in outs.values()], axis=0)
-                pretrained_actions = jax.tree_util.tree_map(lambda q: jnp.argmax(q.squeeze(0), axis=-1), q_vals)
-                actions = {**trainable_actions, **pretrained_actions}
-                # step
+                hstate, q_vals = homogeneous_pass(params, hstate, obs_, dones_)
+                actions = jax.tree_util.tree_map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, test_env.valid_actions)
                 obs, env_state, rewards, dones, infos = test_env.batch_step(key_s, env_state, actions)
-                step_state = (params, env_state, obs, dones, hstate, hstate_pretrained, rng)
-                return step_state, (rewards, dones)
+                step_state = (params, env_state, obs, dones, hstate, rng)
+                return step_state, (rewards, dones, infos)
             rng, _rng = jax.random.split(rng)
             init_obs, env_state = test_env.batch_reset(_rng)
             init_dones = {agent:jnp.zeros((config["NUM_TEST_EPISODES"]), dtype=bool) for agent in env.agents+['__all__']}
             rng, _rng = jax.random.split(rng)
             if config["PARAMETERS_SHARING"]:
-                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(agents)*config["NUM_TEST_EPISODES"]) # (n_agents*n_envs, hs_size)
+                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents)*config["NUM_TEST_EPISODES"]) # (n_agents*n_envs, hs_size)
             else:
-                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(agents), config["NUM_TEST_EPISODES"]) # (n_agents, n_envs, hs_size)
-            hstate_pretrained = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(pretrained_agents), config["NUM_TEST_EPISODES"])
+                hstate = ScannedRNN.initialize_carry(config['AGENT_HIDDEN_DIM'], len(env.agents), config["NUM_TEST_EPISODES"]) # (n_agents, n_envs, hs_size)
             step_state = (
                 params,
                 env_state,
                 init_obs,
                 init_dones,
-                hstate,
-                hstate_pretrained,
+                hstate, 
                 _rng,
             )
-            step_state, rews_dones = jax.lax.scan(
+            step_state, (rewards, dones, infos) = jax.lax.scan(
                 _greedy_env_step, step_state, None, config["NUM_STEPS"]
             )
-            # compute the episode returns of the first episode that is done for each parallel env
+            # compute the metrics of the first episode that is done for each parallel env
             def first_episode_returns(rewards, dones):
                 first_done = jax.lax.select(jnp.argmax(dones)==0., dones.size, jnp.argmax(dones))
                 first_episode_mask = jnp.where(jnp.arange(dones.size) <= first_done, True, False)
                 return jnp.where(first_episode_mask, rewards, 0.).sum()
-            all_dones = rews_dones[1]['__all__']
-            returns = jax.tree_map(lambda r: jax.vmap(first_episode_returns, in_axes=1)(r, all_dones), rews_dones[0])
+            all_dones = dones['__all__']
+            first_returns = jax.tree_map(lambda r: jax.vmap(first_episode_returns, in_axes=1)(r, all_dones), rewards)
+            first_infos   = jax.tree_map(lambda i: jax.vmap(first_episode_returns, in_axes=1)(i[..., 0], all_dones), infos)
             metrics = {
-                'test_returns': returns # episode returns
+                'test_returns': first_returns['__all__'],# episode returns
+                **first_infos
             }
             if config.get('VERBOSE', False):
                 def callback(timestep, val):
                     print(f"Timestep: {timestep}, return: {val}")
-                jax.debug.callback(callback, time_state['timesteps']*config['NUM_ENVS'], returns['__all__'].mean())
+                jax.debug.callback(callback, time_state['timesteps']*config['NUM_ENVS'], first_returns['__all__'].mean())
             return metrics
         
         time_state = {
@@ -519,11 +587,15 @@ def main(config):
     alg_name = f'qmix_{"ps" if config["alg"].get("PARAMETERS_SHARING", True) else "ns"}'
     
     # smac init neeeds a scenario
-    if 'SMAC' in env_name:
+    if 'smax' in env_name.lower():
         config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
-        env_name = 'jaxmarl_'+config['env']['MAP_NAME']
+        env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
+        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        env = SMAXLogWrapper(env)
+    else:
+        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        env = LogWrapper(env)
 
-    env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
     config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
     
     wandb.init(
@@ -541,6 +613,10 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
 
+    def load_params(filename):
+        flattened_dict = load_file(filename)
+        return unflatten_dict(flattened_dict, sep=',')
+
     pretrained_params = load_params(config['env']['PRETRAINED_FILE'])
     if 'mixer' in pretrained_params: # qmix case
         pretrained_params = pretrained_params['agent']
@@ -554,6 +630,11 @@ def main(config):
     
     # save params
     if config['SAVE_PATH'] is not None:
+
+        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+            flattened_dict = flatten_dict(params, sep=',')
+            save_file(flattened_dict, filename)
+
         model_state = outs['runner_state'][0]
         params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
         save_dir = os.path.join(config['SAVE_PATH'], env_name)
