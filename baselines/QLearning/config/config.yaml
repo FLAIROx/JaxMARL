@@ -1,10 +1,10 @@
 # experiment params
-"NUM_SEEDS": 1
+"NUM_SEEDS": 2
 "SEED": 0
 
 # wandb params
 "ENTITY": "mttga"
-"PROJECT": "transf_qmix_tuning"
+"PROJECT": "utracking"
 "WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)

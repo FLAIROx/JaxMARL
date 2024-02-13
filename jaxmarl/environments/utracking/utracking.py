@@ -350,7 +350,7 @@ class UTracking(MultiAgentEnv):
             0
         ).sum() # reward for tracking beeing under threshold 
         
-        rew_land_distance = jnp.where(
+        rew_land_distance_old = jnp.where(
             (min_land_dist <= self.min_agent_dist*2), # agent is close enought to the landmark 
             jnp.where(
                 (min_land_dist >= self.min_agent_dist), # agent is respecting the safe distance
@@ -359,6 +359,14 @@ class UTracking(MultiAgentEnv):
             ),
             jnp.maximum(-1, -1e-3*min_land_dist), # penalty proportional to the distance of the landmark, with a max of -10
         ).min()# landmark-distance-based reward enhance the agents to stay close to landmarks while respecting safety distance
+        
+        distance_weight = 2 # the power for giving more weight to distance landmark
+        good_distance_threshold = 1e-3*self.min_agent_dist*2 # defines when agent is close enought to the landmark 
+        rew_land_distance = 1 - (
+            jnp.sum(jnp.maximum(1e-3*min_land_dist-good_distance_threshold, 0)**distance_weight)
+            / (self.num_landmarks * good_distance_threshold**distance_weight) # normalization (max reward==1)
+        )
+        rew_land_distance = jnp.maximum(rew_land_distance, -1) # lower bound
 
         # TODO: reward for keeping a good distance with the other agents
         # agent_dist = distances_2d[:, :self.num_agents].min(axis=1) # distance between agents and all other entities
