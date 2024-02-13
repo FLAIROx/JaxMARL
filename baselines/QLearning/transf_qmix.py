@@ -928,7 +928,7 @@ def make_train(config, env):
     return train
 
 
-def signle_run(config):
+def single_run(config):
     """Perform a single run with multiple parallel seeds in one env."""
     config = OmegaConf.to_container(config)
 
@@ -1048,7 +1048,7 @@ def tune(default_config):
 @hydra.main(version_base=None, config_path="./config", config_name="config")
 def main(config):
     #tune(config) # uncomment to run hypertuning
-    signle_run(config)
+    single_run(config)
 
 if __name__ == "__main__":
     main()
