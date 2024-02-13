@@ -29,7 +29,6 @@ class HanabiOBL(HanabiGame):
         num_moves=None,
         debug=False
     ):
-        
         super().__init__(
             num_agents=num_agents,
             num_colors=num_colors,
@@ -439,9 +438,4 @@ class HanabiOBL(HanabiGame):
             print(f'Actor {aidx} Hand:' + ('<-- current player' if aidx==current_player else ''))
             for card_str in get_actor_hand_str(aidx):
                 print(card_str)
-        
-        print('---')
-
-
-
 

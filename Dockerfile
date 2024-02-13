@@ -42,6 +42,9 @@ RUN pip install --ignore-installed -e '.[qlearning, dev]'
 # install jax from to enable cuda
 RUN pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
+RUN pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+
+
 #disabling preallocation
 RUN export XLA_PYTHON_CLIENT_PREALLOCATE=false
 #safety measures
