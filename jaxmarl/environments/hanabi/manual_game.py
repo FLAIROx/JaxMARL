@@ -9,6 +9,8 @@ import numpy as np
 import argparse
 from obl.obl_pytorch import OBLPytorchAgent
 
+OBL1A_WEIGHT = "obl/models/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a/model0.pthw"
+
 
 class ManualPlayer:
     def act(self, obs) -> int:
@@ -36,10 +38,12 @@ def get_agents(args):
     for player_idx in [0, 1]:
         player_type = getattr(args, f"player{player_idx}")
         weight_file = getattr(args, f"weight{player_idx}")
+        if weight_file is None:
+            weight_file = OBL1A_WEIGHT
         if player_type == "manual":
             agents.append(ManualPlayer())
         elif player_type == "obl":
-            agents.append(OBLPytorchAgent(args.weight))
+            agents.append(OBLPytorchAgent(weight_file, ))
 
     return agents
 

@@ -7,7 +7,7 @@ from collections import OrderedDict
 
 
 class OBLPytorchAgent:
-    def __init__(self, weight_file, device):
+    def __init__(self, weight_file, device="cuda:0"):
         agent = load_agent_from_file(weight_file, device)
 
     def act(self, obs):
