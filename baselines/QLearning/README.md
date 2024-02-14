@@ -5,6 +5,7 @@ Pure JAX implementations of:
 * IQL (Independent Q-Learners)
 * VDN (Value Decomposition Network)
 * QMIX
+* TransfQMix (Transformers for Leveraging the Graph Structure of MARL Problems)
 * SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)
 
 The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning)
@@ -26,12 +27,12 @@ pip install -r requirements/requirements-qlearning.txt
 - Hanabi
 ```
 
-## 🔎 Implementation Details
+## ⚙️ Implementation Details
 
 General features:
 
 - Agents are controlled by a single RNN architecture.
-- You can choose whether to share parameters between agents or not.
+- You can choose whether to share parameters between agents or not (not available on TransfQMix).
 - Works also with non-homogeneous agents (different observation/action spaces).
 - Experience replay is a simple buffer with uniform sampling.
 - Uses Double Q-Learning with a target agent network (hard-updated).
@@ -60,10 +61,12 @@ python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
 python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
 # QMix with SMAX
 python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
-# QMix with hanabi
-python baselines/QLearning/qmix.py +alg=qmix_hanabi +env=hanabi
+# VDN with hanabi
+python baselines/QLearning/vdn.py +alg=qlearn_hanabi +env=hanabi
 # QMix against pretrained agents
 python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
+# TransfQMix
+python baselines/QLearning/transf_qmix.py +alg=transf_qmix_smax +env=smax
 ```
 
 Notice that with Hydra, you can modify parameters on the go in this way:
@@ -73,44 +76,8 @@ Notice that with Hydra, you can modify parameters on the go in this way:
 python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_spread alg.PARAMETERS_SHARING=False
 ```
 
-It is often useful to run these scripts manually in a notebook or in another script.
+**❗Note on Transformers**: TransfQMix currently supports only MPE_Spread and SMAX. You will need to wrap the observation vectors into matrices to use transformers in other environments. See: ```jaxmarl.wrappers.transformers```
 
-```python
-from jaxmarl import make
-from baselines.QLearning.qmix import make_train
+## 🎯 Hyperparameter tuning
 
-env = make("MPE_simple_spread_v3")
-
-config = {
-    "NUM_ENVS": 8,
-    "BUFFER_SIZE": 5000,
-    "BUFFER_BATCH_SIZE": 32,
-    "TOTAL_TIMESTEPS": 2050000,
-    "AGENT_HIDDEN_DIM": 64,
-    "AGENT_INIT_SCALE": 2.0,
-    "PARAMETERS_SHARING": True,
-    "EPSILON_START": 1.0,
-    "EPSILON_FINISH": 0.05,
-    "EPSILON_ANNEAL_TIME": 100000,
-    "MIXER_EMBEDDING_DIM": 32,
-    "MIXER_HYPERNET_HIDDEN_DIM": 64,
-    "MIXER_INIT_SCALE": 0.00001,
-    "MAX_GRAD_NORM": 25,
-    "TARGET_UPDATE_INTERVAL": 200,
-    "LR": 0.005,
-    "LR_LINEAR_DECAY": True,
-    "EPS_ADAM": 0.001,
-    "WEIGHT_DECAY_ADAM": 0.00001,
-    "TD_LAMBDA_LOSS": True,
-    "TD_LAMBDA": 0.6,
-    "GAMMA": 0.9,
-    "VERBOSE": False,
-    "WANDB_ONLINE_REPORT": False,
-    "NUM_TEST_EPISODES": 32,
-    "TEST_INTERVAL": 50000,
-}
-
-rng = jax.random.PRNGKey(42)
-train_vjit = jax.jit(make_train(config, env))
-outs = train_vjit(rng)
-```
+Please refer to the ```tune``` function in the [transf_qmix.py](transf_qmix.py) script for an example of hyperparameter tuning using WANDB. 
