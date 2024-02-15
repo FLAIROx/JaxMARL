@@ -1,26 +1,26 @@
-"LR": 0.004
+"LR": 2.5e-4
 "NUM_ENVS": 128
 "NUM_STEPS": 128
 "GRU_HIDDEN_DIM": 128
 "TOTAL_TIMESTEPS": 1e7
 "UPDATE_EPOCHS": 4
-"NUM_MINIBATCHES": 4
+"NUM_MINIBATCHES": 2
 "GAMMA": 0.99
 "GAE_LAMBDA": 0.95
-"CLIP_EPS": 0.05
+"CLIP_EPS": 0.2
 "SCALE_CLIP_EPS": False
 "ENT_COEF": 0.01
 "VF_COEF": 0.5
-"MAX_GRAD_NORM": 0.25
+"MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
 "ENV_NAME": "HeuristicEnemySMAX"
 "MAP_NAME": "2s3z"
-"SEED": 1
+"SEED": 0
 "ENV_KWARGS": 
   "see_enemy_actions": True
   "walls_cause_death": True
   "attack_mode": "closest"
-"ANNEAL_LR": True
+"ANNEAL_LR": False
 
 # WandB Params
 "ENTITY": amacrutherford

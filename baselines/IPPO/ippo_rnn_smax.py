@@ -287,7 +287,7 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean(where=(1 - traj_batch.done))
+                        ).mean()
 
                         # CALCULATE ACTOR LOSS
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
@@ -302,8 +302,8 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
 
                         total_loss = (
                             loss_actor
@@ -317,7 +317,15 @@ def make_train(config):
                         train_state.params, init_hstate, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, total_loss
+                    
+                    loss_info = {
+                        "total_loss": total_loss[0],
+                        "value_loss": total_loss[1][0],
+                        "actor_loss": total_loss[1][1],
+                        "entropy": total_loss[1][2],
+                    }
+                    
+                    return train_state, loss_info
 
                 (
                     train_state,
@@ -358,7 +366,7 @@ def make_train(config):
                     shuffled_batch,
                 )
 
-                train_state, total_loss = jax.lax.scan(
+                train_state, loss_info = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (
@@ -369,7 +377,7 @@ def make_train(config):
                     targets,
                     rng,
                 )
-                return update_state, total_loss
+                return update_state, loss_info
 
             update_state = (
                 train_state,
@@ -406,10 +414,12 @@ def make_train(config):
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
+                        **metric["loss_info"],
                     }
                 )
 
             metric["update_steps"] = update_steps
+            metric["loss_info"] = jax.tree_map(lambda x: x.mean(), loss_info)
             jax.experimental.io_callback(callback, None, metric)
             update_steps = update_steps + 1
             runner_state = (train_state, env_state, last_obs, last_done, hstate, rng)
