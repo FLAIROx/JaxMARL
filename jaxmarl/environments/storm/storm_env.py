@@ -904,7 +904,7 @@ class InTheGrid(MultiAgentEnv):
 
             return (
                 obs,
-                state,
+                state_nxt,
                 rewards,
                 done,
                 {"discount": jnp.zeros((), dtype=jnp.int8)},
