@@ -2,9 +2,13 @@ import math
 
 import numpy as np
 
-from jaxmarl.viz.window import Window
-import jaxmarl.viz.grid_rendering as rendering
-from jaxmarl.environments.overcooked.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
+from window import Window
+import grid_rendering as rendering
+import sys
+sys.path.append('/Users/anushamishra/Documents/Human-AI Research/Anusha/JaxMARL/jaxmarl')  # Add environments directory to sys.path
+# import environments.overcooked
+from environments.overcooked.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
+# from .overcooked.common import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
 
 
 INDEX_TO_COLOR = [k for k,v in COLOR_TO_INDEX.items()]

@@ -8,7 +8,7 @@ import numpy as np
 import optax
 import distrax
 from jaxmarl import make
-from jaxmarl.environments.smax import map_name_to_scenario, Scenario
+from smax import map_name_to_scenario, Scenario
 import time
 
 

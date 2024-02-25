@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 import jax
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
-from jaxmarl.environments.spaces import Box, Discrete
-from jaxmarl.environments.smax.distributions import (
+from multi_agent_env import MultiAgentEnv
+from spaces import Box, Discrete
+from smax.distributions import (
     SurroundAndReflectPositionDistribution,
     UniformUnitTypeDistribution,
 )

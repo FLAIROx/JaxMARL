@@ -5,11 +5,24 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+# from overcooked_visualizer import OvercookedVisualizer as Visualizer
+
 # from jaxmarl.gridworld.maze import Maze #, Actions
 # from jaxmarl.gridworld.ma_maze import MAMaze
-from jaxmarl.environments.overcooked.overcooked import Overcooked
-from jaxmarl.environments.overcooked.layouts import overcooked_layouts as layouts
+# from jaxmarl.environments.overcooked import overcooked
+# from jaxmarl.environments.overcooked.overcooked import Overcooked
+# from viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
+import overcooked
+from overcooked import Overcooked
 
+import sys
+sys.path.append('/Users/anushamishra/Documents/Human-AI Research/Anusha/JaxMARL/jaxmarl/viz')
+import overcooked_visualizer
+# importlib.reload(overcooked)
+from layouts import overcooked_layouts as layouts
+
+# Example action: moving agent 0 to the right
+action = overcooked.Actions.right
 
 def redraw(state, obs, extras):
     extras['viz'].render(extras['agent_view_size'], state, highlight=False)
@@ -38,7 +51,9 @@ def step(env, action, extras):
 
     actions = {"agent_0" : jnp.array(action), "agent_1" : jnp.array(action)}
     print("Actions : ", actions)
+    # print("Env: ", DIR_TO_VEC[state.agent_dir_idx])
     obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], actions)
+    # print("Env: ", state.agent_dir_idx)
     extras['obs'] = obs
     extras['state'] = state
     print(f"t={state.time}: reward={reward['agent_0']}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done['__all__']}")
@@ -73,6 +88,7 @@ def step(env, action, extras):
     # print(f"agent obs =\n {obs}")
 
     if done["__all__"] or (jnp.array([action, action]) == Actions.done).any():
+        print("I got done")
         key, subkey = jax.random.split(subkey)
         reset(subkey, env, extras)
     else:
@@ -85,7 +101,7 @@ def key_handler(env, extras, event):
     print('pressed', event.key)
 
     if event.key == 'escape':
-        window.close()
+        extras['viz'].window.close()
         return
 
     if event.key == 'backspace':
@@ -121,7 +137,7 @@ def key_handler_overcooked(env, extras, event):
     print('pressed', event.key)
 
     if event.key == 'escape':
-        window.close()
+        extras['viz'].window.close()
         return
     if event.key == 'backspace':
         extras['jit_reset']((env, extras))
@@ -249,10 +265,13 @@ if __name__ == '__main__':
                 layout=layout,
                 random_reset=args.random_reset
             )
+            # env = Overcooked(layout=layout, random_reset=True, max_steps=400)
+            print("I got here")
         else:
             print("You must provide a layout.")
-        from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
-        from jaxmarl.environments.overcooked.overcooked import Actions
+        from viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
+        from overcooked import Actions
+
 
 
     viz = Visualizer()
@@ -264,6 +283,7 @@ if __name__ == '__main__':
             obs_viz2 = Visualizer()
 
     with jax.disable_jit(False):
+        print(type(env))
         jit_reset = jax.jit(env.reset)
         # jit_reset = env.reset_env
         key = jax.random.PRNGKey(args.seed)

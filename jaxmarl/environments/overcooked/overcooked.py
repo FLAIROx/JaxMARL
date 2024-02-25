@@ -1,28 +1,53 @@
 from collections import OrderedDict
 from enum import IntEnum
-
 import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import lax
-from jaxmarl.environments import MultiAgentEnv
-from jaxmarl.environments import spaces
+
+import sys
+import os
+
+# Get the current directory of the script
+import sys
+sys.path.append('/Users/anushamishra/Documents/Human-AI Research/Anusha/JaxMARL/jaxmarl/environments')
+
+import spaces
+from multi_agent_env import MultiAgentEnv
+# import jaxmarl.environments.overcooked.common
+# from .environments.multi_agent_env import 
+# from . import spaces
+# from . import multi_agent_env
+
+from spaces import Space
 from typing import Tuple, Dict
 import chex
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 
-from jaxmarl.environments.overcooked.common import (
+# from jaxmarl.environments.overcooked import common
+# import common
+# # importlib.reload(common)
+# from common import DIR_TO_VEC
+from common import (
     OBJECT_TO_INDEX,
     COLOR_TO_INDEX,
     OBJECT_INDEX_TO_VEC,
     DIR_TO_VEC,
     make_overcooked_map)
-from jaxmarl.environments.overcooked.layouts import overcooked_layouts as layouts
 
+from layouts import overcooked_layouts as layouts
 
+print("From overcooked: ", DIR_TO_VEC)
 class Actions(IntEnum):
     # Turn left, turn right, move forward
+    # right = 2
+    # down = 1
+    # left = 3
+    # up = 0
+    # stay = 4
+    # interact = 5
+    # done = 6
     right = 0
     down = 1
     left = 2
@@ -31,6 +56,7 @@ class Actions(IntEnum):
     interact = 5
     done = 6
 
+DIR_2_VEC = DIR_TO_VEC
 
 @struct.dataclass
 class State:
@@ -66,7 +92,7 @@ class Overcooked(MultiAgentEnv):
     ):
         # Sets self.num_agents to 2
         super().__init__(num_agents=2)
-
+        print("Initialized")
         # self.obs_shape = (agent_view_size, agent_view_size, 3)
         # Observations given by 26 channels, most of which are boolean masks
         self.height = layout["height"]
@@ -129,6 +155,7 @@ class Overcooked(MultiAgentEnv):
 
         In both cases, the environment layout is determined by `self.layout`
         """
+        print("RESET")
 
         # Whether to fully randomize the start state
         random_reset = self.random_reset
@@ -158,6 +185,7 @@ class Overcooked(MultiAgentEnv):
         key, subkey = jax.random.split(key)
         agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.int32), shape=(num_agents,))
         agent_dir = DIR_TO_VEC.at[agent_dir_idx].get() # dim = n_agents x 2
+        print(DIR_TO_VEC.at[agent_dir_idx].get())
 
         # Keep track of empty counter space (table)
         empty_table_mask = jnp.zeros_like(all_pos)
@@ -415,8 +443,11 @@ class Overcooked(MultiAgentEnv):
         agent_pos = fwd_pos.astype(jnp.uint32)
 
         # Update agent direction
+        print(state.agent_dir_idx)
         agent_dir_idx = ~is_move_action * state.agent_dir_idx + is_move_action * action
+        print(agent_dir_idx)
         agent_dir = DIR_TO_VEC[agent_dir_idx]
+        print(agent_dir)
 
         # Handle interacts. Agent 1 first, agent 2 second, no collision handling.
         # This matches the original Overcooked
@@ -637,3 +668,24 @@ class Overcooked(MultiAgentEnv):
 
     def max_steps(self) -> int:
         return self.max_steps
+cramped_room = {
+    "height" : 4,
+    "width" : 5,
+    "wall_idx" : jnp.array([0,1,2,3,4,
+                            5,9,
+                            10,14,
+                            15,16,17,18,19]),
+    "agent_idx" : jnp.array([6, 8]),
+    "goal_idx" : jnp.array([18]),
+    "plate_pile_idx" : jnp.array([16]),
+    "onion_pile_idx" : jnp.array([5,9]),
+    "pot_idx" : jnp.array([2])
+}
+jax.clear_caches()
+# Create an instance of the Overcooked environment
+env = Overcooked(layout=cramped_room, random_reset=True, max_steps=400)
+
+key = jax.random.PRNGKey(0)  # You can change the seed if needed
+
+# Call the step_agents method
+state, _ = env.reset(key)

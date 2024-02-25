@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from jaxmarl.environments.mpe.simple import State, SimpleMPE
+from mpe.simple import State, SimpleMPE
 from gymnax.environments.spaces import Box
-from jaxmarl.environments.mpe.default_params import *
+from mpe.default_params import *
 
 
 SimpleFacmacMPE3a = lambda: SimpleFacmacMPE(num_good_agents=1, num_adversaries=3, num_landmarks=2,

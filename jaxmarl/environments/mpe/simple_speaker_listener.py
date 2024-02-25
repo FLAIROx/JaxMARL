@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
-from jaxmarl.environments.mpe.simple import SimpleMPE, State
-from jaxmarl.environments.mpe.default_params import *
+from mpe.simple import SimpleMPE, State
+from mpe.default_params import *
 from gymnax.environments.spaces import Box, Discrete
 
 SPEAKER = "speaker_0"

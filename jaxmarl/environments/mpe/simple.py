@@ -7,8 +7,8 @@ TODO: viz for communication env, e.g. crypto
 import jax
 import jax.numpy as jnp
 import numpy as onp
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
-from jaxmarl.environments.mpe.default_params import *
+from multi_agent_env import MultiAgentEnv
+from mpe.default_params import *
 import chex
 from gymnax.environments.spaces import Box, Discrete
 from flax import struct

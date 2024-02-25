@@ -70,10 +70,10 @@ DIR_TO_VEC = jnp.array([
 	# (0, 1), # down
 	# (-1, 0), # left
 	# (0, -1), # up
-	(0, -1), # NORTH
+	(1, 0), # NORTH
 	(0, 1), # SOUTH
-	(1, 0), # EAST
-	(-1, 0), # WEST
+	(-1, 0), # EAST
+	(0, -1), # WEST
 ], dtype=jnp.int8)
 
 
@@ -102,6 +102,7 @@ def make_overcooked_map(
 	# Add agents
 	def _get_agent_updates(agent_dir_idx, agent_pos, agent_idx):
 		agent = jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red']+agent_idx*2, agent_dir_idx], dtype=jnp.uint8)
+		# print(agent)
 		agent_x, agent_y = agent_pos
 		return agent_x, agent_y, agent
 

@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from jaxmarl.environments.mpe.simple import SimpleMPE, State
+from mpe.simple import SimpleMPE, State
 from gymnax.environments.spaces import Box
-from jaxmarl.environments.mpe.default_params import *
+from mpe.default_params import *
 
 
 class SimpleTagMPE(SimpleMPE):
