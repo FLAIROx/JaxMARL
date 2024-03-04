@@ -4,14 +4,41 @@ import sys
 import random
 import json
 from collections import OrderedDict
+import numpy as np
+import jax
+import jax.numpy as jnp
 
+import obl.r2d2 as r2d2
 
 class OBLPytorchAgent:
     def __init__(self, weight_file, device="cuda:0"):
-        agent = load_agent_from_file(weight_file, device)
+        self._agent = load_agent_from_file(weight_file, device)
+        self._device = device
+        self._hid = {
+            'h0': torch.zeros(1, 2, 2, 512).to(device),
+            'c0':torch.zeros(1, 2, 2, 512).to(device),
+        }
 
-    def act(self, obs):
-        return random.randint(1,20)
+    def act(self, env, obs, legal_moves, curr_player):
+        obs = self._batchify(env, obs)
+        legal_moves = self._batchify(env, legal_moves)
+        legal_moves = jnp.roll(legal_moves, -1, axis=1)
+
+        torch_obs = {
+            'priv_s':torch.tensor(np.array(obs[..., 125:])).to(self._device),
+            'publ_s':torch.tensor(np.array(obs[..., 250:])).to(self._device),
+            'h0': self._hid['h0'].to(self._device),
+            'c0': self._hid['c0'].to(self._device),
+            'legal_move': torch.tensor(np.array(legal_moves)).to(self._device),
+        }
+        act_result = self._agent.act(torch_obs)
+        actions = act_result.pop('a').detach().numpy()
+        self._hid = act_result
+        actions = np.where(actions+1==21, 0, actions+1)
+        return actions
+
+    def _batchify(self, env, x): 
+        return jnp.stack([x[a] for a in env.agents])
 
 
 def load_agent_from_file(weight_file, device, sad_legacy=False, iql_legacy=False):
@@ -23,7 +50,8 @@ def load_agent_from_file(weight_file, device, sad_legacy=False, iql_legacy=False
     except:
         sys.exit(f"weight_file {weight_file} can't be loaded")
 
-    agent, _ = load_agent(weight_file, None)
+    overwrite = {'vdn': False, 'device': 'cuda:0', 'boltzmann_act': False}
+    agent, _ = load_agent(weight_file, overwrite)
 
     agent.train(False)
 
@@ -43,22 +71,12 @@ def load_agent(weight_file, overwrite):
         flatten_dict(cfg, new_cfg)
         cfg = new_cfg
 
-    hand_size = cfg.get("hand_size", 5)
-
-    game = create_envs(
-        1,
-        1,
-        cfg["num_player"],
-        cfg["train_bomb"],
-        cfg["max_len"],
-        hand_size=hand_size,
-    )[0]
-
     cfg["parameterized"] = cfg["parameterized"] if "parameterized" in cfg else False
     cfg["parameter_type"] = cfg["parameter_type"] if "parameter_type" in cfg else "one_hot"
     cfg["num_parameters"] = cfg["num_parameters"] if "num_parameters" in cfg else 0
 
-    in_dim = game.feature_size(cfg["sad"])
+    in_dim = (783, 658, 533)
+
     if cfg["parameterized"]:
         in_dim = tuple([x + cfg["num_parameters"] for x in in_dim])
 
@@ -70,7 +88,7 @@ def load_agent(weight_file, overwrite):
         "device": overwrite["device"],
         "in_dim": in_dim,
         "hid_dim": cfg["hid_dim"] if "hid_dim" in cfg else cfg["rnn_hid_dim"],
-        "out_dim": game.num_action(),
+        "out_dim": 21,
         "num_lstm_layer": cfg.get("num_lstm_layer", overwrite.get("num_lstm_layer", 2)),
         "boltzmann_act": overwrite.get(
             "boltzmann_act", cfg.get("boltzmann_act", False)

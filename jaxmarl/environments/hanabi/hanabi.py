@@ -131,7 +131,11 @@ class HanabiGame(MultiAgentEnv):
             fireworks = state.fireworks
             info_tokens = state.info_tokens
             # discard always legal
-            legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(1)
+            #TODO: This incorrect, discard is only legal
+            is_not_max_info_tokens = jnp.sum(state.info_tokens) < 8
+            legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(
+                is_not_max_info_tokens
+            )
             move_idx += self.hand_size
             # play moves always legal
             legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(1)
@@ -375,6 +379,13 @@ class HanabiGame(MultiAgentEnv):
             is_valid_play = (rank == jnp.sum(color_fireworks))
             make_play = jnp.logical_and(is_valid_play, jnp.logical_not(is_discard)).squeeze(0)
 
+            # gain another info token if completed a color
+            is_final_card = jnp.logical_and(is_valid_play, rank == self.num_ranks-1).squeeze(0)
+            infos_remaining = jnp.sum(info_tokens)
+            infos_depleted = (infos_remaining < self.max_info_tokens)
+            new_infos = (infos_remaining + (is_final_card * infos_depleted)).astype(int)
+            info_tokens = info_tokens.at[new_infos - 1].set(1)
+
             # increment fireworks if valid play action
             color_fireworks = color_fireworks.at[0, jnp.sum(color_fireworks).astype(int)].set(make_play)
             fireworks = state.fireworks.at[color].set(color_fireworks)
@@ -529,7 +540,7 @@ class HanabiGame(MultiAgentEnv):
         game_won = (fireworks_after == (self.num_colors * self.num_ranks))
         deck_empty = (state.num_cards_dealt >= self.deck_size)
         last_round_count = state.last_round_count + deck_empty
-        last_round_done = (last_round_count == self.num_agents)
+        last_round_done = (last_round_count == self.num_agents + 1)
         terminal = jnp.logical_or(jnp.logical_or(state.out_of_lives, game_won), last_round_done)
 
         # last moves
