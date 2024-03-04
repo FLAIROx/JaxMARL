@@ -130,8 +130,11 @@ class HanabiGame(MultiAgentEnv):
             hands = state.player_hands
             fireworks = state.fireworks
             info_tokens = state.info_tokens
-            # discard always legal
-            legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(1)
+            # discard legal when discard tokens are not full
+            is_not_max_info_tokens = jnp.sum(state.info_tokens) < 8
+            legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(
+                is_not_max_info_tokens
+            )
             move_idx += self.hand_size
             # play moves always legal
             legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(1)
@@ -161,7 +164,7 @@ class HanabiGame(MultiAgentEnv):
 
             _, valid_hints = lax.scan(_get_hints_for_hand, (0, other_hands), None, self.num_agents - 1)
             # make other player positions relative to current player
-            valid_hints = jnp.roll(valid_hints, aidx, axis=0)
+            valid_hints = jnp.roll(valid_hints, -aidx, axis=0)
             # include valid hints in legal moves
             num_hints = (self.num_agents - 1) * (self.num_colors + self.num_ranks)
             valid_hints = jnp.concatenate(valid_hints, axis=0)
@@ -374,6 +377,13 @@ class HanabiGame(MultiAgentEnv):
             color_fireworks = state.fireworks.at[color].get()
             is_valid_play = (rank == jnp.sum(color_fireworks))
             make_play = jnp.logical_and(is_valid_play, jnp.logical_not(is_discard)).squeeze(0)
+
+            # gain another info token if completed a color
+            is_final_card = jnp.logical_and(is_valid_play, rank == self.num_ranks-1).squeeze(0)
+            infos_remaining = jnp.sum(info_tokens)
+            infos_depleted = (infos_remaining < self.max_info_tokens)
+            new_infos = (infos_remaining + (is_final_card * infos_depleted)).astype(int)
+            info_tokens = info_tokens.at[new_infos - 1].set(1)
 
             # increment fireworks if valid play action
             color_fireworks = color_fireworks.at[0, jnp.sum(color_fireworks).astype(int)].set(make_play)
