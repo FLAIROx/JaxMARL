@@ -130,8 +130,7 @@ class HanabiGame(MultiAgentEnv):
             hands = state.player_hands
             fireworks = state.fireworks
             info_tokens = state.info_tokens
-            # discard always legal
-            #TODO: This incorrect, discard is only legal
+            # discard legal when discard tokens are not full
             is_not_max_info_tokens = jnp.sum(state.info_tokens) < 8
             legal_moves = legal_moves.at[move_idx:move_idx + self.hand_size].set(
                 is_not_max_info_tokens
@@ -165,7 +164,7 @@ class HanabiGame(MultiAgentEnv):
 
             _, valid_hints = lax.scan(_get_hints_for_hand, (0, other_hands), None, self.num_agents - 1)
             # make other player positions relative to current player
-            valid_hints = jnp.roll(valid_hints, aidx, axis=0)
+            valid_hints = jnp.roll(valid_hints, -aidx, axis=0)
             # include valid hints in legal moves
             num_hints = (self.num_agents - 1) * (self.num_colors + self.num_ranks)
             valid_hints = jnp.concatenate(valid_hints, axis=0)
