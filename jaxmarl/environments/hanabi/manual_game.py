@@ -33,8 +33,9 @@ class ManualPlayer:
             try:
                 print("---")
                 action = int(input('Insert manual action: '))
+                print("action legal:", legal_moves[curr_player][action])
                 print("---\n")
-                if action >= 0 and action <= 20 and legal_moves[action] == 1:
+                if action >= 0 and action <= 20 and legal_moves[curr_player][action] == 1:
                     break
                 else:
                     print('Invalid action.')
