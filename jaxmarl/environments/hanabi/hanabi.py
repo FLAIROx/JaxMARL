@@ -539,7 +539,7 @@ class HanabiGame(MultiAgentEnv):
         game_won = (fireworks_after == (self.num_colors * self.num_ranks))
         deck_empty = (state.num_cards_dealt >= self.deck_size)
         last_round_count = state.last_round_count + deck_empty
-        last_round_done = (last_round_count == self.num_agents)
+        last_round_done = (last_round_count == self.num_agents + 1)
         terminal = jnp.logical_or(jnp.logical_or(state.out_of_lives, game_won), last_round_done)
 
         # last moves

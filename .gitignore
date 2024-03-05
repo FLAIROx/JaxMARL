@@ -14,3 +14,4 @@ tmp/
 *-checkpoint.py
 wandb/
 outputs/
+models/
