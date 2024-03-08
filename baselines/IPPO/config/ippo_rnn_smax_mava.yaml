@@ -1,5 +1,5 @@
 "LR": 2.5e-4
-"NUM_ENVS": 128
+"NUM_ENVS": 16
 "NUM_STEPS": 128
 "GRU_HIDDEN_DIM": 128
 "TOTAL_TIMESTEPS": 1e7
@@ -14,13 +14,15 @@
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
 "ENV_NAME": "HeuristicEnemySMAX"
-"MAP_NAME": "2s3z"
-"SEED": 0
+"MAP_NAME": "3s5z"
+"SEED": 42
+"ANNEAL_LR": False
+"ADD_AGENT_ID": True
+
 "ENV_KWARGS": 
   "see_enemy_actions": True
   "walls_cause_death": True
   "attack_mode": "closest"
-"ANNEAL_LR": False
 
 # WandB Params
 "ENTITY": amacrutherford
