@@ -194,6 +194,12 @@ class HanabiOBL(HanabiGame):
                 )
             )
         )
+
+        target_player_relative_index_feat = jnp.where(
+            action>=10, # only for hint actions
+            target_player_relative_index,
+            jnp.zeros(self.num_agents)
+        )                         
         
         # get the hand of the target player
         target_hand = new_state.player_hands[jnp.nonzero(target_player_index, size=1)[0][0]]
@@ -243,13 +249,19 @@ class HanabiOBL(HanabiGame):
 
         # effect of playing the card in the game
         card_played_score = (new_state.fireworks.sum(axis=(0,1)) - old_state.fireworks.sum(axis=(0,1)))!=0
-        added_info_tokens = new_state.info_tokens.sum() > old_state.info_tokens.sum()
+
+        # "added info token" boolean is present only when you get an info from playing the 5 of the color
+        added_info_tokens = jnp.where(
+            (action>=5)&(action<10), 
+            new_state.info_tokens.sum() > old_state.info_tokens.sum(),
+            0,
+        )  
 
         if False:
             feats = {
                 'acting_player_relative_index':acting_player_relative_index,
                 'move_type':move_type,
-                'target_player_relative_index':target_player_relative_index,
+                'target_player_relative_index':target_player_relative_index_feat,
                 'color_revealed':color_revealed,
                 'rank_revealed':rank_revealed,
                 'reveal_outcome':reveal_outcome,
@@ -264,7 +276,7 @@ class HanabiOBL(HanabiGame):
         last_action = jnp.concatenate((
             acting_player_relative_index,
             move_type,
-            target_player_relative_index,
+            target_player_relative_index_feat,
             color_revealed,
             rank_revealed,
             reveal_outcome,
@@ -290,17 +302,38 @@ class HanabiOBL(HanabiGame):
         fireworks = jax.vmap(keep_only_last_one)(state.fireworks)
         deck = jnp.any(jnp.any(state.deck, axis=1), axis=1).astype(int)
         deck = deck[-1:self.num_agents*self.hand_size-1:-1] # avoid the first cards at beginning of episode and reset the order 
-        board_feats = jnp.concatenate((deck, fireworks.ravel(), state.life_tokens, state.info_tokens))
+        board_feats = jnp.concatenate((deck, fireworks.ravel(), state.info_tokens, state.life_tokens))
         
         return board_feats
     
     @partial(jax.jit, static_argnums=[0])
+    def get_full_deck(self):
+        def _gen_cards(aidx):
+            """Generates one-hot card encodings given (color, rank) pairs"""
+            color, rank = color_rank_pairs[aidx]
+            card = jnp.zeros((self.num_colors, self.num_ranks))
+            card = card.at[color, rank].set(1)
+
+            return card
+
+        colors = jnp.arange(self.num_colors)
+        ranks = jnp.arange(self.num_ranks)
+        ranks = jnp.repeat(ranks, self.num_cards_of_rank)
+        color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
+
+        full_deck = jax.vmap(_gen_cards)(jnp.arange(self.deck_size))
+        return full_deck
+    
+    @partial(jax.jit, static_argnums=[0])
     def get_v0_belief_feats(self, aidx:int, state:State):
 
-        def belief_per_hand(hand, knowledge, color_hint, rank_hint):
+        full_deck = self.get_full_deck()
+
+        def belief_per_hand(knowledge, color_hint, rank_hint):
             count = (
-                hand.sum(axis=0).ravel()+
-                state.deck.sum(axis=0).ravel()
+                full_deck.sum(axis=0).ravel()
+                - state.discard_pile.sum(axis=0).ravel()
+                - state.fireworks.ravel()
             ) # count of the remaining cards
             normalized_knowledge = knowledge*count
             normalized_knowledge /= normalized_knowledge.sum(axis=1)[:,np.newaxis]
@@ -314,7 +347,6 @@ class HanabiOBL(HanabiGame):
         # compute my belief and the beliefs of other players, starting from self cards 
         rel_pos = lambda x: jnp.roll(x, -aidx, axis=0)
         belief = jax.vmap(belief_per_hand)(
-            rel_pos(state.player_hands),
             rel_pos(state.card_knowledge),
             rel_pos(state.colors_revealed),
             rel_pos(state.ranks_revealed),
@@ -342,6 +374,7 @@ class HanabiOBL(HanabiGame):
     
     def render_obs(self, obs:dict):
         # print the dictionary of agents observations
+
         for i, (agent, obs) in enumerate(obs.items()):
             print(f'Obs for {agent}')
             j = 0
@@ -438,4 +471,6 @@ class HanabiOBL(HanabiGame):
             print(f'Actor {aidx} Hand:' + ('<-- current player' if aidx==current_player else ''))
             for card_str in get_actor_hand_str(aidx):
                 print(card_str)
+
+        return board_info
 
