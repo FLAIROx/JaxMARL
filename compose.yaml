@@ -8,4 +8,5 @@ services:
     volumes:
       - .:/app
     runtime: nvidia
+    command: sh -c "pip install -e . && /bin/bash"
     
