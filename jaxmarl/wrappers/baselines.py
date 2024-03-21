@@ -30,6 +30,37 @@ class JaxMARLWrapper(object):
         return jnp.stack([x[a] for a in self._env.agents])
 
 
+class AddAgentID(JaxMARLWrapper):
+    """ Add one hot encoded agent id to start all agent's observations."""
+    
+    def __init__(self, env: MultiAgentEnv):
+        super().__init__(env)
+        self.agent_ids = jnp.eye(self._env.num_agents)
+        
+        # Update observation space
+        self._env.observation_spaces = jax.tree_map(lambda s: s.replace(shape=(s.shape[0]+self._env.num_agents,)), self._env.observation_spaces)
+
+    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+        obs, state = self._env.reset(key)
+        obs_batch = self._batchify_floats(obs)
+        obs = jax.tree_util.tree_map(lambda x: jnp.concatenate([x, self.agent_ids], axis=-1), obs_batch)
+        obs = {a: obs[i] for i, a in enumerate(self._env.agents)}
+        return obs, state
+
+    def step(
+        self,
+        key: chex.PRNGKey,
+        state: State,
+        action: Union[int, float],
+    ) -> Tuple[chex.Array, State, float, bool, dict]:
+        
+        obs, state, reward, done, info = self._env.step(key, state, action)
+        obs_batch = self._batchify_floats(obs)
+        obs = jax.tree_util.tree_map(lambda x: jnp.concatenate([x, self.agent_ids], axis=-1), obs_batch)
+        obs = {a: obs[i] for i, a in enumerate(self._env.agents)}
+        return obs, state, reward, done, info
+
+
 @struct.dataclass
 class LogEnvState:
     env_state: State

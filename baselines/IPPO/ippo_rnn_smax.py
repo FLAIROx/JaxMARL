@@ -310,7 +310,7 @@ def make_train(config):
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (value_loss, loss_actor, entropy, ratio)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
@@ -323,6 +323,7 @@ def make_train(config):
                         "value_loss": total_loss[1][0],
                         "actor_loss": total_loss[1][1],
                         "entropy": total_loss[1][2],
+                        "ratio": total_loss[1][3],
                     }
                     
                     return train_state, loss_info
