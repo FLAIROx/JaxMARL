@@ -122,6 +122,7 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
     avail_actions: jnp.ndarray
+    terminated: jnp.ndarray
 
 # below classes inspired by Mava
 class Params(NamedTuple):
@@ -152,6 +153,7 @@ class RNNRunnerState(NamedTuple):
     env_state: State
     obs: jnp.ndarray
     done: jnp.ndarray
+    episode_done: jnp.ndarray
     hstates: HiddenStates
     key: chex.PRNGKey
 
@@ -261,7 +263,7 @@ def make_train(config):
             
             # COLLECT TRAJECTORIES
             def _env_step(runner_state: RNNRunnerState, unused):
-                update_step, params, opt_states, env_state, last_obs, last_done, hstates, rng = runner_state
+                update_step, params, opt_states, env_state, last_obs, last_done, last_episode_done, hstates, rng = runner_state
 
                 # RUN NETWORKS
                 rng, policy_rng = jax.random.split(rng)
@@ -292,7 +294,17 @@ def make_train(config):
                     env.step, in_axes=(0, 0, 0)
                 )(rng_step, env_state, env_act)
                 info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                episode_done = done["__all__"]
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
+                
+                ## term - mask out timesteps when the agent didn't act
+                # if agent was done in the last timestep and the episode is not over then this action is invalid
+                # but if the episode ends, then this action is valid 
+                
+                last_done = last_done.reshape((config["NUM_ENVS"], -1))
+                last_ep_done = jnp.all(last_done, axis=1)
+                term = last_done & ~last_ep_done[:, None]
+                term = term.reshape((-1,))
                 
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
@@ -304,11 +316,12 @@ def make_train(config):
                     obs_batch,
                     info,
                     avail_actions,
+                    term
                 )
                 
                 hstates = HiddenStates(actor_hstate, critic_hstate)
                 runner_state = RNNRunnerState(
-                    update_step, params, opt_states, env_state, obs, done_batch, hstates, rng
+                    update_step, params, opt_states, env_state, obs, done_batch, episode_done, hstates, rng
                 )                
                 return runner_state, transition
 
@@ -318,7 +331,7 @@ def make_train(config):
             )
 
             # CALCULATE ADVANTAGE
-            update_step, params, opt_states, env_state, last_obs, last_done, hstates, rng = runner_state
+            update_step, params, opt_states, env_state, last_obs, last_done, last_episode_done, hstates, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
             ac_in = (
                 last_obs_batch[np.newaxis, :],
@@ -326,6 +339,7 @@ def make_train(config):
             )
             _, last_val = critic_network.apply(params.critic_params, hstates.critic_hstate, ac_in)
             last_val = last_val.squeeze()  # mava here masks out the terminal states but surely unnecessary?
+            last_val = jnp.where(last_done, jnp.zeros_like(last_val), last_val)
             # TODO mava's masking
             
             def _calculate_gae(traj_batch, last_val):
@@ -390,9 +404,10 @@ def make_train(config):
                             * gae
                         )
                         # TODO add back in done masking on the mean 
+                        print('loss actor shape', loss_actor1.shape, 'term shape', traj_batch.terminated.shape)
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean()
-                        entropy = pi.entropy().mean()
+                        loss_actor = loss_actor.mean(where=(1-traj_batch.done))
+                        entropy = pi.entropy().mean(where=(1-traj_batch.done))
 
                         total_loss = loss_actor - config["ENT_COEF"] * entropy
                         return total_loss, (loss_actor, entropy, ratio)
@@ -417,7 +432,7 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean() 
+                        ).mean(where=(1-traj_batch.done)) 
                         
                         total_loss = config["VF_COEF"] * value_loss
                         return total_loss, (value_loss)
@@ -573,6 +588,7 @@ def make_train(config):
                 env_state,
                 last_obs,
                 last_done,
+                last_episode_done,
                 hstates,
                 rng,
             )
@@ -587,6 +603,7 @@ def make_train(config):
             env_state=env_state,
             obs=obsv,
             done=jnp.zeros((config["NUM_ACTORS"]), dtype=bool),
+            episode_done=jnp.zeros((config["NUM_ENVS"]), dtype=bool),
             hstates=init_hstates,
             key=_rng,
         )
