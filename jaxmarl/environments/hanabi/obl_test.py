@@ -13,7 +13,7 @@ from jaxmarl import make
 from jaxmarl.wrappers.baselines import LogWrapper
 from safetensors.flax import save_file, load_file
 from flax.traverse_util import flatten_dict, unflatten_dict
-from obl.obl_flax import SimpleOBLAgent, TorchAlignedLSTM 
+from jaxmarl.environments.hanabi.pre_trained.obl_r2d2_agent import SimpleOBLAgent, TorchAlignedLSTM 
 import json
 
 def load_params(filename):
