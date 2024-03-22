@@ -89,6 +89,7 @@ def test_injected_decks():
     This tests consists in injecting in the Hanabi environment a set of decks and actions that are known to produce a certain score.
     The test checks if the scores produced by the environment are the same as the expected ones.
     """
+    print('Hanabi Test: test_injected_decks')
     actions_seq = get_action_sequences()
     decks = get_decks()
     true_scores = get_scores()
