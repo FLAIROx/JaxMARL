@@ -16,11 +16,11 @@ from .environments import (
     HeuristicEnemySMAX,
     LearnedPolicyEnemySMAX,
     SwitchRiddle,
-    #Ant,
-    #Humanoid,
-    #Hopper,
-    #Walker2d,
-    #HalfCheetah,
+    Ant,
+    Humanoid,
+    Hopper,
+    Walker2d,
+    HalfCheetah,
     InTheGrid,
     InTheGrid_2p,
     Hanabi,
@@ -76,17 +76,16 @@ def make(env_id: str, **env_kwargs):
         env = LearnedPolicyEnemySMAX(**env_kwargs)
 
     # 4. MABrax
-    elif False:
-        if env_id == "ant_4x2":
-            env = Ant(**env_kwargs)
-        elif env_id == "halfcheetah_6x1":
-            env = HalfCheetah(**env_kwargs)
-        elif env_id == "hopper_3x1":
-            env = Hopper(**env_kwargs)
-        elif env_id == "humanoid_9|8":
-            env = Humanoid(**env_kwargs)
-        elif env_id == "walker2d_2x3":
-            env = Walker2d(**env_kwargs)
+    if env_id == "ant_4x2":
+        env = Ant(**env_kwargs)
+    elif env_id == "halfcheetah_6x1":
+        env = HalfCheetah(**env_kwargs)
+    elif env_id == "hopper_3x1":
+        env = Hopper(**env_kwargs)
+    elif env_id == "humanoid_9|8":
+        env = Humanoid(**env_kwargs)
+    elif env_id == "walker2d_2x3":
+        env = Walker2d(**env_kwargs)
 
     # 5. InTheGrid
     elif env_id == "storm":

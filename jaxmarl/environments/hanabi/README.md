@@ -61,9 +61,9 @@ import jax
 from jax import numpy as jnp
 from jaxmarl import make
 from jaxmarl.wrappers.baselines import load_params
-from jaxmarl.environments.hanabi.pre_trained import OBLAgentR2D2
+from jaxmarl.environments.hanabi.pretrained import OBLAgentR2D2
 
-weight_file = "jaxmarl/environments/hanabi/pre_trained/obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors"
+weight_file = "jaxmarl/environments/hanabi/pretrained/obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors"
 params = load_params(weight_file)
 
 agent = OBLAgentR2D2()
