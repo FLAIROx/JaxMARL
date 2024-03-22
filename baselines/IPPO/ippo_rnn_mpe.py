@@ -20,6 +20,9 @@ from jaxmarl.wrappers.baselines import MPELogWrapper
 import wandb
 import functools
 
+from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.mpe.simple import State
+from jaxmarl.environments.mpe import MPEVisualizer
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -410,7 +413,8 @@ def make_train(config):
         runner_state, metric = jax.lax.scan(
             _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
-        return {"runner_state": runner_state}
+
+        return {"runner_state": runner_state, "network_params": network_params}
 
     return train
 
@@ -418,6 +422,8 @@ def make_train(config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_mpe")
 def main(config):
     config = OmegaConf.to_container(config)
+
+    ## TRAINING ##
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
@@ -442,13 +448,72 @@ def main(config):
         
     })'''
 
-'''
-"total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
-        "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
-        "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
-        "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
-        "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
-'''
+    '''
+    "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+            "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+            "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+            "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+            "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
+    '''
+
+    ## TESTING ##
+    rng = jax.random.PRNGKey(0)
+    trained_network_params = out["network_params"]
+    env = jaxmarl.make(config["ENV_NAME"])
+    config["NUM_ENVS"] = 1
+    config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
+    network = ActorCriticRNN(env.action_space(env.agents[0]).n, config=config)
+
+    num_test_episodes = 2
+    episode_length = env.max_steps
+    with jax.disable_jit(True):
+        for episode_idx in range(num_test_episodes):
+            rng, rng_next = jax.random.split(rng)  # Prepare RNG for this episode
+            reset_rng = jax.random.split(rng_next, config["NUM_ENVS"])  # Split RNG for environment resets
+
+            # Initialize inputs
+            obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
+            hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
+            done_batch = jnp.zeros((config["NUM_ACTORS"],), dtype=bool)
+
+            state_seq = []
+            obs_seq = []
+            for step_idx in range(episode_length):
+                # RNN STEP
+                obs_batch = batchify(obsv, env.agents, config["NUM_ACTORS"])
+                ac_in = (obs_batch[np.newaxis, :], done_batch[np.newaxis, :])
+                hstate, pi, value = network.apply(trained_network_params, hstate, ac_in)
+
+                # SELECT ACTION
+                rng, rng_action = jax.random.split(rng_next)  # Split RNG for actions
+                agent_actions = pi.sample(seed=rng_action)
+                env_act = unbatchify(agent_actions, env.agents, config["NUM_ENVS"], env.num_agents)
+
+                # STEP ENV
+                rng, rng_step = jax.random.split(rng_next)  # Split RNG for environment steps
+                rng_step_env = jax.random.split(rng_step, config["NUM_ENVS"])
+                obsv, env_state, reward, done, info = jax.vmap(
+                        env.step, in_axes=(0, 0, 0)
+                    )(rng_step_env, env_state, env_act)
+                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(axis=-1)
+
+                # Squeeze State members; Wouldn't have been needed if State were NamedTuple
+                env_state_squeezed = State(
+                    p_pos=env_state.p_pos.squeeze() if hasattr(env_state.p_pos, 'squeeze') else env_state.p_pos,
+                    p_vel=env_state.p_vel.squeeze() if hasattr(env_state.p_vel, 'squeeze') else env_state.p_vel,
+                    c=env_state.c.squeeze() if hasattr(env_state.c, 'squeeze') else env_state.c,
+                    done=env_state.done.squeeze() if hasattr(env_state.done, 'squeeze') else env_state.done,
+                    step=env_state.step,  # step is an int, so no squeezing needed
+                    goal=env_state.goal  # goal is optional and an int, so no squeezing needed
+                )
+                state_seq.append(env_state_squeezed)
+
+            # Save animation
+            gif_path = f"ippo_mpe_ep{episode_idx:02d}.gif"
+            viz = MPEVisualizer(env, state_seq)
+            viz.animate(save_fname=gif_path)
+            print("Episode", episode_idx, "saved:", gif_path)
 
 if __name__ == "__main__":
     main()
