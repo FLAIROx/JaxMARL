@@ -259,7 +259,7 @@ class CTRolloutManager(JaxMARLWrapper):
         # custom global state and rewards for specific envs
         if 'smax' in env.name.lower():
             self.global_state = lambda obs, state: obs['world_state']
-            self.global_reward = lambda rewards: rewards[self.training_agents[0]]
+            self.global_reward = lambda rewards: rewards[self.training_agents[0]]*10
         elif 'overcooked' in env.name.lower():
             self.global_state = lambda obs, state:  jnp.concatenate([obs[agent].ravel() for agent in self.agents], axis=-1)
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
