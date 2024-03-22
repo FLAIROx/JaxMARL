@@ -10,22 +10,14 @@ Pure JAX implementations of:
 
 The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning)
 
-```
-⚠️ The implementations were tested with Python 3.9 and Jax 0.4.11. 
-With Jax 0.4.13, you could experience a degradation of performance. 
-```
-
-We use [`flashbax`](https://github.com/instadeepai/flashbax) to provide our replay buffers, this requires Python 3.9 and the dependency can be installed with:
-``` 
-pip install -r requirements/requirements-qlearning.txt 
-```
 
 ```
 ❗The implementations were tested in the following environments:
 - MPE
 - SMAX
-- Hanabi
 ```
+
+WIP for Hanabi and Overcooked.
 
 ## ⚙️ Implementation Details
 
