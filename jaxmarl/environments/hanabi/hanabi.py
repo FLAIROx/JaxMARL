@@ -134,7 +134,15 @@ class HanabiEnv(HanabiGame):
 
     @partial(jax.jit, static_argnums=[0])
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
+        """Reset the environment and return the initial observation."""
         state = self.reset_game(key)
+        obs = self.get_obs(state, state, action=20)
+        return obs, state
+    
+    @partial(jax.jit, static_argnums=[0])
+    def reset_from_deck(self, key: chex.PRNGKey, deck:chex.Array) -> Tuple[Dict, State]:
+        """Inject a deck in the game. Useful for testing."""
+        state = self.reset_game_from_deck(key, deck)
         obs = self.get_obs(state, state, action=20)
         return obs, state
 
@@ -145,6 +153,7 @@ class HanabiEnv(HanabiGame):
         state: State,
         actions: Dict,
     ) -> Tuple[chex.Array, State, Dict, Dict, Dict]:
+        """Execute the environment step."""
 
         # get actions as array
         actions = jnp.array([actions[i] for i in self.agents])
@@ -172,6 +181,7 @@ class HanabiEnv(HanabiGame):
     def get_obs(
         self, new_state: State, old_state: State, action: chex.Array = 20
     ) -> Dict:
+        """Get all agents' observations."""
 
         # no agent-specific obs
         board_fats = self.get_board_fats(new_state)
@@ -293,6 +303,7 @@ class HanabiEnv(HanabiGame):
     def get_last_action_feats_(
         self, aidx: int, old_state: State, new_state: State, action: chex.Array
     ):
+        """Get the features of the last action taken"""
 
         acting_player_index = old_state.cur_player_idx  # absolute OH index
         target_player_index = new_state.cur_player_idx  # absolute OH index
@@ -415,6 +426,7 @@ class HanabiEnv(HanabiGame):
     def get_last_action_feats(
         self, aidx: int, old_state: State, new_state: State, action: chex.Array
     ):
+        """Get the features of the last action taken"""
         last_action = self.get_last_action_feats_(aidx, old_state, new_state, action)
         last_action = jnp.concatenate((
             last_action['acting_player_relative_index'],
@@ -434,7 +446,7 @@ class HanabiEnv(HanabiGame):
 
     @partial(jax.jit, static_argnums=[0])
     def get_board_fats(self, state: State):
-
+        """Get the features of the board."""
         # by default the fireworks are incremental, i.e. [1,1,0,0,0] one and two are in the board
         # must be OH of only the highest rank, i.e. [0,1,0,0,0]
         keep_only_last_one = lambda x: jnp.where(
@@ -456,6 +468,7 @@ class HanabiEnv(HanabiGame):
 
     @partial(jax.jit, static_argnums=[0])
     def get_full_deck(self):
+        """Get the full deck of cards."""
         def _gen_cards(aidx):
             """Generates one-hot card encodings given (color, rank) pairs"""
             color, rank = color_rank_pairs[aidx]
@@ -474,6 +487,7 @@ class HanabiEnv(HanabiGame):
 
     @partial(jax.jit, static_argnums=[0])
     def get_v0_belief_feats(self, aidx: int, state: State):
+        """Get the belief of the agent about the player hands."""
 
         full_deck = self.get_full_deck()
 
@@ -501,6 +515,7 @@ class HanabiEnv(HanabiGame):
 
     @partial(jax.jit, static_argnums=[0])
     def _binarize_discard_pile(self, discard_pile: chex.Array):
+        """Binarize the discard pile to reduce dimensionality."""
 
         def binarize_ranks(n_ranks):
             tree = jax.tree_util.tree_map(
@@ -574,7 +589,7 @@ class HanabiEnv(HanabiGame):
         return f"{self.color_map[color]}{rank+1}"
 
     def render(self, state: State):
-        # prints in console the state as string
+        """Render the state of the game as a string in console."""
 
         def get_actor_hand_str(aidx: int) -> str:
             # get the index of an actor and returns its hand (with knowledge per card) as string
@@ -654,7 +669,8 @@ class HanabiEnv(HanabiGame):
                 print(card_str)
 
     def get_obs_str(self, new_state, old_state=None, action=20, include_belief=False, best_belief=5):
-        # prints in console the state as string
+        """Get the observation as a string."""
+        
         output = ""
 
         def get_actor_hand_str(aidx: int, belief: chex.Array=None, mask_hand=False) -> str:

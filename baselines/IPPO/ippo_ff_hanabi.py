@@ -138,6 +138,7 @@ def make_train(config):
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
+                env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
 
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)

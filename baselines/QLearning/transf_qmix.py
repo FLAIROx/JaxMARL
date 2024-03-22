@@ -6,7 +6,7 @@ The implementation closely follows the original one https://github.com/mttga/pym
 - It's added the possibility to perform $n$ training updates of the network at each update step. 
 
 Currently supports only MPE_spread and SMAX. Remember that to use the transformers in your environment you need 
-to reshape the observations and states into matrices. See: jaxmarl.wrappers.transformers
+to reshape the observations and states to matrices. See: jaxmarl.wrappers.transformers
 """
 
 import os
@@ -928,7 +928,7 @@ def make_train(config, env):
     return train
 
 
-def signle_run(config):
+def single_run(config):
     """Perform a single run with multiple parallel seeds in one env."""
     config = OmegaConf.to_container(config)
 
@@ -1026,9 +1026,6 @@ def tune(default_config):
         train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
         outs = jax.block_until_ready(train_vjit(rngs))
 
-    n_updates = (
-        default_config["alg"]["TOTAL_TIMESTEPS"] // default_config["alg"]["NUM_STEPS"] // default_config["alg"]["NUM_ENVS"]
-    )*default_config["NUM_SEEDS"] # 2 seeds will log double, 3 seeds will log triple and so on
     sweep_config = {
         'method': 'bayes',
         'metric': {
@@ -1036,11 +1033,11 @@ def tune(default_config):
             'goal': 'maximize',
         },
         'parameters':{
-            'LR':{'values':[0.01, 0.005, 0.001, 0.0005]},
-            'LR_EXP_DECAY_RATE':{'values':[0.02, 0.002, 0.0002, 0.00002]},
+            'LR':{'values':[0.005, 0.001, 0.0005]},
             'EPS_ADAM':{'values':[0.0001, 0.0000001, 0.0000000001]},
-            'NUM_ENVS':{'values':[16, 32]},
-            'N_MINI_UPDATES':{'values':[2, 4, 8]},
+            'SCALE_INPUTS':{'values':[True, False]},
+            'NUM_ENVS':{'values':[8, 16]},
+            'N_MINI_UPDATES':{'values':[1, 2, 4]},
         },
     }
 
@@ -1051,7 +1048,7 @@ def tune(default_config):
 @hydra.main(version_base=None, config_path="./config", config_name="config")
 def main(config):
     #tune(config) # uncomment to run hypertuning
-    signle_run(config)
+    single_run(config)
 
 if __name__ == "__main__":
     main()

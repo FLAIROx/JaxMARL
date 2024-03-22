@@ -6,8 +6,6 @@ This implementation had the goal to perform inference with pretrained params, fo
 is kept as minimal as possible.
 """
 
-import numpy as np
-import flax
 import jax
 from jax import numpy as jnp
 import flax.linen as nn
@@ -15,8 +13,6 @@ from functools import partial
 from typing import Tuple
 from chex import Array, PRNGKey
 from flax.linen.module import compact, nowrap
-from jaxmarl.wrappers.baselines import load_params
-
 
 class MultiLayerLSTM(nn.RNNCellBase):
 
@@ -114,45 +110,11 @@ class OBLAgentR2D2(nn.Module):
         ).initialize_carry(rng, batch_dims)
 
 
-class ManualGameR2D2Agent:
-
-    def __init__(self, weight_file, player_idx):
-        self.player_id = player_idx
-        self.params = load_params(weight_file)
-        self.model = OBLAgentR2D2()
-        self._hid = {
-            "h0": jnp.zeros((2, 2, 512)),  # num_layer, batch_size, dim
-            "c0": jnp.zeros((2, 2, 512)),
-        }
-
-    def act(self, obs, legal_moves, curr_player):
-
-        obs = self._batchify(obs)
-        legal_moves = self._batchify(legal_moves)
-
-        flax_input = {
-            "priv_s": obs,  # batch*agents, ...
-            "publ_s": obs[
-                ..., 125:
-            ],  # batch*agents, remove private info (other agents' hands)
-            "h0": self._hid["h0"],  # num_layer, batch*agents, dim
-            "c0": self._hid["c0"],  # num_layer, batch*agents, dim
-            "legal_move": legal_moves,
-        }
-
-        act_result = self.model.greedy_act(self.params, flax_input)
-        actions = act_result.pop("a")
-        self._hid = act_result
-        return np.array(actions)
-
-    def _batchify(self, x_dict):
-        return jnp.stack([x_dict[agent] for agent in ["agent_0", "agent_1"]])
-
-
 
 def example():
 
     from jaxmarl import make
+    from jaxmarl.wrappers.baselines import load_params
 
     weight_file = "./obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors"
     params = load_params(weight_file)

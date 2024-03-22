@@ -52,10 +52,11 @@ The observations closely follow the featurization in the HLE. Each observation i
 
 We make available to use some pretrained models. For example you can use a jax conversion of the original R2D2 OBL model in this way:
 
-1. Download the models from Hugginface: ```git clone https://huggingface.co/mttga/obl-r2d2-flax``` (ensure to have git lfs installed). You can also use the script: bash jaxmarl/environments/hanabi/models/download_r2d2_obl.sh
+1. Download the models from Hugginface: ```git clone https://huggingface.co/mttga/obl-r2d2-flax``` (ensure to have git lfs installed). You can also use the script: ```bash jaxmarl/environments/hanabi/models/download_r2d2_obl.sh```
 2. Load the parameters, import the agent wrapper and use it with JaxMarl Hanabi:
 
 ```python
+!git clone https://huggingface.co/mttga/obl-r2d2-flax
 import jax
 from jax import numpy as jnp
 from jaxmarl import make
@@ -87,6 +88,91 @@ obs, env_state, rewards, done, info = env.step(rng, env_state, actions)
 
 print('actions:', {agent:env.action_encoding[int(a)] for agent, a in actions.items()})
 env.render(env_state)
+```
+
+## Rendering
+
+You can render the full environment state:
+
+```python
+obs, env_state = env.reset(rng)
+env.render(env_state)
+
+Turn: 0
+
+Score: 0
+Information: 8
+Lives: 3
+Deck: 40
+Discards:                                                  
+Fireworks:     
+Actor 0 Hand:<-- current player
+0 W3 || XX|RYGWB12345
+1 G5 || XX|RYGWB12345
+2 G4 || XX|RYGWB12345
+3 G1 || XX|RYGWB12345
+4 Y2 || XX|RYGWB12345
+Actor 1 Hand:
+0 R3 || XX|RYGWB12345
+1 B1 || XX|RYGWB12345
+2 G1 || XX|RYGWB12345
+3 R4 || XX|RYGWB12345
+4 W4 || XX|RYGWB12345
+```
+
+Or you can render the partial observation of the current agent:
+
+```python
+obs, new_env_state, rewards, dones, infos  = env.step_env(rng, env_state, actions)
+obs_s = env.get_obs_str(new_env_state, env_state, a, include_belief=True, best_belief=5)
+print(obs_s)
+
+Turn: 1
+
+Score: 0
+Information available: 7
+Lives available: 3
+Deck remaining cards: 40
+Discards:                                                  
+Fireworks:     
+Other Hand:
+0 Card: W3, Hints: , Possible: RYGWB12345, Belief: [R1: 0.060 Y1: 0.060 G1: 0.060 W1: 0.060 B1: 0.060]
+1 Card: G5, Hints: , Possible: RYGWB12345, Belief: [R1: 0.060 Y1: 0.060 G1: 0.060 W1: 0.060 B1: 0.060]
+2 Card: G4, Hints: , Possible: RYGWB12345, Belief: [R1: 0.060 Y1: 0.060 G1: 0.060 W1: 0.060 B1: 0.060]
+3 Card: G1, Hints: , Possible: RYGWB12345, Belief: [R1: 0.060 Y1: 0.060 G1: 0.060 W1: 0.060 B1: 0.060]
+4 Card: Y2, Hints: , Possible: RYGWB12345, Belief: [R1: 0.060 Y1: 0.060 G1: 0.060 W1: 0.060 B1: 0.060]
+Your Hand:
+0 Hints: , Possible: RYGWB2345, Belief: [R2: 0.057 R3: 0.057 R4: 0.057 Y2: 0.057 Y3: 0.057]
+1 Hints: 1, Possible: RYGWB1, Belief: [R1: 0.200 Y1: 0.200 G1: 0.200 W1: 0.200 B1: 0.200]
+2 Hints: 1, Possible: RYGWB1, Belief: [R1: 0.200 Y1: 0.200 G1: 0.200 W1: 0.200 B1: 0.200]
+3 Hints: , Possible: RYGWB2345, Belief: [R2: 0.057 R3: 0.057 R4: 0.057 Y2: 0.057 Y3: 0.057]
+4 Hints: , Possible: RYGWB2345, Belief: [R2: 0.057 R3: 0.057 R4: 0.057 Y2: 0.057 Y3: 0.057]
+Last action: H1
+Cards afected: [1 2]
+Legal Actions: ['D0', 'D1', 'D2', 'D3', 'D4', 'P0', 'P1', 'P2', 'P3', 'P4', 'HY', 'HG', 'HW', 'H1', 'H2', 'H3', 'H4', 'H5']
+```
+
+## Manual Game
+
+You can test the environment and your models by using the ```manual_game.py``` script in this folder. It allows to control one or two agents with the keyboard and one or two agents with a pretrained model (an obl model by default). For example, to play with an obl pretrained model:
+
+```
+python manual_game.py \
+  --player0 "manual" \
+  --player1 "obl" \
+  --weight1 "./pretrained/obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors" \
+  --seed 7
+```
+
+Or to look an obl model playing with itself:
+
+```
+python manual_game.py \
+  --player0 "manual" \
+  --player1 "obl" \
+  --weight0 "./pretrained/obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors" \
+  --weight1 "./pretrained/obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors" \
+  --seed 7
 ```
 
 ## Citation

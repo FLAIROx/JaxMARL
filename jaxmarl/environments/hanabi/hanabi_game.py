@@ -63,27 +63,8 @@ class HanabiGame(MultiAgentEnv):
         self.color_map = color_map
 
     @partial(jax.jit, static_argnums=[0])
-    def reset_game(self, key: chex.PRNGKey) -> State:
-        """Reset the environment"""
-
-        def _gen_cards(aidx, unused):
-            """Generates one-hot card encodings given (color, rank) pairs"""
-            color, rank = shuffled_pairs[aidx]
-            card = jnp.zeros((self.num_colors, self.num_ranks))
-            card = card.at[color, rank].set(1)
-
-            return aidx + 1, card
-
-        # get all possible (colour, rank) pairs, including repetitions given num_cards_of_rank
-        colors = jnp.arange(self.num_colors)
-        ranks = jnp.arange(self.num_ranks)
-        ranks = jnp.repeat(ranks, self.num_cards_of_rank)
-        color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
-        # randomly shuffle (colour, rank) pairs
-        key, _key = jax.random.split(key)
-        shuffled_pairs = jax.random.permutation(_key, color_rank_pairs, axis=0)
-        # generate one-hot encoded deck
-        _, deck = lax.scan(_gen_cards, 0, None, self.deck_size)
+    def get_first_state(self, key:chex.PRNGKey, deck:chex.Array) -> State:
+        """Get the initial state of the game"""
 
         def _deal_cards(aidx, unused):
             """Deals cards to players from top of deck"""
@@ -150,6 +131,35 @@ class HanabiGame(MultiAgentEnv):
         )
 
         return state
+
+    @partial(jax.jit, static_argnums=[0])
+    def reset_game(self, key: chex.PRNGKey) -> State:
+        """Create a random deck and return the first state of the game"""
+
+        def _gen_cards(aidx, unused):
+            """Generates one-hot card encodings given (color, rank) pairs"""
+            color, rank = shuffled_pairs[aidx]
+            card = jnp.zeros((self.num_colors, self.num_ranks))
+            card = card.at[color, rank].set(1)
+
+            return aidx + 1, card
+
+        # get all possible (colour, rank) pairs, including repetitions given num_cards_of_rank
+        colors = jnp.arange(self.num_colors)
+        ranks = jnp.arange(self.num_ranks)
+        ranks = jnp.repeat(ranks, self.num_cards_of_rank)
+        color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
+        # randomly shuffle (colour, rank) pairs
+        key, _key = jax.random.split(key)
+        shuffled_pairs = jax.random.permutation(_key, color_rank_pairs, axis=0)
+        # generate one-hot encoded deck
+        _, deck = lax.scan(_gen_cards, 0, None, self.deck_size)
+
+        return self.get_first_state(key, deck)
+
+    @partial(jax.jit, static_argnums=[0])
+    def reset_game_from_deck(self, key: chex.PRNGKey, deck:chex.PRNGKey) -> State:
+        return self.get_first_state(key, deck)
 
     @partial(jax.jit, static_argnums=[0])
     def step_game(

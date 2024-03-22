@@ -4,11 +4,11 @@ import numpy as np
 from jax import numpy as jnp
 from jaxmarl import make
 from jaxmarl.wrappers.baselines import load_params, LogWrapper
-from jaxmarl.environments.hanabi.pre_trained.obl_r2d2_agent import OBLAgentR2D2#, SimpleOBLAgent
+from jaxmarl.environments.hanabi.pretrained.obl_r2d2_agent import OBLAgentR2D2
 import json
 
 seed = 0
-n_test_games = 100
+n_test_games = 1000
 time_limit = 80
 env = LogWrapper(make('hanabi'))
 agent = OBLAgentR2D2()
@@ -49,22 +49,21 @@ def run_obl_test(rng, params):
         first_episode_mask = jnp.where(jnp.arange(dones.size) <= first_done, True, False)
         return jnp.where(first_episode_mask, rewards, 0.).sum()
         
-    returns = first_episode_returns(rewards['__all__'], dones['__all__'])
+    cum_rewards = first_episode_returns(rewards['__all__'], dones['__all__'])
 
     first_returned_episode = jnp.nonzero(infos['returned_episode'], size=1)[0][0]
     returns = infos['returned_episode_returns'][first_returned_episode][0]
 
+    returns = jnp.where(
+        first_returned_episode.any(), returns, cum_rewards
+    )
+
     return returns
 
 def main():
-
-    # load the decks
-    with open('decks_test.json') as f:
-        decks_j = json.load(f)
-    test_rngs = jnp.array([jnp.array(np.array(deck['jax_rng'], dtype=np.uint32))for deck in decks_j])
         
     rng = jax.random.PRNGKey(seed)
-    #test_rngs = jax.random.split(rng, n_test_games)
+    test_rngs = jax.random.split(rng, n_test_games)
     f = jax.jit(jax.vmap(run_obl_test, in_axes=[0,None]))
 
     model_dir = './obl-r2d2-flax'

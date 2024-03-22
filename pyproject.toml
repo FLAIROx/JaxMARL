@@ -8,7 +8,6 @@ include = ['jaxmarl*']
 [tool.setuptools.dynamic]
 version = {attr = "jaxmarl.__version__"}
 dependencies = {file = ["requirements/requirements.txt"]}
-optional-dependencies = {dev = { file = ["requirements/requirements-dev.txt"] }, qlearning = { file = ["requirements/requirements-qlearning.txt"] }}
 
 [project]
 name = "jaxmarl"
@@ -19,12 +18,11 @@ authors = [
   ]
 dynamic = ["version", "dependencies", "optional-dependencies"]
 license = {file = "LICENSE"}
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
