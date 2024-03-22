@@ -8,7 +8,7 @@ from jaxmarl.environments.storm.storm_env import Items
 
 action=1
 render_agent_view = False
-num_outer_steps = 1
+num_outer_steps = 3
 # num_inner_steps = 68
 #num_agents=8
 num_agents=2
@@ -96,22 +96,9 @@ for t in range(num_outer_steps * num_inner_steps):
     obs, state, reward, done, info = env.step_env(
         rng, old_state, [a*action for a in actions]
     )
-    # print(state.agent_inventories, 'agent inventories')
-    # print(actions.shape, 'actions')
-    # print(state.agent_positions.shape, 'agent positions')
-    # print(state.agent_freezes.shape, 'agent freezes')
-    # if (state.grid == old_state.grid).all():
-    #     print(t, 'hello there')
-
-    # if (state.red_pos[:2] == state.blue_pos[:2]).all():
-    #     import pdb
-
-    #     # pdb.set_trace()
-    #     print("collision")
-    #     print(
-    #         f"timestep: {t}, A1: {int_action[a1.item()]} A2:{int_action[a2.item()]}"
-    #     )
-    #     print(state.red_pos, state.blue_pos)
+    print('outer t', state.outer_t)
+    print('inner t', state.inner_t)
+    print('done', done)
 
     img = env.render(state)
     Image.fromarray(img).save(f"state_pics/state_{t+1}.png")
