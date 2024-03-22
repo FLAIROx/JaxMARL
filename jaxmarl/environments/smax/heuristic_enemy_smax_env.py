@@ -98,10 +98,10 @@ class EnemySMAX(MultiAgentEnv):
                 self._env._decode_discrete_actions(actions)
             )
 
-        movement_actions = jnp.concat(
+        movement_actions = jnp.concatenate(
             [ally_movement_actions, enemy_movement_actions], axis=0
         )
-        attack_actions = jnp.concat([ally_attack_actions, enemy_attack_actions], axis=0)
+        attack_actions = jnp.concatenate([ally_attack_actions, enemy_attack_actions], axis=0)
 
         if not get_state_sequence:
             obs, jaxmarl_state, rewards, dones, infos = self._env.step_env_no_decode(

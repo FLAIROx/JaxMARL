@@ -1,4 +1,5 @@
 """ Wrappers for use with jaxmarl baselines. """
+import os
 import jax
 import jax.numpy as jnp
 import chex
@@ -8,9 +9,20 @@ from functools import partial
 
 # from gymnax.environments import environment, spaces
 from gymnax.environments.spaces import Box as BoxGymnax, Discrete as DiscreteGymnax
-from typing import Optional, List, Tuple, Union
+from typing import Dict, Optional, List, Tuple, Union
 from jaxmarl.environments.spaces import Box, Discrete, MultiDiscrete
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv, State
+
+from safetensors.flax import save_file, load_file
+from flax.traverse_util import flatten_dict, unflatten_dict
+
+def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+    flattened_dict = flatten_dict(params, sep=',')
+    save_file(flattened_dict, filename)
+
+def load_params(filename:Union[str, os.PathLike]) -> Dict:
+    flattened_dict = load_file(filename)
+    return unflatten_dict(flattened_dict, sep=",")
 
 
 class JaxMARLWrapper(object):
@@ -247,7 +259,7 @@ class CTRolloutManager(JaxMARLWrapper):
         # custom global state and rewards for specific envs
         if 'smax' in env.name.lower():
             self.global_state = lambda obs, state: obs['world_state']
-            self.global_reward = lambda rewards: rewards[self.training_agents[0]]
+            self.global_reward = lambda rewards: rewards[self.training_agents[0]]*10
         elif 'overcooked' in env.name.lower():
             self.global_state = lambda obs, state:  jnp.concatenate([obs[agent].ravel() for agent in self.agents], axis=-1)
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]

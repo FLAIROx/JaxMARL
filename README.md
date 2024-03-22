@@ -87,15 +87,6 @@ pip install jaxmarl
     pip install -e .
     export PYTHONPATH=./JaxMARL:$PYTHONPATH
     ```
-3. If you would also like to run the Q-learning algorithms, Python 3.9 is required along with additional dependencies:
-    ``` 
-    pip install -e '.[qlearning]'
-    ```
-
-**Test Scripts** - To run our test scripts, some additional dependencies are required (for comparisons against existing implementations), these can be installed with:
-```
-pip install -r requirements/requirements-dev.txt 
-```
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
 

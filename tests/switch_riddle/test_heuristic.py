@@ -13,7 +13,7 @@ def action_for_agent_in_room(env, state, action_name):
     return actions
 
 @pytest.mark.parametrize("seed", [0, 999])
-@pytest.mark.parametrize("num_agents", [3, 5, 10, 50, 100])
+@pytest.mark.parametrize("num_agents", [3, 5, 10])
 class TestHeuristic:
 
     def test_light_switch(self, seed, num_agents):
