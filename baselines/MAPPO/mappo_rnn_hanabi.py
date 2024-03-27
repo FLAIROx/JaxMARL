@@ -57,7 +57,7 @@ class HanabiWorldStateWrapper(JaxMARLWrapper):
         hands = state.player_hands.reshape((self._env.num_agents, -1))
         return jnp.concatenate((all_obs, hands), axis=1)
         
-    
+    @partial(jax.jit, static_argnums=0)
     def world_state_size(self):
    
         return self._env.observation_space(self._env.agents[0]).n + 125 # NOTE hardcoded hand size
@@ -193,7 +193,7 @@ def make_train(config):
     def train(rng):
         # INIT NETWORK
         actor_network = ActorRNN(env.action_space(env.agents[0]).n, config=config)
-        critic_network = CriticRNN()
+        critic_network = CriticRNN(config=config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
         ac_init_x = (
             jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).n)),
@@ -202,9 +202,9 @@ def make_train(config):
         )
         ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
         actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
-        
+        print('ac init x',ac_init_x)
         cr_init_x = (
-            jnp.zeros((1, config["NUM_ENVS"], env.world_state_size(),)), 
+            jnp.zeros((1, config["NUM_ENVS"], 658+125,)), # NOTE hardcoded
             jnp.zeros((1, config["NUM_ENVS"])),
         )
         cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
@@ -272,6 +272,7 @@ def make_train(config):
                 env_act = unbatchify(
                     action, env.agents, config["NUM_ENVS"], env.num_agents
                 )
+                env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
 
                 # VALUE
                 world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
