@@ -31,5 +31,5 @@ parameters:
       # - 50
       # - 51
 
-program: baselines/IPPO/ippo_rnn_smax.py
+program: baselines/MAPPO/mappo_rnn_smax.py
 project: jaxmarl-smax
