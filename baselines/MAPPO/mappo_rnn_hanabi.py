@@ -98,7 +98,7 @@ class ActorRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones, avail_actions = x
         embedding = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
         embedding = nn.relu(embedding)
 
@@ -121,12 +121,13 @@ class ActorRNN(nn.Module):
 
 
 class CriticRNN(nn.Module):
+    config: Dict
     
     @nn.compact
     def __call__(self, hidden, x):
         world_state, dones = x
         embedding = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(world_state)
         embedding = nn.relu(embedding)
         
@@ -290,7 +291,7 @@ def make_train(config):
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
-                    done_batch,
+                    last_done,
                     action.squeeze(),
                     value.squeeze(),
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
