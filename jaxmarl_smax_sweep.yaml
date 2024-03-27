@@ -25,11 +25,11 @@ parameters:
       - 44
       - 45
       - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
+      # - 47
+      # - 48
+      # - 49
+      # - 50
+      # - 51
 
 program: baselines/IPPO/ippo_rnn_smax.py
 project: jaxmarl-smax
