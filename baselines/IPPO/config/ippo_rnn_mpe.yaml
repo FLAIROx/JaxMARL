@@ -19,6 +19,6 @@
 "SEED": 30
 
 # WandB Params
-"ENTITY": ""
+"ENTITY": "amacrutherford"
 "PROJECT": "jaxmarl-mpe"
-"WANDB_MODE" : "disabled"
+"WANDB_MODE" : "online"

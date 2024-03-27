@@ -1,0 +1,34 @@
+command:
+  - python3
+  - ${program}
+  - ${args_no_hyphens}
+entity: amacrutherford
+method: grid
+parameters:
+  ENV_NAME:
+    values:
+      - "MPE_simple_spread_v3"
+      - "MPE_simple_tag_v3"
+      - "MPE_simple_world_comm_v3"
+      - "MPE_simple_spread_v3"
+      - "MPE_simple_crypto_v3"
+      - "MPE_simple_speaker_listener_v4"
+      - "MPE_simple_push_v3"
+      - "MPE_simple_adversary_v3"
+      - "MPE_simple_reference_v3"
+
+  SEED:
+    values:
+      - 42
+      - 43
+      - 44
+      - 45
+      - 46
+      # - 47
+      # - 48
+      # - 49
+      # - 50
+      # - 51
+
+program: baselines/IPPO/ippo_rnn_mpe.py
+project: jaxmarl-smax
