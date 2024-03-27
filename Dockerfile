@@ -7,6 +7,10 @@ COPY . .
 #jaxmarl from source if needed, all the requirements
 RUN pip install -e .
 
+# install tmux
+RUN apt-get update && \
+    apt-get install -y tmux
+
 #disabling preallocation
 RUN export XLA_PYTHON_CLIENT_PREALLOCATE=false
 #safety measures
