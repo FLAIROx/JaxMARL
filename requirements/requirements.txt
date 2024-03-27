@@ -1,6 +1,6 @@
 # requirements are alligned with nvcr.io/nvidia/jax:23.10-py3 image
 # jax==0.4.17
-# jaxlib==0.4.17
+# jaxlib==0.4.17  # commenting these out as it causes the dockerfile to reinstall jax as only the cpu version >:|
 flax==0.7.4
 chex==0.1.84
 optax==0.1.7
