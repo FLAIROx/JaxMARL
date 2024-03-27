@@ -2,6 +2,7 @@
 "NUM_ENVS": 128
 "NUM_STEPS": 128
 "GRU_HIDDEN_DIM": 256
+"FC_DIM_SIZE": 128
 "TOTAL_TIMESTEPS": 1e7
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
@@ -23,6 +24,6 @@
 "ANNEAL_LR": True
 
 # WandB Params
-"ENTITY": ${oc.env:WANDB_ENTITY}
+"ENTITY": "amacrutherford"
 "PROJECT": "jaxmarl-smax"
-"WANDB_MODE" : "disabled"
+"WANDB_MODE" : "online"
