@@ -8,7 +8,7 @@ from jaxmarl.environments.storm.storm_2p import Items
 
 action = 1
 render_agent_view = True
-num_outer_steps = 1
+num_outer_steps = 3
 num_inner_steps = 152
 
 rng = jax.random.PRNGKey(0)
@@ -58,6 +58,9 @@ for t in range(num_outer_steps * num_inner_steps):
         rng, old_state, (a1 * action, a2 * action)
     )
 
+    print('outer t', state.outer_t)
+    print('inner t', state.inner_t)
+    print('done', done)
     if (state.red_pos[:2] == state.blue_pos[:2]).all():
         import pdb
 
