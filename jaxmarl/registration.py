@@ -24,6 +24,7 @@ from .environments import (
     InTheGrid,
     InTheGrid_2p,
     Hanabi,
+    HintGuess,
     Overcooked,
     CoinGame,
 )
@@ -97,6 +98,8 @@ def make(env_id: str, **env_kwargs):
     # 6. Hanabi
     elif env_id == "hanabi":
         env = Hanabi(**env_kwargs)
+    elif env_id == "hint_guess":
+        env = HintGuess(**env_kwargs)
 
     # 7. Overcooked
     elif env_id == "overcooked":
@@ -134,6 +137,7 @@ registered_envs = [
     "storm",
     "storm_2p",
     "hanabi",
+    "hint_guess",
     "overcooked",
     "coin_game",
 ]

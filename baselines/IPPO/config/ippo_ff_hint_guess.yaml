@@ -1,0 +1,20 @@
+"LR": 1e-4
+"NUM_ENVS": 64
+"NUM_STEPS": 8
+"TOTAL_TIMESTEPS": 4e6
+"UPDATE_EPOCHS": 4
+"NUM_MINIBATCHES": 4
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ENV_NAME": "hint_guess"
+"ENV_KWARGS": {}
+"ANNEAL_LR": False
+
+# WandB Params
+"WANDB_MODE": "online"
+"ENTITY": "mttga"
+"PROJECT": "hint_guess"
