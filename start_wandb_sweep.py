@@ -22,8 +22,15 @@ sweep_id = wandb.sweep(sweep_config, project=project)
 agents_per_gpu = 2
 print('jax.devices():', jax.devices())
 # count number of GPUs
+
 gpu_count = [1 for device in jax.devices() if 'gpu' in device.platform.lower()]
 gpu_count = sum(gpu_count)
+
+gpus_to_use = "all"
+if gpus_to_use != "all":
+    gpu_count = min(gpu_count, gpus_to_use)
+    if gpu_count < gpus_to_use:
+        print(f"Warning: only {gpu_count} GPUs available, but {gpus_to_use} requested.")
 
 print('gpu_count:', gpu_count)
 # Calculate total number of agents
