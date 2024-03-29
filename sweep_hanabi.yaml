@@ -1,0 +1,17 @@
+command:
+  - python3
+  - ${program}
+  - ${args_no_hyphens}
+entity: amacrutherford
+method: grid
+parameters:
+  SEED:
+    values:
+      - 42
+      - 43
+      - 44
+  WANDB_MODE:
+    values:
+      - online
+program: baselines/IPPO/ippo_rnn_hanabi.py
+project: jaxmarl-hanabi
