@@ -1,5 +1,8 @@
 """
-Based on PureJaxRL Implementation of PPO
+Based on PureJaxRL Implementation of PPO.
+
+Note, this file will only work for MPE environments with homogenous agents (e.g. Simple Spread).
+
 """
 
 import jax
