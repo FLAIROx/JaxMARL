@@ -17,4 +17,4 @@ jobs:
     - name: Build the Docker image
       run: make build
     - name: Run tests
-      run: make test
+      run: make workflow-test
