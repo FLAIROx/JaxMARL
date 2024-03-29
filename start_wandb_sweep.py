@@ -7,7 +7,6 @@ from os import system
 def tmux(command):
     system('tmux %s' % command)
 
-
 def tmux_shell(command):
     tmux('send-keys "%s" "C-m"' % command)
 
