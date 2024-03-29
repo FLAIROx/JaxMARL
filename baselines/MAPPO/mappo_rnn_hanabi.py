@@ -363,7 +363,8 @@ def make_train(config):
                         log_prob = pi.log_prob(traj_batch.action)
 
                         # CALCULATE ACTOR LOSS
-                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                        logratio = log_prob - traj_batch.log_prob
+                        ratio = jnp.exp(logratio)
                         gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
                         loss_actor2 = (
@@ -375,13 +376,18 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean(where=())
+                        entropy = pi.entropy().mean(where=())
+                        
+                        # debug
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
+                        
                         actor_loss = (
                             loss_actor
                             - config["ENT_COEF"] * entropy
                         )
-                        return actor_loss, (loss_actor, entropy)
+                        return actor_loss, (loss_actor, entropy, ratio, approx_kl, clip_frac)
                     
                     def _critic_loss_fn(critic_params, init_hstate, traj_batch, targets):
                         # RERUN NETWORK
@@ -394,7 +400,7 @@ def make_train(config):
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean(where=(1 - traj_batch.done))
+                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
                         critic_loss = config["VF_COEF"] * value_loss
                         return critic_loss, (value_loss)
@@ -415,8 +421,11 @@ def make_train(config):
                     loss_info = {
                         "total_loss": total_loss,
                         "actor_loss": actor_loss[0],
-                        "critic_loss": critic_loss[0],
+                        "value_loss": critic_loss[0],
                         "entropy": actor_loss[1][1],
+                        "ratio": actor_loss[1][2],
+                        "approx_kl": actor_loss[1][3],
+                        "clip_frac": actor_loss[1][4],
                     }
                     
                     return (actor_train_state, critic_train_state), loss_info
@@ -488,10 +497,12 @@ def make_train(config):
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
+            loss_info["ratio_0"] = loss_info["ratio"].at[0,0].get()
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
             
             train_states = update_state[0]
             metric = traj_batch.info
+            metric["loss"] = loss_info
             rng = update_state[-1]
 
             def callback(metric):
@@ -502,6 +513,7 @@ def make_train(config):
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
+                        **metric["loss"],
                     }
                 )
                 

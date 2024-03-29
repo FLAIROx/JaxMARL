@@ -1,5 +1,5 @@
 "LR": 0.002
-"NUM_ENVS": 64
+"NUM_ENVS": 128
 "NUM_STEPS": 128 
 "TOTAL_TIMESTEPS": 1e7
 "FC_DIM_SIZE": 128
@@ -25,6 +25,6 @@
 "ANNEAL_LR": True
 
 # WandB Params
-"WANDB_MODE": "disabled"
-"ENTITY": ""
+"WANDB_MODE": "online"
+"ENTITY": "amacrutherford"
 "PROJECT": "jaxmarl-smax"
