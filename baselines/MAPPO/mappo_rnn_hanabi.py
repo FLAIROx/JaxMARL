@@ -376,8 +376,8 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=())
-                        entropy = pi.entropy().mean(where=())
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
                         
                         # debug
                         approx_kl = ((ratio - 1) - logratio).mean()
