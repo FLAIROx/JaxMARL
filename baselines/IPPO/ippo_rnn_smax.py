@@ -287,7 +287,7 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean(where=(1 - traj_batch.done))
+                        ).mean()
 
                         # CALCULATE ACTOR LOSS
                         logratio = log_prob - traj_batch.log_prob
@@ -303,8 +303,8 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
 
                         # debug
                         approx_kl = ((ratio - 1) - logratio).mean()
