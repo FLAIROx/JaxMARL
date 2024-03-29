@@ -1,10 +1,5 @@
-name: Docker Image CI
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+name: Run tests on Docker Image
+on: [push, pull_request]
 
 jobs:
 
