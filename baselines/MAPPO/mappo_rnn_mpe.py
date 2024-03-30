@@ -199,14 +199,14 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
         actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
         
         cr_init_x = (
             jnp.zeros((1, config["NUM_ENVS"], env.world_state_size(),)),  #  + env.observation_space(env.agents[0]).shape[0]
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
         critic_network_params = critic_network.init(_rng_critic, cr_init_hstate, cr_init_x)
         
         if config["ANNEAL_LR"]:

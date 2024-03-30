@@ -53,14 +53,14 @@ class HanabiWorldStateWrapper(JaxMARLWrapper):
         For each agent: [agent obs, own hand]
         """
             
-        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
-        hands = state.player_hands.reshape((self._env.num_agents, -1))
-        return jnp.concatenate((all_obs, hands), axis=1)
+        return jnp.array([obs[agent] for agent in self._env.agents])
+        # hands = state.player_hands.reshape((self._env.num_agents, -1))
+        # return jnp.concatenate((all_obs, hands), axis=1)
         
     @partial(jax.jit, static_argnums=0)
     def world_state_size(self):
    
-        return self._env.observation_space(self._env.agents[0]).n + 125 # NOTE hardcoded hand size
+        return self._env.observation_space(self._env.agents[0]).n * self._env.num_agents # + 125 # NOTE hardcoded hand size
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -105,7 +105,7 @@ class ActorRNN(nn.Module):
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
-        actor_mean = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
+        actor_mean = nn.Dense(self.config["GRU_HIDDEN_DIM"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
         )
         actor_mean = nn.relu(actor_mean)
@@ -200,14 +200,14 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
         )
-        ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
         actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
         print('ac init x',ac_init_x)
         cr_init_x = (
-            jnp.zeros((1, config["NUM_ENVS"], 658+125,)), # NOTE hardcoded
+            jnp.zeros((1, config["NUM_ENVS"], 658,)), # NOTE hardcoded
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
         critic_network_params = critic_network.init(_rng_critic, cr_init_hstate, cr_init_x)
         
         if config["ANNEAL_LR"]:
@@ -234,7 +234,7 @@ def make_train(config):
             tx=actor_tx,
         )
         critic_train_state = TrainState.create(
-            apply_fn=actor_network.apply,
+            apply_fn=critic_network.apply,
             params=critic_network_params,
             tx=critic_tx,
         )
@@ -243,8 +243,8 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
-        cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
+        ac_init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"])
+        cr_init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"])
 
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
