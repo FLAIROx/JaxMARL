@@ -7,6 +7,7 @@ import chex
 from flax import struct
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from gymnax.environments.spaces import Discrete
+import copy
 
 
 @struct.dataclass
@@ -46,6 +47,7 @@ class HintGuessGame(MultiAgentEnv):
         self.num_classes_per_feature = num_classes_per_feature
         self.num_cards = np.prod(self.num_classes_per_feature)
         self.matrix_obs = matrix_obs
+        self.feature_tree = [np.arange(n_c) for n_c in num_classes_per_feature]
 
         # generate the deck of one-hot encoded cards
         if card_encoding == "onehot":
@@ -76,7 +78,7 @@ class HintGuessGame(MultiAgentEnv):
                 self.hand_size,
             ),
         )
-
+        
         # every agent sees the hands in different order
         _rngs = jax.random.split(rng_hands, self.num_agents)
         permuted_hands = jax.vmap(
@@ -90,6 +92,67 @@ class HintGuessGame(MultiAgentEnv):
             player_hands=permuted_hands, target=target, hint=-1, guess=-1, turn=0
         )
         return jax.lax.stop_gradient(self.get_obs(state)), state
+
+    @partial(jax.jit, static_argnums=[0])
+    def reset_for_eval(self, rng):
+       
+        target_rng, hint_rng, hinter_hand_rng, guesser_hand_rng = jax.random.split(rng, 4)
+
+        def feature_level_sample(rng, subarray):
+            return jax.random.choice(rng, subarray, shape=(1,))
+
+        def card_level_sample(rng, feature_tree):
+            rng = jax.random.split(rng, self.num_features)
+            return jnp.array([feature_level_sample(rng, subarray) for rng, subarray in zip(rng, feature_tree)])
+        
+        def remove_feature(feature, subarray):
+            return jnp.delete(subarray, feature)
+        
+        def exact_match(rngs):
+            _, hinter_hand_rngs, guesser_hand_rngs = rngs
+            set_of_rest_of_hinter_and_guesser_hand = [remove_feature(feature, subarray) for feature, subarray in zip(target, self.feature_tree)]
+            hint = target
+            rest_of_hinter_hand = hand_level_sample(hinter_hand_rngs, set_of_rest_of_hinter_and_guesser_hand)
+            rest_of_guesser_hand = hand_level_sample(guesser_hand_rngs, set_of_rest_of_hinter_and_guesser_hand)
+            return hint, rest_of_hinter_hand, rest_of_guesser_hand
+        
+        def similar_match(rngs):
+            hint_rng, hinter_hand_rngs, guesser_hand_rngs = rngs
+            feature_at_interest = jax.random.choice(rng, self.num_features)
+            set_of_hints = copy.deepcopy(self.feature_tree)
+            set_of_hints[feature_at_interest] = [target[feature_at_interest]]
+            set_of_rest_of_hinter_hand = copy.deepcopy(self.feature_tree)
+            set_of_rest_of_hinter_hand = [remove_feature(feature, subarray) for feature, subarray in zip(target, self.feature_tree)]
+            set_of_rest_of_guesser_hand = set_of_rest_of_hinter_hand
+
+            hint = card_level_sample(hint_rng, set_of_hints)
+            rest_of_hinter_hand = hand_level_sample(hinter_hand_rngs, set_of_rest_of_hinter_hand)
+            rest_of_guesser_hand = hand_level_sample(guesser_hand_rngs, set_of_rest_of_guesser_hand)
+            return hint, rest_of_hinter_hand, rest_of_guesser_hand
+        
+        def mutual_exclusive(rngs):
+            hint_rng, hinter_hand_rngs, guesser_hand_rngs = rngs
+        
+        hand_level_sample = jax.vmap(card_level_sample, in_axes=(0, None))
+        replace = False
+
+        target = card_level_sample(target_rng, self.feature_tree)
+        hinter_hand_rngs = jax.random.split(hinter_hand_rng, self.hand_size)
+        guesser_hand_rngs = jax.random.split(guesser_hand_rng, self.hand_size)
+        rngs = [hint_rng, hinter_hand_rngs, guesser_hand_rngs]
+        
+        print(target, exact_match(rngs))
+        
+        # card_set = jnp.arange(self.num_cards)
+        # target_flat_id = jax.random.choice(rng, self.num_cards)
+        # target_multi_id = jnp.unravel_index(target_flat_id, self.num_classes_per_feature)
+        
+        
+        
+
+        
+        # eval_fns = [exact_match, similar_match, mutual_exclusive, exclusive_match]
+        # return jax.lax.switch(eval_mode, eval_fns, rng)
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, rng, state, actions):
@@ -210,3 +273,10 @@ class HintGuessGame(MultiAgentEnv):
             [jnp.concatenate(combination) for combination in list(product(*encodings))]
         )
         return encodings
+
+    
+if __name__ == "__main__":
+    jax.config.update("jax_disable_jit", True)
+    env = HintGuessGame()
+    rng = jax.random.PRNGKey(0)
+    env.reset_for_eval(rng)
