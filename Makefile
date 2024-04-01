@@ -26,3 +26,6 @@ run:
 test:
 	$(DOCKER_RUN) /bin/bash -c "pytest ./tests/"
 
+workflow-test:
+	# without -it flag
+	docker run --rm -v ${PWD}:/home/workdir --shm-size 20G $(IMAGE) /bin/bash -c "pytest ./tests/"
