@@ -253,7 +253,7 @@ class SMAX(MultiAgentEnv):
             )
         elif self.observation_type == "conic":
             return len(self.unit_features) * (
-                self.num_sections * self.max_units_per_section + 1
+                self.num_sections * self.max_units_per_section
             ) + len(self.own_features)
         else:
             raise ValueError("Provided observation type is not valid")
