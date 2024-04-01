@@ -18,7 +18,7 @@ RUN export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25
 RUN export TF_FORCE_GPU_ALLOW_GROWTH=true
 
 # if you want jupyter 
-RUN pip install pip install jupyterlab
+RUN pip install jupyterlab
 
 #for secrets and debug
 ENV WANDB_API_KEY=""
