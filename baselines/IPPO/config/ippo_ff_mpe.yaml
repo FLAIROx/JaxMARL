@@ -11,7 +11,7 @@
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "tanh"
-"ENV_NAME": "MPE_simple_tag_v3"
+"ENV_NAME": "MPE_simple_spread_v3"
 "ENV_KWARGS": {}
 "ANNEAL_LR": True
 "SEED": 30

@@ -16,11 +16,9 @@
 "ENV_NAME": "hanabi"
 "ENV_KWARGS": {}
 "ANNEAL_LR": True
-"NUM_FC_LAYERS": 2
-"LAYER_WIDTH": 128
 "SEED": 30
 
 # WandB Params
 "WANDB_MODE": "disabled"
 "ENTITY": ""
-"PROJECT": "jaxmarl-hanabi"
+"PROJECT": ""

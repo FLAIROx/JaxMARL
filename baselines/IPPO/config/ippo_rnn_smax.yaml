@@ -24,6 +24,6 @@
 "ANNEAL_LR": True
 
 # WandB Params
-"ENTITY": "amacrutherford"
-"PROJECT": "jaxmarl-smax"
-"WANDB_MODE" : "online"
+"ENTITY": ""
+"PROJECT": ""
+"WANDB_MODE" : "disabled"
