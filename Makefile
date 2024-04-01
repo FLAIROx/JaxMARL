@@ -1,10 +1,10 @@
-# NVCC_RESULT := $(shell which nvcc 2> NULL; rm NULL)
-# NVCC_TEST := $(notdir $(NVCC_RESULT))
-# ifeq ($(NVCC_TEST),nvcc)
+NVCC_RESULT := $(shell which nvcc 2> NULL; rm NULL)
+NVCC_TEST := $(notdir $(NVCC_RESULT))
+ifeq ($(NVCC_TEST),nvcc)
 GPUS=--gpus all
-# else
-# GPUS=
-# endif
+else
+GPUS=
+endif
 
 
 # Set flag for docker run command
