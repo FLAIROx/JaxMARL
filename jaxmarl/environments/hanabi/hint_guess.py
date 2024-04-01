@@ -93,66 +93,149 @@ class HintGuessGame(MultiAgentEnv):
         )
         return jax.lax.stop_gradient(self.get_obs(state)), state
 
-    @partial(jax.jit, static_argnums=[0])
-    def reset_for_eval(self, rng):
-       
-        target_rng, hint_rng, hinter_hand_rng, guesser_hand_rng = jax.random.split(rng, 4)
+    @partial(jax.jit, static_argnums=[0, 2])
+    def reset_for_eval(self, rng, reset_mode="exact_match"):
+        
+        def exact_match(card_multi_set):
+            card_flat_set = card_multi_set.flatten()
+            hint_flat_id = target_flat_id
+            hinter_and_guesser_flat_hand_set = jnp.delete(card_flat_set, target_flat_id, assume_unique_indices=True)
+            hinter_flat_rest_of_hand = jax.random.choice(hinter_hand_rngs, 
+                                                         hinter_and_guesser_flat_hand_set, 
+                                                         shape=(self.hand_size-1,))
+            guesser_flat_rest_of_hand = jax.random.choice(guesser_hand_rngs, 
+                                                          hinter_and_guesser_flat_hand_set, 
+                                                          shape=(self.hand_size-1,))
+            return hint_flat_id, hinter_flat_rest_of_hand, guesser_flat_rest_of_hand
+        
+        def similarity_match(card_multi_set):
+            feature_of_interest = jax.random.choice(hint_rng, self.num_features)
+            target_index_of_interest = target_multi_id[feature_of_interest]
+            # note this hint_set also include target card, need to be removed
+            # print(feature_of_interest, target_index_of_interest)
+            hint_set = jax.lax.dynamic_index_in_dim(card_multi_set, 
+                                                    target_index_of_interest, 
+                                                    feature_of_interest, 
+                                                    keepdims=False)
+            # find the target card id in hint set after slicing from the feature of interest
+            target_id = jnp.concatenate((target_multi_id[:feature_of_interest], target_multi_id[feature_of_interest+1:]))
+            hint_flat_set = jnp.delete(hint_set, target_id, assume_unique_indices=True).flatten()
+            
+            non_similar_hand_set = copy.deepcopy(card_multi_set)
+            for feature_dim in range(self.num_features):
+                non_similar_hand_set = jnp.delete(non_similar_hand_set, 
+                                                  target_multi_id[feature_dim], 
+                                                  axis=feature_dim,
+                                                  assume_unique_indices=True)
+                
+            non_similar_flat_hand_set = non_similar_hand_set.flatten()
+            hinter_flat_id = jax.random.choice(hint_rng, 
+                                               hint_flat_set, 
+                                               shape=(1,))
+            hinter_flat_rest_of_hand = jax.random.choice(hinter_hand_rngs, 
+                                                         non_similar_flat_hand_set, 
+                                                         shape=(self.hand_size-1,))
+            guesser_flat_rest_of_hand = jax.random.choice(guesser_hand_rngs, 
+                                                          non_similar_flat_hand_set, 
+                                                          shape=(self.hand_size-1,))
+            return hinter_flat_id, hinter_flat_rest_of_hand, guesser_flat_rest_of_hand
+        
+        def mutual_exclusive(card_multi_set):
+            non_similar_hand_set = copy.deepcopy(card_multi_set)
+            for feature_dim in range(self.num_features):
+                non_similar_hand_set = jnp.delete(non_similar_hand_set, 
+                                                  target_multi_id[feature_dim], 
+                                                  axis=feature_dim,
+                                                  assume_unique_indices=True)
+            
+            non_similar_flat_hand_set = non_similar_hand_set.flatten()
+            hint_flat_id = jax.random.choice(hint_rng, 
+                                             non_similar_flat_hand_set, 
+                                             shape=(1,))
+            hinter_and_guesser_flat_rest_of_hand_set = jnp.delete(non_similar_flat_hand_set, hint_flat_id, assume_unique_indices=True)
+            # note the rest of hand of both players are the same, so use either of the rngs
+            hinter_and_guesser_flat_rest_of_hand = jax.random.choice(hinter_hand_rngs, 
+                                                                     hinter_and_guesser_flat_rest_of_hand_set, 
+                                                                     shape=(self.hand_size-1,))
+            return hint_flat_id, hinter_and_guesser_flat_rest_of_hand, hinter_and_guesser_flat_rest_of_hand
+        
+        def mutual_exclusice_similarity(card_multi_set):
+            # the target will be included by the first slice, thus need to be removed
+            similar_cards_of_the_first_feature = jax.lax.dynamic_index_in_dim(card_multi_set, 
+                                                                                    target_multi_id[0], 
+                                                                                    0, 
+                                                                                    keepdims=False)
+            target_id = target_multi_id[1:]
+            hinter_and_guesser_flat_rest_of_hand_set = jnp.delete(similar_cards_of_the_first_feature, target_id, assume_unique_indices=True).flatten()
+            
+            # later slices does include the target card
+            for feature_dim in range(1, self.num_features):
+                similar_cards = jax.lax.dynamic_index_in_dim(card_multi_set, 
+                                                             target_multi_id[feature_dim], 
+                                                             feature_dim, 
+                                                             keepdims=False)
+                hinter_and_guesser_flat_rest_of_hand_set = jnp.append(hinter_and_guesser_flat_rest_of_hand_set, 
+                                                                      similar_cards.flatten())
+                card_multi_set = jnp.delete(card_multi_set, 
+                                            target_multi_id[feature_dim], 
+                                            axis=feature_dim,
+                                            assume_unique_indices=True)
+                
+            hint_flat_set = card_multi_set.flatten()
+            hint_flat_id = jax.random.choice(hint_rng, hint_flat_set, shape=(1,))
+            # note the rest of hand of both players are the same, so use either of the rngs
+            hinter_and_guesser_flat_rest_of_hand = jax.random.choice(hinter_hand_rngs, 
+                                                                     hinter_and_guesser_flat_rest_of_hand_set, 
+                                                                     shape=(self.hand_size-1,))
+            return hint_flat_id, hinter_and_guesser_flat_rest_of_hand, hinter_and_guesser_flat_rest_of_hand
+                
+        def shuffle_and_index(rng, players_hands):
+            def set_single_hand(hand, index):
+                empty_hands = jnp.zeros(5, dtype=jnp.int32)
+                return empty_hands.at[index].set(hand)
+            """
+            generates a permutation mapping for the hands of the players such that the target_card and hint_card are tractable after the permutation
+            returns permuted hands, hint_card_index and target_card_index in the permuted hands
+            """
+            rngs = jax.random.split(rng, 2)
+            permutation_index = jax.vmap(jax.random.permutation, in_axes=(0, None))(rngs, 5)
+            permuted_hands = jax.vmap(set_single_hand, in_axes=(0, 0))(players_hands, permutation_index)
+            return permuted_hands, permutation_index[0, 0], permutation_index[0, 1]
 
-        def feature_level_sample(rng, subarray):
-            return jax.random.choice(rng, subarray, shape=(1,))
-
-        def card_level_sample(rng, feature_tree):
-            rng = jax.random.split(rng, self.num_features)
-            return jnp.array([feature_level_sample(rng, subarray) for rng, subarray in zip(rng, feature_tree)])
+        target_rng, hint_rng, hinter_hand_rngs, guesser_hand_rngs = jax.random.split(rng, 4)
         
-        def remove_feature(feature, subarray):
-            return jnp.delete(subarray, feature)
-        
-        def exact_match(rngs):
-            _, hinter_hand_rngs, guesser_hand_rngs = rngs
-            set_of_rest_of_hinter_and_guesser_hand = [remove_feature(feature, subarray) for feature, subarray in zip(target, self.feature_tree)]
-            hint = target
-            rest_of_hinter_hand = hand_level_sample(hinter_hand_rngs, set_of_rest_of_hinter_and_guesser_hand)
-            rest_of_guesser_hand = hand_level_sample(guesser_hand_rngs, set_of_rest_of_hinter_and_guesser_hand)
-            return hint, rest_of_hinter_hand, rest_of_guesser_hand
-        
-        def similar_match(rngs):
-            hint_rng, hinter_hand_rngs, guesser_hand_rngs = rngs
-            feature_at_interest = jax.random.choice(rng, self.num_features)
-            set_of_hints = copy.deepcopy(self.feature_tree)
-            set_of_hints[feature_at_interest] = [target[feature_at_interest]]
-            set_of_rest_of_hinter_hand = copy.deepcopy(self.feature_tree)
-            set_of_rest_of_hinter_hand = [remove_feature(feature, subarray) for feature, subarray in zip(target, self.feature_tree)]
-            set_of_rest_of_guesser_hand = set_of_rest_of_hinter_hand
-
-            hint = card_level_sample(hint_rng, set_of_hints)
-            rest_of_hinter_hand = hand_level_sample(hinter_hand_rngs, set_of_rest_of_hinter_hand)
-            rest_of_guesser_hand = hand_level_sample(guesser_hand_rngs, set_of_rest_of_guesser_hand)
-            return hint, rest_of_hinter_hand, rest_of_guesser_hand
-        
-        def mutual_exclusive(rngs):
-            hint_rng, hinter_hand_rngs, guesser_hand_rngs = rngs
-        
-        hand_level_sample = jax.vmap(card_level_sample, in_axes=(0, None))
-        replace = False
-
-        target = card_level_sample(target_rng, self.feature_tree)
-        hinter_hand_rngs = jax.random.split(hinter_hand_rng, self.hand_size)
-        guesser_hand_rngs = jax.random.split(guesser_hand_rng, self.hand_size)
-        rngs = [hint_rng, hinter_hand_rngs, guesser_hand_rngs]
-        
-        print(target, exact_match(rngs))
-        
-        # card_set = jnp.arange(self.num_cards)
-        # target_flat_id = jax.random.choice(rng, self.num_cards)
-        # target_multi_id = jnp.unravel_index(target_flat_id, self.num_classes_per_feature)
-        
-        
+        # constants
+        target_flat_id = jax.random.choice(target_rng, self.num_cards)
+        target_multi_id = jnp.array(jnp.unravel_index(target_flat_id, self.num_classes_per_feature))
+        card_multi_set = jnp.arange(self.num_cards).reshape(self.num_classes_per_feature)
         
 
+        if reset_mode == "exact_match":
+            hint_flat_id, hinter_flat_rest_of_hand, guesser_flat_rest_of_hand = exact_match(card_multi_set)
+        elif reset_mode == "similarity_match":
+            hint_flat_id, hinter_flat_rest_of_hand, guesser_flat_rest_of_hand = similarity_match(card_multi_set)
+        elif reset_mode == "mutual_exclusive":
+            hint_flat_id, hinter_flat_rest_of_hand, guesser_flat_rest_of_hand = mutual_exclusive(card_multi_set)
+        elif reset_mode == "mutual_exclusive_similarity":
+            hint_flat_id, hinter_flat_rest_of_hand, guesser_flat_rest_of_hand = mutual_exclusice_similarity(card_multi_set)
+        else:
+            raise ValueError("reset_mode is not supported")
         
-        # eval_fns = [exact_match, similar_match, mutual_exclusive, exclusive_match]
-        # return jax.lax.switch(eval_mode, eval_fns, rng)
+        hinter_hand = jnp.append(hint_flat_id, hinter_flat_rest_of_hand)
+        guesser_hand = jnp.append(target_flat_id, guesser_flat_rest_of_hand)
+
+        player_hands = jnp.stack((hinter_hand, guesser_hand))
+        print(player_hands.shape)
+        rngs = jnp.stack((hinter_hand_rngs, guesser_hand_rngs))
+        permuted_hands, hints, targets = jax.vmap(shuffle_and_index, in_axes=(0, None), out_axes=(0, 0, 0))(rngs, player_hands)
+        state = State(
+            player_hands=permuted_hands, target=target_flat_id, hint=-1, guess=-1, turn=0
+        )
+
+        return jax.lax.stop_gradient(self.get_obs(state)), state, hints, targets
+
+
+        
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, rng, state, actions):
@@ -279,4 +362,5 @@ if __name__ == "__main__":
     jax.config.update("jax_disable_jit", True)
     env = HintGuessGame()
     rng = jax.random.PRNGKey(0)
-    env.reset_for_eval(rng)
+    _, state, _, _ = env.reset_for_eval(rng, reset_mode="exact_match")
+    print(state)
