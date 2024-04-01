@@ -1,0 +1,15 @@
+name: Run tests on Docker Image
+on: [push, pull_request]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build the Docker image
+      run: make build
+    - name: Run tests
+      run: make workflow-test
