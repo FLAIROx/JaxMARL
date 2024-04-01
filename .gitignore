@@ -16,3 +16,5 @@ tmp/
 wandb/
 outputs/
 models/
+.devcontainer/
+.gitignore

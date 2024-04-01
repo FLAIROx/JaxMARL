@@ -11,7 +11,7 @@ endif
 BASE_FLAGS=-it --rm -v ${PWD}:/home/workdir --shm-size 20G
 RUN_FLAGS=$(GPUS) $(BASE_FLAGS)
 
-DOCKER_IMAGE_NAME = jaxmarl
+DOCKER_IMAGE_NAME = jaxmarl-cf
 IMAGE = $(DOCKER_IMAGE_NAME):latest
 DOCKER_RUN=docker run $(RUN_FLAGS) $(IMAGE)
 USE_CUDA = $(if $(GPUS),true,false)

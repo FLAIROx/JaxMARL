@@ -423,8 +423,8 @@ def tune(default_config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_hint_guess")
 def main(config):
     config = OmegaConf.to_container(config)
-    #single_run(config)
-    tune(config)
+    single_run(config)
+    # tune(config)
 
 
 if __name__ == "__main__":
