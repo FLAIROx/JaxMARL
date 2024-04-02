@@ -30,6 +30,9 @@ parameters:
       - 49
       - 50
       - 51
+  ADD_AGENT_ID:
+    values:
+      - True
   WANDB_MODE:
     values:
       - online
