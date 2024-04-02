@@ -30,11 +30,8 @@ parameters:
       - 49
       - 50
       - 51
-  ADD_AGENT_ID:
-    values:
-      - True
   WANDB_MODE:
     values:
       - online
-program: baselines/IPPO/ippo_rnn_smax.py
+program: baselines/IPPO/ippo_rnn_smax_split_networks.py
 project: jaxmarl-smax
