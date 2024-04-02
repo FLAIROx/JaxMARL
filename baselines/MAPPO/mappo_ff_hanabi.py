@@ -52,34 +52,33 @@ class HanabiWorldStateWrapper(JaxMARLWrapper):
         """ 
         For each agent: [agent obs, own hand]
         """
-        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
-        hands = state.player_hands.reshape((self._env.num_agents, -1))
-        return jnp.concatenate((all_obs, hands), axis=1)
+        return jnp.array([obs[agent] for agent in self._env.agents])
+        # hands = state.player_hands.reshape((self._env.num_agents, -1))
+        # return jnp.concatenate((all_obs, hands), axis=1)
         
     
     def world_state_size(self):
    
-        return self._env.observation_space(self._env.agents[0]).n + 125 # NOTE hardcoded hand size
+        return self._env.observation_space(self._env.agents[0]).n #+ 125 # NOTE hardcoded hand size
 
 
 class ActorFF(nn.Module):
     action_dim: Sequence[int]
-    activation: str = "relu"
-    layer_dim: int = 512
+    config: Dict
 
     @nn.compact
     def __call__(self, x):
-        if self.activation == "relu":
+        if self.config["ACTIVATION"] == "relu":
             activation = nn.relu
         else:
             activation = nn.tanh
         obs, avail_actions = x
         actor_mean = nn.Dense(
-            self.layer_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
         actor_mean = activation(actor_mean)
         actor_mean = nn.Dense(
-            self.layer_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(actor_mean)
         actor_mean = activation(actor_mean)
         action_logits = nn.Dense(
@@ -94,22 +93,21 @@ class ActorFF(nn.Module):
 
 
 class CriticFF(nn.Module):
-    activation: str = "relu"
-    layer_dim: int = 512
+    config: Dict
     
     @nn.compact
     def __call__(self, x):
-        if self.activation == "relu":
+        if self.config["ACTIVATION"] == "relu":
             activation = nn.relu
         else:
             activation = nn.tanh
             
         critic = nn.Dense(
-            self.layer_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(x)
         critic = activation(critic)
         critic = nn.Dense(
-            self.layer_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(critic)
         critic = activation(critic)
         critic = nn.Dense(
@@ -119,6 +117,7 @@ class CriticFF(nn.Module):
         return jnp.squeeze(critic, axis=-1)
 
 class Transition(NamedTuple):
+    global_done: jnp.ndarray
     done: jnp.ndarray
     action: jnp.ndarray
     value: jnp.ndarray
@@ -167,13 +166,9 @@ def make_train(config):
         # INIT NETWORK
         actor_network = ActorFF(
             env.action_space(env.agents[0]).n, 
-            activation=config["ACTIVATION"],
-            layer_dim=config["LAYER_WIDTH"],
+            config,
         )
-        critic_network = CriticFF(
-            activation=config["ACTIVATION"],
-            layer_dim=config["LAYER_WIDTH"],
-        )
+        critic_network = CriticFF(config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
         ac_init_x = (
             jnp.zeros((env.observation_space(env.agents[0]).n,)),
@@ -181,7 +176,7 @@ def make_train(config):
         )
         actor_network_params = actor_network.init(_rng_actor, ac_init_x)
         
-        cr_init_x = jnp.zeros((env.world_state_size(),)) 
+        cr_init_x = jnp.zeros((658,)) # NOTE hardcoded >:(
         
         critic_network_params = critic_network.init(_rng_critic, cr_init_x)
         
@@ -244,7 +239,8 @@ def make_train(config):
                 env_act = unbatchify(
                     action, env.agents, config["NUM_ENVS"], env.num_agents
                 )
-
+                env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
+                
                 # VALUE
                 world_state = last_obs["world_state"].swapaxes(0,1)
                 world_state = world_state.reshape((config["NUM_ACTORS"],-1))
@@ -259,7 +255,8 @@ def make_train(config):
                 info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
-                    done_batch,
+                    jnp.tile(done["__all__"], env.num_agents),
+                    last_done,
                     action.squeeze(),
                     value.squeeze(),
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
@@ -288,7 +285,7 @@ def make_train(config):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
                     done, value, reward = (
-                        transition.done,
+                        transition.global_done,
                         transition.value,
                         transition.reward,
                     )
@@ -325,7 +322,8 @@ def make_train(config):
                         log_prob = pi.log_prob(traj_batch.action)
 
                         # CALCULATE ACTOR LOSS
-                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                        logratio = log_prob - traj_batch.log_prob
+                        ratio = jnp.exp(logratio)
                         gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
                         loss_actor2 = (
@@ -337,13 +335,18 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
+                        
+                        # debug
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
+                        
                         actor_loss = (
                             loss_actor
                             - config["ENT_COEF"] * entropy
                         )
-                        return actor_loss, (loss_actor, entropy)
+                        return actor_loss, (loss_actor, entropy, ratio, approx_kl, clip_frac)
                     
                     def _critic_loss_fn(critic_params, traj_batch, targets):
                         # RERUN NETWORK
@@ -356,7 +359,7 @@ def make_train(config):
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean(where=(1 - traj_batch.done))
+                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
                         critic_loss = config["VF_COEF"] * value_loss
                         return critic_loss, (value_loss)
@@ -377,8 +380,11 @@ def make_train(config):
                     loss_info = {
                         "total_loss": total_loss,
                         "actor_loss": actor_loss[0],
-                        "critic_loss": critic_loss[0],
+                        "value_loss": critic_loss[0],
                         "entropy": actor_loss[1][1],
+                        "ratio": actor_loss[1][2],
+                        "approx_kl": actor_loss[1][3],
+                        "clip_frac": actor_loss[1][4],
                     }
                     
                     return (actor_train_state, critic_train_state), loss_info
@@ -439,11 +445,12 @@ def make_train(config):
             )
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
-            )
-            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
-            
+            )            
             train_states = update_state[0]
             metric = traj_batch.info
+            loss_info["ratio_0"] = loss_info["ratio"].at[0,0].get()
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            metric["loss"] = loss_info
             rng = update_state[-1]
 
             def callback(metric):
@@ -454,6 +461,7 @@ def make_train(config):
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
+                        **metric["loss"],
                     }
                 )
                 
