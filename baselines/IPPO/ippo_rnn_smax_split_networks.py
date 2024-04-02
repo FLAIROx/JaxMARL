@@ -13,7 +13,7 @@ from flax.training.train_state import TrainState
 from flax.core.frozen_dict import FrozenDict
 import distrax
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 import chex
 from optax import OptState
 
@@ -308,7 +308,7 @@ def make_train(config):
                 
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
-                    done_batch,
+                    last_done,
                     action.squeeze(),
                     value.squeeze(),
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
