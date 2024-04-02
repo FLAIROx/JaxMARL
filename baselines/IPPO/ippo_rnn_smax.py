@@ -14,7 +14,7 @@ import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from jaxmarl.wrappers.baselines import SMAXLogWrapper
+from jaxmarl.wrappers.baselines import SMAXLogWrapper, AddAgentID
 from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
 
 import wandb
@@ -127,6 +127,8 @@ def make_train(config):
     )
 
     env = SMAXLogWrapper(env)
+    if config["ADD_AGENT_ID"]:
+        env = AddAgentID(env)
 
     def linear_schedule(count):
         frac = (

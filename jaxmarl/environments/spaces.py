@@ -5,15 +5,21 @@ import jax
 import jax.numpy as jnp
 
 class Space(object):
-    """
-    Minimal jittable class for abstract jaxmarl space.
-    """
+	"""
+	Minimal jittable class for abstract jaxmarl space.
+	"""
 
-    def sample(self, rng: chex.PRNGKey) -> chex.Array:
-        raise NotImplementedError
+	def sample(self, rng: chex.PRNGKey) -> chex.Array:
+		raise NotImplementedError
 
-    def contains(self, x: jnp.int_) -> bool:
-        raise NotImplementedError
+	def contains(self, x: jnp.int_) -> bool:
+		raise NotImplementedError
+
+	def replace(self, **kwargs):
+		"""Replace the current space with new values."""
+		for k, v in kwargs.items():
+			setattr(self, k, v)
+		return self
 
 class Discrete(Space):
 	"""

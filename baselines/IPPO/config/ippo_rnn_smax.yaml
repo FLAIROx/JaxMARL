@@ -22,9 +22,9 @@
   "walls_cause_death": True
   "attack_mode": "closest"
 "ANNEAL_LR": True
-"ADD_AGENT_ID": True
+"ADD_AGENT_ID": False
 
 # WandB Params
-"ENTITY": ""
-"PROJECT": ""
-"WANDB_MODE" : "disabled"
+"ENTITY": "amacrutherford"
+"PROJECT": "jaxmarl-smax"
+"WANDB_MODE" : "online"

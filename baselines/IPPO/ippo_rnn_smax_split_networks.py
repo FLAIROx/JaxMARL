@@ -301,9 +301,9 @@ def make_train(config):
                 # if agent was done in the last timestep and the episode is not over then this action is invalid
                 # but if the episode ends, then this action is valid 
                 
-                last_done = last_done.reshape((config["NUM_ENVS"], -1))
-                last_ep_done = jnp.all(last_done, axis=1)
-                term = last_done & ~last_ep_done[:, None]
+                last_done_re = last_done.reshape((config["NUM_ENVS"], -1))
+                last_ep_done = jnp.all(last_done_re, axis=1)
+                term = last_done_re & ~last_ep_done[:, None]
                 term = term.reshape((-1,))
                 
                 transition = Transition(
@@ -392,7 +392,8 @@ def make_train(config):
                         log_prob = pi.log_prob(traj_batch.action)
 
                         # CALCULATE ACTOR LOSS
-                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                        logratio = log_prob - traj_batch.log_prob
+                        ratio = jnp.exp(logratio)
                         gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
                         loss_actor2 = (
@@ -403,14 +404,16 @@ def make_train(config):
                             )
                             * gae
                         )
-                        # TODO add back in done masking on the mean 
-                        print('loss actor shape', loss_actor1.shape, 'term shape', traj_batch.terminated.shape)
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1-traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1-traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
+                        
+                        # debug
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
 
                         total_loss = loss_actor - config["ENT_COEF"] * entropy
-                        return total_loss, (loss_actor, entropy, ratio)
+                        return total_loss, (loss_actor, entropy, ratio, approx_kl, clip_frac)
                     
                     def _critic_loss_fn(critic_params: FrozenDict,
                                         critic_opt_state: OptState,
@@ -432,7 +435,7 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean(where=(1-traj_batch.done)) 
+                        ).mean() 
                         
                         total_loss = config["VF_COEF"] * value_loss
                         return total_loss, (value_loss)
@@ -467,6 +470,8 @@ def make_train(config):
                         "actor_loss": actor_loss_info[1][0],
                         "entropy": actor_loss_info[1][1],
                         "ratio": actor_loss_info[1][2],
+                        "approx_kl": actor_loss_info[1][3],
+                        "clip_frac": actor_loss_info[1][4],
                     }
                     
                     return (new_params, new_opt_state), loss_info
@@ -483,9 +488,6 @@ def make_train(config):
                 rng, shuffle_rng = jax.random.split(rng)
 
                 # adding an additional "fake" dimensionality to perform minibatching correctly
-                # NOTE: mava does this differently, reshaping into "recurrent chunk size" and then permuting
-                # TODO: look at the shapes of mava and jaxmarl
-                # NOTE: mava also handles hstates differently, use the one stored in traj_batch
                 init_hstates = jax.tree_map(
                     lambda x: jnp.reshape(
                         x, (1, config["NUM_ACTORS"], -1)
@@ -499,8 +501,6 @@ def make_train(config):
                     targets.squeeze(),
                 )
                 permutation = jax.random.permutation(shuffle_rng, config["NUM_ACTORS"])
-                print('batch advantage shape', batch[2].shape)
-                # advantage shape is (num_steps, num_actors)
                 shuffled_batch = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation, axis=1), batch
                 )
@@ -517,8 +517,6 @@ def make_train(config):
                     ),
                     shuffled_batch,
                 )
-                print('minibatch advantage shape', minibatches[2].shape)
-                # advantage shape is (num_minibatches, num_steps, -1)
                 
                 (params, opt_states), loss_info = jax.lax.scan(
                     _update_minbatch, (params, opt_states), minibatches
@@ -559,6 +557,10 @@ def make_train(config):
                 ),
                 traj_batch.info,
             )
+            ratio_0 = loss_info["ratio"].at[0,0].get().mean()
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            loss_info["ratio_0"] = ratio_0
+            metric["loss_info"] = loss_info
 
             def callback(metric):
                 wandb.log(
@@ -579,7 +581,6 @@ def make_train(config):
                 )
 
             metric["update_steps"] = update_step
-            metric["loss_info"] = jax.tree_map(lambda x: x.mean(), loss_info)
             jax.experimental.io_callback(callback, None, metric)
             runner_state = RNNRunnerState(
                 update_step + 1, 
