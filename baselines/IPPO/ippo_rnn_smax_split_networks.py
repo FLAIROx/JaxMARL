@@ -62,7 +62,7 @@ class ActorRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones, avail_actions = x
         embedding = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
         embedding = nn.relu(embedding)
 
@@ -95,14 +95,14 @@ class CriticRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones = x
         embedding = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
         embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
-        critic = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
+        critic = nn.Dense(self.config["GRU_HIDDEN_DIM"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
         )
         critic = nn.relu(critic)
@@ -378,7 +378,6 @@ def make_train(config):
 
                     def _actor_loss_fn(
                         actor_params: FrozenDict,
-                        actor_opt_state: OptState,
                         actor_init_hstate: chex.Array,
                         traj_batch,
                         gae: chex.Array
@@ -416,7 +415,6 @@ def make_train(config):
                         return total_loss, (loss_actor, entropy, ratio, approx_kl, clip_frac)
                     
                     def _critic_loss_fn(critic_params: FrozenDict,
-                                        critic_opt_state: OptState,
                                         critic_init_hstate: chex.Array,
                                         traj_batch,
                                         targets: chex.Array):
@@ -442,12 +440,12 @@ def make_train(config):
 
                     actor_grad_fn = jax.value_and_grad(_actor_loss_fn, has_aux=True)
                     actor_loss_info, actor_grads = actor_grad_fn(
-                        params.actor_params, opt_states.actor_opt_state, init_hstates.actor_hstate, traj_batch, advantages
+                        params.actor_params, init_hstates.actor_hstate, traj_batch, advantages
                     )
                     
                     critic_grad_fn = jax.value_and_grad(_critic_loss_fn, has_aux=True)
                     critic_loss_info, critic_grads = critic_grad_fn(
-                        params.critic_params, opt_states.critic_opt_state, init_hstates.critic_hstate, traj_batch, targets
+                        params.critic_params, init_hstates.critic_hstate, traj_batch, targets
                     )
 
                     actor_updates, actor_new_opt_state = actor_optim.update(
