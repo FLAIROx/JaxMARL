@@ -143,7 +143,7 @@ class HintGuessGame(MultiAgentEnv):
 
         def get_similar_pair(masks, rng, replace=False):
             """
-            This function returns a pair of cards that are identical in at least one feature but not the same card
+            This function returns a pair of cards that are identical in at least one feature, could be identical
             """
             f_rng, h_rng, g_rng = jax.random.split(rng, 3)
             task_specific_mask, h_hand_mask, g_hand_mask = masks
@@ -152,19 +152,14 @@ class HintGuessGame(MultiAgentEnv):
             # Solution: need to backtrack a set of possible hints from guesser's playable cards
             
             h_card = jax.random.choice(h_rng, self.num_cards, p=get_safe_probability_from_mask(h_card_mask))
-            h_card_feature_vector = self.card_feature_space[h_card, :]
-            interested_feature_class = jax.random.choice(f_rng, self.num_features)
-            interested_feature_mask = jnp.where(self.card_feature_space[:, interested_feature_class] 
-                                                == h_card_feature_vector[interested_feature_class],
-                                                1, 
-                                                0).flatten()
+            h_card_similarity_mask = jnp.any(get_similarity_mask(h_card), axis=0).astype(jnp.int32)
+            # accept identcal cards as a dirty fix for now
             non_h_cards = 1 - jax.nn.one_hot(h_card, self.num_cards)
-            g_card_mask = task_specific_mask * g_hand_mask * interested_feature_mask * non_h_cards
-            print(task_specific_mask, g_hand_mask, interested_feature_mask, non_h_cards)
+            g_card_mask = task_specific_mask * g_hand_mask * h_card_similarity_mask * non_h_cards
             g_card = jax.random.choice(g_rng, self.num_cards, p=get_safe_probability_from_mask(g_card_mask))
             selected_cards = jnp.array([h_card, g_card])
             hand_masks = jnp.stack([h_hand_mask, g_hand_mask], axis=0)
-            updated_masks = jax.lax.cond(replace, 
+            updated_masks = jax.lax.cond(replace,
                                       mask_selected_card, 
                                       lambda args: args[0], 
                                       (hand_masks, selected_cards))
@@ -250,13 +245,14 @@ class HintGuessGame(MultiAgentEnv):
         elif reset_mode == "mutual_exclusive":
             # apart from hint/target, the rest of the hands pairs should also have no feature that is same as target
             task_specific_mask = 1 - jnp.any(similarity_mask, axis=0).astype(jnp.int32)
-        elif reset_mode == "mutual_exclusive_similarity":
-            # there are two possibilities here, we can set the rest of the hand to be "no feature idential", like the two previous cases
-            # or we can let the rest of the hands to have one/more similar feature with the target, as far as they are not the target
-            # first option
+        else: # the mutual_exclusive_similarity case
+            # set the rest of the hand to be "no feature idential", like the two previous cases
             task_specific_mask = 1 - jnp.any(similarity_mask, axis=0).astype(jnp.int32)
-            # second option
-            # task_specific_mask = jnp.ones(self.num_cards, dtype=jnp.int32)
+            # future case:  we can let the rest of the hands to have one/more similar feature with the target, as far as they are not the target
+            #               but this involves a more complex logic to ensure that the rest of hand does not hint other card of the rest of the hand
+            #               a potential solution is to scan the current hand generated and backtrack if the rest of hand does not implicitly hint each other
+            
+            
 
 
         hinter_hand = hint
@@ -413,7 +409,7 @@ class HintGuessGame(MultiAgentEnv):
 if __name__ == "__main__":
     jax.config.update("jax_disable_jit", True)
     env = HintGuessGame()
-    rng = jax.random.PRNGKey(20)
+    rng = jax.random.PRNGKey(0)
     # reset_modes: exact_match, similarity_match, mutual_exclusive, mutual_exclusive_similarity
     _, state, hint = env.reset_for_eval(rng, reset_mode="mutual_exclusive_similarity", replace=False)
     print(jnp.arange(9).reshape(3, 3))
