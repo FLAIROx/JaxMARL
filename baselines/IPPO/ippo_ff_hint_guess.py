@@ -35,13 +35,15 @@ class ActorCritic(nn.Module):
 
         obs, dones, avail_actions = x
         embedding = nn.Dense(
-            self.hidden_size, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.hidden_size,
+            kernel_init=orthogonal(np.sqrt(2)),
+            bias_init=constant(0.0),
         )(obs)
         embedding = activation(embedding)
 
-        actor_mean = nn.Dense(self.hidden_size, kernel_init=orthogonal(2), bias_init=constant(0.0))(
-            embedding
-        )
+        actor_mean = nn.Dense(
+            self.hidden_size, kernel_init=orthogonal(2), bias_init=constant(0.0)
+        )(embedding)
         actor_mean = activation(actor_mean)
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
@@ -50,9 +52,9 @@ class ActorCritic(nn.Module):
         action_logits = actor_mean - (unavail_actions * 1e10)
         pi = distrax.Categorical(logits=action_logits)
 
-        critic = nn.Dense(self.hidden_size, kernel_init=orthogonal(2), bias_init=constant(0.0))(
-            embedding
-        )
+        critic = nn.Dense(
+            self.hidden_size, kernel_init=orthogonal(2), bias_init=constant(0.0)
+        )(embedding)
         critic = activation(critic)
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
             critic
@@ -83,16 +85,16 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
+    basic_env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = LogWrapper(basic_env)
+
+    config["NUM_ACTORS"] = basic_env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
     config["MINIBATCH_SIZE"] = (
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
-
-    env = LogWrapper(env)
 
     def linear_schedule(count):
         frac = (
@@ -101,6 +103,59 @@ def make_train(config):
             / config["NUM_UPDATES"]
         )
         return config["LR"] * frac
+
+    def similarity_policy_test(rng, network_params, mode="exact_match"):
+
+        network = ActorCritic(
+            action_dim=env.action_space(env.agents[0]).n,
+            activation=config["ACTIVATION"],
+            hidden_size=config["HIDDEN_SIZE"],
+        )
+
+        def test_act(rng, avail_actions, obs):
+            avail_actions = jax.lax.stop_gradient(
+                batchify(avail_actions, env.agents, env.num_agents)
+            )
+            obs_batch = batchify(obs, env.agents, env.num_agents)
+            ac_in = (
+                obs_batch[np.newaxis, :],
+                None,
+                avail_actions[np.newaxis, :],
+            )
+            rng, _rng = jax.random.split(rng)
+            pi, _ = network.apply(network_params, ac_in)
+            action = pi.sample(seed=_rng)
+            env_act = unbatchify(action, env.agents, 1, env.num_agents)
+            env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
+            return env_act
+
+        def get_score(rng):
+            # notice that here we use the basic env and its primordial functions
+
+            rng_r, rng_ah, rng_sh, rng_ag = jax.random.split(rng, 4)
+            obs, hint_state, correct_hint = basic_env.reset_for_eval(
+                rng_r, reset_mode=mode, replace=False
+            )
+
+            # hint step
+            hint_actions = test_act(rng_ah, env.get_legal_moves(hint_state), obs)
+            obs, guess_state, _, _, _ = basic_env.step(rng_sh, hint_state, hint_actions)
+
+            # guess step
+            guess_actions = test_act(
+                rng_ag, basic_env.get_legal_moves(guess_state), obs
+            )
+
+            return (
+                (hint_actions["hinter"] == correct_hint)
+                & (guess_actions["guesser"] == guess_state.target)
+            ).astype(
+                jnp.float32
+            )  # 1 if correct hint and guess, 0 otherwise
+
+        rngs = jax.random.split(rng, config["NUM_SIMILARITY_TESTS"])
+        scores = jax.vmap(get_score)(rngs)
+        return scores.mean()
 
     def train(rng):
 
@@ -318,20 +373,30 @@ def make_train(config):
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
             train_state = update_state[0]
-            metric = traj_batch.info
             rng = update_state[-1]
 
-            def callback(metric):
-                wandb.log(
-                    {
-                        "returns": metric["returned_episode_returns"][-1, :].mean(),
-                        "env_step": metric["update_steps"]
-                        * config["NUM_ENVS"]
-                        * config["NUM_STEPS"],
-                    }
-                )
+            metric = {
+                "returns": traj_batch.info["returned_episode_returns"][-1, :].mean(),
+                "env_step": update_steps * config["NUM_ENVS"] * config["NUM_STEPS"],
+                "update_steps": update_steps,
+            }
 
-            metric["update_steps"] = update_steps
+            if config.get("SIMILARITY_TEST_DURING_TRAINING", False):
+                # add running similarity metrics
+                for mode in [
+                    "exact_match",
+                    "similarity_match",
+                    "mutual_exclusive",
+                    "mutual_exclusive_similarity",
+                ]:
+                    rng, _rng = jax.random.split(rng)
+                    metric[f"{mode}_test"] = similarity_policy_test(
+                        _rng, train_state.params, mode
+                    )
+
+            def callback(metric):
+                wandb.log(metric)
+
             jax.debug.callback(callback, metric)
             update_steps = update_steps + 1
             runner_state = (train_state, env_state, last_obs, last_done, rng)
@@ -405,11 +470,11 @@ def tune(default_config):
             "ACTIVATION": {"values": ["relu", "tanh"]},
             "UPDATE_EPOCHS": {"values": [2, 4, 8]},
             "NUM_MINIBATCHES": {"values": [2, 4, 8, 16]},
-            "GAMMA": {"values": [0.99, 0.9, 0.]},
+            "GAMMA": {"values": [0.99, 0.9, 0.0]},
             "CLIP_EPS": {"values": [0.1, 0.2, 0.3]},
             "ENT_COEF": {"values": [0.0001, 0.001, 0.01]},
             "NUM_STEPS": {"values": [2, 4, 8, 16]},
-            "MAX_GRAD_NORM": {"values": [1., 0.5]},
+            "MAX_GRAD_NORM": {"values": [1.0, 0.5]},
         },
     }
 
@@ -423,8 +488,8 @@ def tune(default_config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_hint_guess")
 def main(config):
     config = OmegaConf.to_container(config)
-    #single_run(config)
-    tune(config)
+    single_run(config)
+    # tune(config)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,9 @@ class HintGuessGame(MultiAgentEnv):
         self.num_classes_per_feature = num_classes_per_feature
         self.num_cards = np.prod(self.num_classes_per_feature)
         self.matrix_obs = matrix_obs
-        self.card_feature_space = jnp.array(list(product(*[np.arange(n_c) for n_c in self.num_classes_per_feature])))
+        self.card_feature_space = jnp.array(
+            list(product(*[np.arange(n_c) for n_c in self.num_classes_per_feature]))
+        )
 
         # generate the deck of one-hot encoded cards
         if card_encoding == "onehot":
@@ -56,8 +58,8 @@ class HintGuessGame(MultiAgentEnv):
         else:
             raise NotImplementedError("Available encodings are: 'onehot'")
 
-        self.obs_size = (
-            (self.num_agents * (self.hand_size)+1) * (self.encoding_dim + 2)
+        self.obs_size = (self.num_agents * (self.hand_size) + 1) * (
+            self.encoding_dim + 2
         )  # +1 one_hot for if it's hinter or guesser card + 1 one_hot if the obs belong to hinter or guesser
         self.action_dim = (
             np.prod(self.num_classes_per_feature) + 1
@@ -78,7 +80,7 @@ class HintGuessGame(MultiAgentEnv):
                 self.hand_size,
             ),
         )
-        
+
         # every agent sees the hands in different order
         _rngs = jax.random.split(rng_hands, self.num_agents)
         permuted_hands = jax.vmap(
@@ -92,7 +94,6 @@ class HintGuessGame(MultiAgentEnv):
             player_hands=permuted_hands, target=target, hint=-1, guess=-1, turn=0
         )
         return jax.lax.stop_gradient(self.get_obs(state)), state
-    
 
     @partial(jax.jit, static_argnums=[0, 2, 3])
     def reset_for_eval(self, rng, reset_mode="exact_match", replace=True):
@@ -100,13 +101,18 @@ class HintGuessGame(MultiAgentEnv):
         def get_safe_probability_from_mask(mask):
             def true_fn(mask):
                 return jnp.full(self.num_cards, -1, dtype=jnp.float32)
-            return jax.lax.cond(jnp.sum(mask) == 0, true_fn, lambda x: x/x.sum(), mask)
+
+            return jax.lax.cond(
+                jnp.sum(mask) == 0, true_fn, lambda x: x / x.sum(), mask
+            )
 
         def mask_selected_card(args):
             hand_masks, selected_cards = args
-            masked_mask = jax.vmap(lambda mask, card: mask.at[card].set(0))(hand_masks, selected_cards)
+            masked_mask = jax.vmap(lambda mask, card: mask.at[card].set(0))(
+                hand_masks, selected_cards
+            )
             return masked_mask
-        
+
         def get_random_pair(masks, rng, replace=False):
             """
             This function returns a random pair of cards based on masks such that there is no relation between the cards.
@@ -114,15 +120,21 @@ class HintGuessGame(MultiAgentEnv):
             h_rng, g_rng = jax.random.split(rng, 2)
             task_specific_mask, h_hand_mask, g_hand_mask = masks
             h_hand_mask = task_specific_mask * h_hand_mask
-            h_card = jax.random.choice(h_rng, self.num_cards, p=get_safe_probability_from_mask(h_hand_mask))
+            h_card = jax.random.choice(
+                h_rng, self.num_cards, p=get_safe_probability_from_mask(h_hand_mask)
+            )
             g_hand_mask = task_specific_mask * g_hand_mask
-            g_card = jax.random.choice(g_rng, self.num_cards, p=get_safe_probability_from_mask(g_hand_mask))
+            g_card = jax.random.choice(
+                g_rng, self.num_cards, p=get_safe_probability_from_mask(g_hand_mask)
+            )
             selected_cards = jnp.array([h_card, g_card])
             hand_masks = jnp.stack([h_hand_mask, g_hand_mask], axis=0)
-            updated_masks = jax.lax.cond(replace, 
-                                      mask_selected_card, 
-                                      lambda args: args[0], 
-                                      (hand_masks, selected_cards))
+            updated_masks = jax.lax.cond(
+                replace,
+                mask_selected_card,
+                lambda args: args[0],
+                (hand_masks, selected_cards),
+            )
             return updated_masks, selected_cards
 
         def get_identical_pair(masks, rng, replace=False):
@@ -132,13 +144,19 @@ class HintGuessGame(MultiAgentEnv):
             task_specific_mask, h_hand_mask, g_hand_mask = masks
             both_hand_available = h_hand_mask * g_hand_mask
             card_mask = task_specific_mask * both_hand_available
-            card_drawn = jax.random.choice(rng, jnp.arange(self.num_cards), p=get_safe_probability_from_mask(card_mask))
+            card_drawn = jax.random.choice(
+                rng,
+                jnp.arange(self.num_cards),
+                p=get_safe_probability_from_mask(card_mask),
+            )
             selected_cards = jnp.array([card_drawn, card_drawn])
             hand_masks = jnp.stack([h_hand_mask, g_hand_mask], axis=0)
-            updated_masks = jax.lax.cond(replace, 
-                                      mask_selected_card, 
-                                      lambda args: args[0], 
-                                      (hand_masks, selected_cards))
+            updated_masks = jax.lax.cond(
+                replace,
+                mask_selected_card,
+                lambda args: args[0],
+                (hand_masks, selected_cards),
+            )
             return updated_masks, selected_cards
 
         def get_similar_pair(masks, rng, replace=False):
@@ -150,56 +168,79 @@ class HintGuessGame(MultiAgentEnv):
             h_card_mask = task_specific_mask * h_hand_mask
             # Robustness issue: need to solve the problem where there might not be a possible corresponding card for the other player
             # Solution: need to backtrack a set of possible hints from guesser's playable cards
-            
-            h_card = jax.random.choice(h_rng, self.num_cards, p=get_safe_probability_from_mask(h_card_mask))
-            h_card_similarity_mask = jnp.any(get_similarity_mask(h_card), axis=0).astype(jnp.int32)
+
+            h_card = jax.random.choice(
+                h_rng, self.num_cards, p=get_safe_probability_from_mask(h_card_mask)
+            )
+            h_card_similarity_mask = jnp.any(
+                get_similarity_mask(h_card), axis=0
+            ).astype(jnp.int32)
             # accept identcal cards as a dirty fix for now
             non_h_cards = 1 - jax.nn.one_hot(h_card, self.num_cards)
-            g_card_mask = task_specific_mask * g_hand_mask * h_card_similarity_mask * non_h_cards
-            g_card = jax.random.choice(g_rng, self.num_cards, p=get_safe_probability_from_mask(g_card_mask))
+            g_card_mask = (
+                task_specific_mask * g_hand_mask * h_card_similarity_mask * non_h_cards
+            )
+            g_card = jax.random.choice(
+                g_rng, self.num_cards, p=get_safe_probability_from_mask(g_card_mask)
+            )
             selected_cards = jnp.array([h_card, g_card])
             hand_masks = jnp.stack([h_hand_mask, g_hand_mask], axis=0)
-            updated_masks = jax.lax.cond(replace,
-                                      mask_selected_card, 
-                                      lambda args: args[0], 
-                                      (hand_masks, selected_cards))
+            updated_masks = jax.lax.cond(
+                replace,
+                mask_selected_card,
+                lambda args: args[0],
+                (hand_masks, selected_cards),
+            )
             return updated_masks, selected_cards
-            
- 
+
         def get_non_simillar_pair(masks, rng, replace=False):
             """
             This function returns a pair of cards that are different in all features.
             """
+
             def get_non_sim_feature_mask(card):
                 def feature_level_non_similar_mask(label, arr):
                     return jnp.where(label != arr, 1, 0)
+
                 card_feature_vector = self.card_feature_space[card, :]
-                card_non_similar_masks = jax.vmap(feature_level_non_similar_mask, in_axes=(0, 1))(card_feature_vector, self.card_feature_space)
+                card_non_similar_masks = jax.vmap(
+                    feature_level_non_similar_mask, in_axes=(0, 1)
+                )(card_feature_vector, self.card_feature_space)
                 return jnp.prod(card_non_similar_masks, axis=0)
+
             h_rng, g_rng = jax.random.split(rng, 2)
             task_specific_mask, h_hand_mask, g_hand_mask = masks
             h_card_mask = task_specific_mask * h_hand_mask
-            h_card = jax.random.choice(h_rng, self.num_cards, p=get_safe_probability_from_mask(h_card_mask))
+            h_card = jax.random.choice(
+                h_rng, self.num_cards, p=get_safe_probability_from_mask(h_card_mask)
+            )
             h_non_sim_feature_mask = get_non_sim_feature_mask(h_card)
             g_card_mask = task_specific_mask * g_hand_mask * h_non_sim_feature_mask
-            g_card = jax.random.choice(g_rng, self.num_cards, p=get_safe_probability_from_mask(g_card_mask))
+            g_card = jax.random.choice(
+                g_rng, self.num_cards, p=get_safe_probability_from_mask(g_card_mask)
+            )
             selected_cards = jnp.array([h_card, g_card])
             hand_masks = jnp.stack([h_hand_mask, g_hand_mask], axis=0)
-            updated_masks = jax.lax.cond(replace, 
-                                      mask_selected_card, 
-                                      lambda args: args[0], 
-                                      (hand_masks, selected_cards))
+            updated_masks = jax.lax.cond(
+                replace,
+                mask_selected_card,
+                lambda args: args[0],
+                (hand_masks, selected_cards),
+            )
             return updated_masks, selected_cards
-        
+
         def get_similarity_mask(card):
             def feature_level_similar_mask(label, arr):
                 return jnp.where(label == arr, 1, 0)
+
             # card_similar_masks is an ndarray indicating the which cards are similar on which features of the target
             # it has shape feature x num_cards
             card_feature_vector = self.card_feature_space[card, :]
-            card_similar_masks = jax.vmap(feature_level_similar_mask, in_axes=(0, 1))(card_feature_vector, self.card_feature_space)
+            card_similar_masks = jax.vmap(feature_level_similar_mask, in_axes=(0, 1))(
+                card_feature_vector, self.card_feature_space
+            )
             return card_similar_masks
-            
+
         feature_masks = jnp.ones((self.num_features, self.num_cards), dtype=jnp.int32)
         h_hand_mask = jnp.ones(self.num_cards, dtype=jnp.int32)
         g_hand_mask = jnp.ones(self.num_cards, dtype=jnp.int32)
@@ -220,10 +261,14 @@ class HintGuessGame(MultiAgentEnv):
             rest_of_hands_fn = get_similar_pair
         else:
             raise ValueError("Invalid reset mode")
-        
+
         # during the target/hint generation phase, there is no restictions on what target can be, thus feature masks are all 1
         # replace is forced to be true to guarentee that hint/target are only used once from individual set
-        hand_masks, selected_cards = hint_target_fn((jnp.ones(self.num_cards, dtype=jnp.int32), h_hand_mask, g_hand_mask), rng, replace=True)
+        hand_masks, selected_cards = hint_target_fn(
+            (jnp.ones(self.num_cards, dtype=jnp.int32), h_hand_mask, g_hand_mask),
+            rng,
+            replace=True,
+        )
         h_hand_mask, g_hand_mask = hand_masks[0, :], hand_masks[1, :]
 
         # set the target card in hinter's hand to 0 to avoid duplication if they are not the same
@@ -231,7 +276,6 @@ class HintGuessGame(MultiAgentEnv):
 
         # similarly, set the hint card in guesser's hand to 0 to avoid duplication if they are not the same, e.g., if hint is 6, then 6 must not be an option for guesser's rest of the hand
         g_hand_mask = g_hand_mask * h_hand_mask
-
 
         hint, target = selected_cards[0], selected_cards[1]
         similarity_mask = get_similarity_mask(target)
@@ -245,21 +289,20 @@ class HintGuessGame(MultiAgentEnv):
         elif reset_mode == "mutual_exclusive":
             # apart from hint/target, the rest of the hands pairs should also have no feature that is same as target
             task_specific_mask = 1 - jnp.any(similarity_mask, axis=0).astype(jnp.int32)
-        else: # the mutual_exclusive_similarity case
+        else:  # the mutual_exclusive_similarity case
             # set the rest of the hand to be "no feature idential", like the two previous cases
             task_specific_mask = 1 - jnp.any(similarity_mask, axis=0).astype(jnp.int32)
             # future case:  we can let the rest of the hands to have one/more similar feature with the target, as far as they are not the target
             #               but this involves a more complex logic to ensure that the rest of hand does not hint other card of the rest of the hand
             #               a potential solution is to scan the current hand generated and backtrack if the rest of hand does not implicitly hint each other
-            
-            
-
 
         hinter_hand = hint
         guesser_hand = target
         for _ in range(self.hand_size - 1):
             _, rng = jax.random.split(rng)
-            hand_masks, selected_cards = rest_of_hands_fn((task_specific_mask, h_hand_mask, g_hand_mask), rng, replace=replace)
+            hand_masks, selected_cards = rest_of_hands_fn(
+                (task_specific_mask, h_hand_mask, g_hand_mask), rng, replace=replace
+            )
             h_hand_mask, g_hand_mask = hand_masks[0, :], hand_masks[1, :]
             hinter_card, guesser_card = selected_cards[0], selected_cards[1]
             hinter_hand = jnp.append(hinter_hand, hinter_card)
@@ -269,10 +312,10 @@ class HintGuessGame(MultiAgentEnv):
         _rngs = jax.random.split(rng_hand, 2)
         hinter_hand = jax.random.permutation(_rngs[0], hinter_hand)
         guesser_hand = jax.random.permutation(_rngs[1], guesser_hand)
-        
+
         player_hands = jnp.stack([hinter_hand, guesser_hand])
         # assert player_hands.shape == (2, self.hand_size)
-        
+
         # shuffle the views
         _rngs = jax.random.split(rng_view, self.num_agents)
         permuted_hands = jax.vmap(
@@ -283,7 +326,6 @@ class HintGuessGame(MultiAgentEnv):
         )
 
         return jax.lax.stop_gradient(self.get_obs(state)), state, hint
-
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(self, rng, state, actions):
@@ -405,13 +447,57 @@ class HintGuessGame(MultiAgentEnv):
         )
         return encodings
 
-    
+
 if __name__ == "__main__":
-    jax.config.update("jax_disable_jit", True)
+    # jax.config.update("jax_disable_jit", True)
+
+    from jaxmarl import make
+
     env = HintGuessGame()
-    rng = jax.random.PRNGKey(0)
-    # reset_modes: exact_match, similarity_match, mutual_exclusive, mutual_exclusive_similarity
-    _, state, hint = env.reset_for_eval(rng, reset_mode="mutual_exclusive_similarity", replace=False)
-    print(jnp.arange(9).reshape(3, 3))
-    print(state)
-    print("the ideal hint is: ", hint)
+
+    for i in range(1000):
+        rng = jax.random.PRNGKey(i)
+
+        # reset_modes: exact_match, similarity_match, mutual_exclusive, mutual_exclusive_similarity
+        obs, state, correct_hint = env.reset_for_eval(
+            rng, reset_mode="mutual_exclusive_similarity", replace=False
+        )
+
+        rng, _rng = jax.random.split(rng)
+        key_act = jax.random.split(_rng, env.num_agents)
+        hint_actions = {
+            agent: env.action_space(agent).sample(key_act[i])
+            for i, agent in enumerate(env.agents)
+        }
+
+        rng, _rng = jax.random.split(rng)
+        obs, state, reward, done, infos = env.step(_rng, state, hint_actions)
+
+        rng, _rng = jax.random.split(rng)
+        key_act = jax.random.split(_rng, env.num_agents)
+        guess_actions = {
+            agent: env.action_space(agent).sample(key_act[i])
+            for i, agent in enumerate(env.agents)
+        }
+
+        obs, _state, reward, done, infos = env.step(_rng, state, guess_actions)
+
+        if reward["guesser"] != 0:
+
+            print(
+                "hint: ",
+                hint_actions["hinter"],
+                ", correct hint: ",
+                correct_hint,
+                ", guess: ",
+                guess_actions["guesser"],
+                ", correct guess: ",
+                state.target,
+                ", reward: ",
+                reward,
+                ", score: ",
+                (hint_actions["hinter"] == correct_hint)
+                & (
+                    guess_actions["guesser"] == state.target
+                ),  # correct hint and correct guess
+            )

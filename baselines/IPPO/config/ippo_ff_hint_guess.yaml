@@ -1,7 +1,7 @@
 "LR": 0.0005
 "NUM_ENVS": 128
 "NUM_STEPS": 8
-"TOTAL_TIMESTEPS": 2e6
+"TOTAL_TIMESTEPS": 4e6
 "UPDATE_EPOCHS": 2
 "NUM_MINIBATCHES": 16
 "GAMMA": 0.99
@@ -16,8 +16,11 @@
 "ENV_KWARGS": {}
 "ANNEAL_LR": True
 "SEED": 0
-"NUM_SEEDS": 1
+"NUM_SEEDS": 8
 
+# test
+"SIMILARITY_TEST_DURING_TRAINING": True # perform the similarity tests every update step
+"NUM_SIMILARITY_TESTS": 128 # per similarity mode
 
 # WandB Params
 "WANDB_MODE": "online"
