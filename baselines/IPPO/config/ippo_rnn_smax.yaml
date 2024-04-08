@@ -22,7 +22,7 @@
   "walls_cause_death": True
   "attack_mode": "closest"
 "ANNEAL_LR": True
-"ADD_AGENT_ID": False
+"ADD_AGENT_ID": True
 
 # WandB Params
 "ENTITY": "amacrutherford"

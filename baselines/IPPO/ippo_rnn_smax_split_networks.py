@@ -570,7 +570,7 @@ def make_train(config):
                         ].mean(),
                         "win_rate": metric["returned_won_episode"][:, :, 0][
                             metric["returned_episode"][:, :, 0]
-                        ].mean()*100,
+                        ].mean(),
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
