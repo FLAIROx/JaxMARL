@@ -12,7 +12,7 @@ from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
 import distrax
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 from jaxmarl.wrappers.baselines import SMAXLogWrapper, AddAgentID
 from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
@@ -72,10 +72,13 @@ class ActorCriticRNN(nn.Module):
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
         )(actor_mean)
-        unavail_actions = 1 - avail_actions
-        action_logits = actor_mean - (unavail_actions * 1e10)
+        masked_logits = jnp.where(
+            avail_actions,
+            actor_mean,
+            jnp.finfo(jnp.float32).min,
+        )
 
-        pi = distrax.Categorical(logits=action_logits)
+        pi = distrax.Categorical(logits=masked_logits)
 
         critic = nn.Dense(self.config["FC_DIM_SIZE"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
@@ -113,6 +116,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 def make_train(config):
     scenario = map_name_to_scenario(config["MAP_NAME"])
     env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
+    
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
