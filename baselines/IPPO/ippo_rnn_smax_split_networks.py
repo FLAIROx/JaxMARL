@@ -339,7 +339,7 @@ def make_train(config):
             )
             _, last_val = critic_network.apply(params.critic_params, hstates.critic_hstate, ac_in)
             last_val = last_val.squeeze()  # mava here masks out the terminal states but surely unnecessary?
-            last_val = jnp.where(last_done, jnp.zeros_like(last_val), last_val)
+            # last_val = jnp.where(last_done, jnp.zeros_like(last_val), last_val)
             # TODO mava's masking
             
             def _calculate_gae(traj_batch, last_val):
