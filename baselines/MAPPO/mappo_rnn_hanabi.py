@@ -357,7 +357,7 @@ def make_train(config):
                         # RERUN NETWORK
                         _, pi = actor_network.apply(
                             actor_params,
-                            init_hstate.transpose(),
+                            init_hstate.squeeze(),
                             (traj_batch.obs, traj_batch.done, traj_batch.avail_actions),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
@@ -391,7 +391,7 @@ def make_train(config):
                     
                     def _critic_loss_fn(critic_params, init_hstate, traj_batch, targets):
                         # RERUN NETWORK
-                        _, value = critic_network.apply(critic_params, init_hstate.transpose(), (traj_batch.world_state,  traj_batch.done)) 
+                        _, value = critic_network.apply(critic_params, init_hstate.squeeze(), (traj_batch.world_state,  traj_batch.done)) 
                         
                         # CALCULATE VALUE LOSS
                         value_pred_clipped = traj_batch.value + (
@@ -441,8 +441,8 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
                 init_hstates = jax.tree_map(lambda x: jnp.reshape(
-                    x, (config["NUM_STEPS"], config["NUM_ACTORS"])
-                ), init_hstates)
+                    x, (1, config["NUM_ACTORS"], -1)
+                ), initial_hstates)
                 
                 batch = (
                     init_hstates[0],
@@ -475,7 +475,7 @@ def make_train(config):
                 )
                 update_state = (
                     train_states,
-                    init_hstates,
+                    jax.tree_map(lambda x: x.squeeze(), init_hstates),
                     traj_batch,
                     advantages,
                     targets,
@@ -483,12 +483,9 @@ def make_train(config):
                 )
                 return update_state, loss_info
 
-            ac_init_hstate = initial_hstates[0][None, :].squeeze().transpose()
-            cr_init_hstate = initial_hstates[1][None, :].squeeze().transpose()
-
             update_state = (
                 train_states,
-                (ac_init_hstate, cr_init_hstate),
+                initial_hstates,
                 traj_batch,
                 advantages,
                 targets,
