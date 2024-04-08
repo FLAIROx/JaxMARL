@@ -39,7 +39,7 @@ class ScannedRNN(nn.Module):
         ins, resets = x
         rnn_state = jnp.where(
             resets[:, np.newaxis],
-            self.initialize_carry(ins.shape[0], ins.shape[1]),
+            self.initialize_carry(*rnn_state.shape),
             rnn_state,
         )
         new_rnn_state, y = nn.GRUCell(features=ins.shape[1])(rnn_state, ins)
@@ -263,7 +263,7 @@ def make_train(config):
                         # RERUN NETWORK
                         _, pi, value = network.apply(
                             params,
-                            init_hstate.transpose(),
+                            init_hstate.squeeze(),
                             (traj_batch.obs, traj_batch.done),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
@@ -276,7 +276,7 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean(where=(1 - traj_batch.done))
+                        ).mean()
 
                         # CALCULATE ACTOR LOSS
                         logratio = log_prob - traj_batch.log_prob
@@ -292,8 +292,8 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
 
                         # debug
                         approx_kl = ((ratio - 1) - logratio).mean()
@@ -324,7 +324,7 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
                 init_hstate = jnp.reshape(
-                    init_hstate, (config["NUM_STEPS"], config["NUM_ACTORS"])
+                    init_hstate, (1, config["NUM_ACTORS"], -1)
                 )
                 batch = (
                     init_hstate,
@@ -356,7 +356,7 @@ def make_train(config):
                 )
                 update_state = (
                     train_state,
-                    init_hstate,
+                    init_hstate.squeeze(),
                     traj_batch,
                     advantages,
                     targets,
@@ -364,10 +364,9 @@ def make_train(config):
                 )
                 return update_state, total_loss
 
-            init_hstate = initial_hstate[None, :].squeeze().transpose()
             update_state = (
                 train_state,
-                init_hstate,
+                initial_hstate,
                 traj_batch,
                 advantages,
                 targets,

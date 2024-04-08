@@ -258,7 +258,7 @@ def make_train(config):
 
                     def _loss_fn(params, init_hstate, traj_batch, gae, targets):
                         # RERUN NETWORK
-                        _, pi, value = network.apply(params, init_hstate.transpose(),
+                        _, pi, value = network.apply(params, init_hstate.squeeze(),
                                                      (traj_batch.obs, traj_batch.done, traj_batch.avail_actions))
                         log_prob = pi.log_prob(traj_batch.action)
 
@@ -310,7 +310,9 @@ def make_train(config):
                 train_state, init_hstate, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
 
-                init_hstate = jnp.reshape(init_hstate, (config["NUM_STEPS"], config["NUM_ACTORS"]))
+                init_hstate = jnp.reshape(
+                    init_hstate, (1, config["NUM_ACTORS"], -1)
+                )                
                 batch = (init_hstate, traj_batch, advantages.squeeze(), targets.squeeze())
                 permutation = jax.random.permutation(_rng, config["NUM_ACTORS"])
 
@@ -334,10 +336,9 @@ def make_train(config):
                 train_state, total_loss = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
-                update_state = (train_state, init_hstate, traj_batch, advantages, targets, rng)
+                update_state = (train_state, init_hstate.squeeze(), traj_batch, advantages, targets, rng)
                 return update_state, total_loss
 
-            init_hstate = initial_hstate[None, :].squeeze().transpose()
             update_state = (train_state, init_hstate, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
