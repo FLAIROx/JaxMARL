@@ -2,10 +2,14 @@
 "NUM_SEEDS": 2
 "SEED": 0
 
+# perform hyp tune
+"HYP_TUNE": True
+"EXP_TIME_LIMIT": 5000 # block the experiment after these seconds (include compilation time)
+
 # wandb params
-"ENTITY": ""
-"PROJECT": ""
-"WANDB_MODE": "disabled"
+"ENTITY": "mttga"
+"PROJECT": "qlupdate"
+"WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)
 "SAVE_PATH": "baselines/QLearning/checkpoints"
