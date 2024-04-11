@@ -503,7 +503,8 @@ def make_train(config, env):
                     _dones,
                 )
                 q_vals = q_vals.squeeze(axis=1)
-                actions = jnp.argmax(q_vals, axis=-1)
+                valid_actions = wrapped_env.get_valid_actions(env_state.env_state)
+                actions = get_greedy_actions(q_vals, batchify(valid_actions))
                 actions = unbatchify(actions)
                 obs, env_state, rewards, dones, infos = test_env.batch_step(
                     key_s, env_state, actions
@@ -671,11 +672,10 @@ def tune(default_config):
             "LR_LINEAR_DECAY": {"values": [True, False]},
             #"NUM_ENVS": {"values": [8, 32, 64]},
             #"NUM_STEPS": {"values": [4, 8, 16, 32]},
-            "TARGET_UPDATE_INTERVAL": {"values": [100, 200, 500]},
-            "NUM_MINI_EPOCHS": {"values": [1, 2, 3, 4, 5]},
+            "HIDDEN_SIZE": {"values": [128, 256, 512]},
+            "TARGET_UPDATE_INTERVAL": {"values": [10, 100, 200, 500]},
+            "NUM_MINI_EPOCHS": {"values": [1, 2, 4, 6, 8]},
             "BUFFER_BATCH_SIZE": {"values": [32, 64]},
-            "EPS_FINISH": {"values": [0.05, 0.1]},
-            "EPS_DECAY": {"values": [0.1, 0.2]},
         },
     }
 
@@ -683,7 +683,7 @@ def tune(default_config):
     sweep_id = wandb.sweep(
         sweep_config, entity=default_config["ENTITY"], project=default_config["PROJECT"]
     )
-    wandb.agent("c4mjmt68", wrapped_make_train, count=300)
+    wandb.agent(sweep_id, wrapped_make_train, count=300)
 
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
