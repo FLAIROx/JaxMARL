@@ -608,7 +608,7 @@ def single_run(config):
         train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
         outs = jax.block_until_ready(train_vjit(rngs))
     else:
-        outs = jax.jit(make_train(config["alg"]))(rng)
+        outs = jax.jit(make_train(config["alg"], env))(rng)
 
 
 def tune(default_config):
