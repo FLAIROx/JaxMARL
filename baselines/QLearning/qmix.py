@@ -493,11 +493,11 @@ def make_train(config, env):
                     wandb.log(
                         {
                             "returns": metrics['rewards']['__all__'].mean(),
-                            "timestep": metrics['timesteps'],
-                            "updates": metrics['updates'],
+                            "env_step": metrics['timesteps'],
+                            "update_steps": metrics['updates'],
                             "loss": metrics['loss'],
                             'epsilon': metrics['eps'],
-                            **info_metrics,
+                            #**info_metrics,
                             **{k:v.mean() for k, v in metrics['test_metrics'].items()}
                         }
                     )
@@ -559,7 +559,7 @@ def make_train(config, env):
             first_infos   = jax.tree_map(lambda i: jax.vmap(first_episode_returns, in_axes=1)(i[..., 0], all_dones), infos)
             metrics = {
                 'test_returns': first_returns['__all__'],# episode returns
-                **{'test_'+k:v for k,v in first_infos.items()}
+                #**{'test_'+k:v for k,v in first_infos.items()}
             }
             if config.get('VERBOSE', False):
                 def callback(timestep, val):
