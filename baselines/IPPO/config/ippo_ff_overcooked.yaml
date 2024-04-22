@@ -15,3 +15,10 @@
 "ENV_KWARGS": 
   "layout" : "cramped_room"
 "ANNEAL_LR": True
+"SEED": 30
+"NUM_SEEDS": 10
+
+# WandB Params
+"ENTITY": ""
+"PROJECT": "jaxmarl-overcooked"
+"WANDB_MODE" : "disabled"

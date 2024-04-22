@@ -18,6 +18,7 @@ from jaxmarl.environments.overcooked import overcooked_layouts
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 import hydra
 from omegaconf import OmegaConf
+import wandb
 
 import matplotlib.pyplot as plt
 
@@ -167,7 +168,7 @@ def make_train(config):
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
-                train_state, env_state, last_obs, rng = runner_state
+                train_state, env_state, last_obs, update_step, rng = runner_state
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
@@ -199,7 +200,7 @@ def make_train(config):
                     info
                     
                 )
-                runner_state = (train_state, env_state, obsv, rng)
+                runner_state = (train_state, env_state, obsv, update_step, rng)
                 return runner_state, transition
 
             runner_state, traj_batch = jax.lax.scan(
@@ -207,7 +208,7 @@ def make_train(config):
             )
             
             # CALCULATE ADVANTAGE
-            train_state, env_state, last_obs, rng = runner_state
+            train_state, env_state, last_obs, update_step, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
             _, last_val = network.apply(train_state.params, last_obs_batch)
 
@@ -320,12 +321,22 @@ def make_train(config):
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
+
+            def callback(metric):
+                wandb.log(
+                    metric
+                )
+            update_step = update_step + 1
+            metric = jax.tree_map(lambda x: x.mean(), metric)
+            metric["update_step"] = update_step
+            metric["env_step"] = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
+            jax.debug.callback(callback, metric)
             
-            runner_state = (train_state, env_state, last_obs, rng)
+            runner_state = (train_state, env_state, last_obs, update_step, rng)
             return runner_state, metric
 
         rng, _rng = jax.random.split(rng)
-        runner_state = (train_state, env_state, obsv, _rng)
+        runner_state = (train_state, env_state, obsv, 0, _rng)
         runner_state, metric = jax.lax.scan(
             _update_step, runner_state, None, config["NUM_UPDATES"]
         )
@@ -338,14 +349,25 @@ def make_train(config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_overcooked")
 def main(config):
     config = OmegaConf.to_container(config) 
-    config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
-    rng = jax.random.PRNGKey(30)
-    num_seeds = 20
-    with jax.disable_jit(False):
-        train_jit = jax.jit(jax.vmap(make_train(config)))
-        rngs = jax.random.split(rng, num_seeds)
-        out = train_jit(rngs)
+    layout_name = config["ENV_KWARGS"]["layout"]
+    config["ENV_KWARGS"]["layout"] = overcooked_layouts[layout_name]
+
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+        name=f'ippo_ff_overcooked_{layout_name}'
+    )
+
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])    
+    train_jit = jax.jit(make_train(config))
+    out = jax.vmap(train_jit)(rngs)
     
+    
+    """
     print('** Saving Results **')
     filename = f'{config["ENV_NAME"]}_cramped_room_new'
     rewards = out["metrics"]["returned_episode_returns"].mean(-1).reshape((num_seeds, -1))
@@ -365,6 +387,7 @@ def main(config):
     viz = OvercookedVisualizer()
     # agent_view_size is hardcoded as it determines the padding around the layout.
     viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
+    """
 
 if __name__ == "__main__":
     main()
