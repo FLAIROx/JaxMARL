@@ -2,6 +2,7 @@
 Based on PureJaxRL Implementation of PPO
 """
 
+import os
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -16,6 +17,12 @@ from jaxmarl.wrappers.baselines import LogWrapper
 import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
+import wandb
+# import orbax.checkpoint
+from flax.training import checkpoints
+from safetensors.flax import save_file
+from flax.traverse_util import flatten_dict
+from typing import NamedTuple, Dict, Union
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -67,6 +74,7 @@ class Transition(NamedTuple):
 
 
 def batchify(x: dict, agent_list, num_actors):
+    print(x)
     max_dim = max([x[a].shape[-1] for a in agent_list])
     def pad(z, length):
         return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + [length - z.shape[-1]])], -1)
@@ -101,8 +109,10 @@ def make_train(config):
 
         # INIT NETWORK
         # TODO doesn't work for non-homogenous agents
+        # print(env.action_space(env.agents[0]).shape[0])
         network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
+        # print(env.observation_space(env.agents[0]).shape)
         init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
@@ -135,10 +145,12 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
                 pi, value = network.apply(train_state.params, obs_batch)
+                print("pi", pi)
                 action = pi.sample(seed=_rng)
+                print("action", action)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-
+                print("env_act", env_act)
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
@@ -235,14 +247,23 @@ def make_train(config):
                                 + config["VF_COEF"] * value_loss
                                 - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (value_loss, loss_actor, entropy, ratio)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
                         train_state.params, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, total_loss
+                    
+                    loss_info = {
+                        "total_loss": total_loss[0],
+                        "actor_loss": total_loss[1][1],
+                        "critic_loss": total_loss[1][0],
+                        "entropy": total_loss[1][2],
+                        "ratio": total_loss[1][3],
+                    }
+                    
+                    return train_state,  loss_info
 
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
@@ -264,11 +285,16 @@ def make_train(config):
                     ),
                     shuffled_batch,
                 )
-                train_state, total_loss = jax.lax.scan(
+                train_state, loss_info = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (train_state, traj_batch, advantages, targets, rng)
-                return update_state, total_loss
+                return update_state, loss_info
+            
+            def callback(metric):
+                wandb.log(
+                    metric
+                )
 
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
@@ -278,6 +304,12 @@ def make_train(config):
             metric = traj_batch.info
             rng = update_state[-1]
 
+            r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
+            # jax.debug.print('ratio0 {x}', x=r0["ratio0"])
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            metric = jax.tree_map(lambda x: x.mean(), metric)
+            metric = {**metric, **loss_info, **r0}
+            jax.experimental.io_callback(callback, None, metric)
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
 
@@ -294,12 +326,56 @@ def make_train(config):
 def main(config):
     config = OmegaConf.to_container(config)
 
-    rng = jax.random.PRNGKey(30)
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        name=config["NAME"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
+    
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])    
     train_jit = jax.jit(make_train(config))
-    out = train_jit(rng)
-    import pdb;
+    out = jax.vmap(train_jit)(rngs)
+    print(out)
+    # save params
+    env_name = config["ENV_NAME"]
+    alg_name = "IPPO"
+    if config['SAVE_PATH'] is not None:
 
-    pdb.set_trace()
+        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+            flattened_dict = flatten_dict(params, sep=',')
+            save_file(flattened_dict, filename)
+
+        model_state = out['runner_state'][0]
+        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
+        save_dir = os.path.join(config['SAVE_PATH'], env_name)
+        os.makedirs(save_dir, exist_ok=True)
+        save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+
+    # logging
+    updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
+    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
+    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
+    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
+    wandb.log({
+        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
+        # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+        "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+        "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+        "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+        "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+        "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
+    })
+    
+    # import pdb;
+
+    # pdb.set_trace()
 
 
 if __name__ == "__main__":
