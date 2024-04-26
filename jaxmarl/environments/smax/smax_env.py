@@ -503,6 +503,7 @@ class SMAX(MultiAgentEnv):
         if self.action_type == "discrete":
             return self._decode_discrete_actions(actions)
         elif self.action_type == "continuous":
+            actions = jnp.clip(actions, 0.0, 1.0)
             return self._decode_continuous_actions(key, state, actions)
         else:
             raise ValueError("Invalid Action Type")
