@@ -275,7 +275,7 @@ def make_train(config):
                 env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
 
                 # VALUE
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1), order="F")
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
@@ -313,7 +313,7 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
       
-            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1), order="F")
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
