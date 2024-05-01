@@ -33,7 +33,8 @@ class QNetwork(nn.Module):
     action_dim: int
     hidden_size: int = 512
     n_layers: int = 4
-    norm_type: str = "batch_norm"
+    norm_type: str = "layer_norm"
+    dueling: bool = True
 
     @nn.compact
     def __call__(self, x: jnp.ndarray, train: bool = False):
@@ -48,8 +49,14 @@ class QNetwork(nn.Module):
             elif self.norm_type == "layer_norm":
                 x = nn.LayerNorm()(x)
             x = nn.relu(x)
-        x = nn.Dense(self.action_dim)(x)
-        return x
+        
+        if self.dueling:
+            adv = nn.Dense(self.action_dim)(x)
+            val = nn.Dense(1)(x)
+            q_vals = val + adv - jnp.mean(adv, axis=-1, keepdims=True)
+        else:
+            q_vals = nn.Dense(self.action_dim)(x)
+        return q_vals
 
 
 @chex.dataclass(frozen=True)
@@ -148,6 +155,7 @@ def make_train(config, env):
             hidden_size=config["HIDDEN_SIZE"],
             n_layers=config["N_LAYERS"],
             norm_type=config["NORM_TYPE"],
+            dueling=config.get("DUELING", False),
         )
 
         def create_agent(rng):
