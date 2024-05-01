@@ -61,7 +61,7 @@ class HanabiEnv(HanabiGame):
                 )
             ).squeeze()
 
-        self.action_set = jnp.arange(self.num_moves)
+        self.action_set = np.arange(self.num_moves)
         self.action_encoding = {}
         for i, a in enumerate(self.action_set):
             if a < hand_size:
@@ -77,12 +77,12 @@ class HanabiEnv(HanabiGame):
             self.action_encoding[int(a)] = move_type
 
         # useful ranges to know the type of the action
-        self.discard_action_range = jnp.arange(0, self.hand_size)
-        self.play_action_range = jnp.arange(self.hand_size, 2 * self.hand_size)
-        self.color_action_range = jnp.arange(
+        self.discard_action_range = np.arange(0, self.hand_size)
+        self.play_action_range = np.arange(self.hand_size, 2 * self.hand_size)
+        self.color_action_range = np.arange(
             2 * self.hand_size, 2 * self.hand_size + self.num_colors
         )
-        self.rank_action_range = jnp.arange(
+        self.rank_action_range = np.arange(
             2 * self.hand_size + self.num_colors,
             2 * self.hand_size + self.num_colors + self.num_ranks,
         )

@@ -52,14 +52,14 @@ class HanabiGame(MultiAgentEnv):
         super().__init__(num_agents)
 
         self.num_agents = num_agents
-        self.agent_range = jnp.arange(num_agents)
+        self.agent_range = np.arange(num_agents)
         self.num_colors = num_colors
         self.num_ranks = num_ranks
         self.hand_size = hand_size
         self.max_info_tokens = max_info_tokens
         self.max_life_tokens = max_life_tokens
         self.num_cards_of_rank = num_cards_of_rank
-        self.deck_size = jnp.sum(num_cards_of_rank) * num_colors
+        self.deck_size = np.sum(num_cards_of_rank) * num_colors
         self.color_map = color_map
 
     @partial(jax.jit, static_argnums=[0])
