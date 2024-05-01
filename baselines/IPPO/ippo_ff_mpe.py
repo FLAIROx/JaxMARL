@@ -65,6 +65,7 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 def batchify(x: dict, agent_list, num_actors):
+    # print(x)
     max_dim = max([x[a].shape[-1] for a in agent_list])
     def pad(z, length):
         return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + [length - z.shape[-1]])], -1)
@@ -129,10 +130,11 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
                 
                 pi, value = network.apply(train_state.params, obs_batch)
+                print("pi", pi)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-
+                print("env_act", env_act)
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
@@ -287,7 +289,7 @@ def make_train(config):
             rng = update_state[-1]
 
             r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
-            jax.debug.print('ratio0 {x}', x=r0["ratio0"])
+            # jax.debug.print('ratio0 {x}', x=r0["ratio0"])
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
             metric = jax.tree_map(lambda x: x.mean(), metric)
             metric = {**metric, **loss_info, **r0}
@@ -312,6 +314,7 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
+        name=config["NAME"],
         tags=["IPPO", "FF"],
         config=config,
         mode=config["WANDB_MODE"],
@@ -328,7 +331,7 @@ def main(config):
     plt.ylabel("Returns")
     plt.title(f"IPPO-FF={config['ENV_NAME']}")
     
-    '''updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
     loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
     loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
     updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
@@ -336,13 +339,13 @@ def main(config):
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
     wandb.log({
         "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
-        "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+        # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
         "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
         "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
         "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
         "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
         "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
-    })'''
+    })
 
 
 if __name__ == "__main__":

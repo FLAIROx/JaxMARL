@@ -112,8 +112,9 @@ def make_train(config):
         # print(env.action_space(env.agents[0]).shape[0])
         network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        # print(env.observation_space(env.agents[0]).shape)
+        print(env.observation_space(env.agents[0]).shape)
         init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
+        print("init x", init_x.shape)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -273,9 +274,11 @@ def make_train(config):
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
+                print("batch before", advantages.shape, targets.shape)
                 batch = jax.tree_util.tree_map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
+                print("batch after", traj_batch.shape)
                 shuffled_batch = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
                 )

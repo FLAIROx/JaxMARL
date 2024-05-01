@@ -18,6 +18,7 @@
 "NUM_SEEDS": 10
 
 # WandB Params
-"ENTITY": ""
-"PROJECT": "jaxmarl-mpe"
-"WANDB_MODE" : "disabled"
+"ENTITY": "jaxmarl"
+"NAME": "ippo_ff_mpe"
+"PROJECT": "neurips2024"
+"WANDB_MODE" : "online"

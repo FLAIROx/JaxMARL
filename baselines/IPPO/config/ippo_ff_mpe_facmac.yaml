@@ -1,7 +1,7 @@
 "LR": 2.5e-4
-"NUM_ENVS": 2048
-"NUM_STEPS": 10
-"TOTAL_TIMESTEPS": 2e7
+"NUM_ENVS": 1
+"NUM_STEPS": 128
+"TOTAL_TIMESTEPS": 2e5
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -14,4 +14,16 @@
 "ENV_NAME": "MPE_simple_facmac_v1"
 "ENV_KWARGS": 
   "score_function": "min"
+  "num_adversaries": 2
 "ANNEAL_LR": True
+"SEED": 30
+"NUM_SEEDS": 10
+
+# WandB Params
+"ENTITY": "jaxmarl"
+"NAME": "ippo_ff_mpe_facmac"
+"PROJECT": "neurips2024"
+"WANDB_MODE" : "online"
+
+# Checkpointing
+"SAVE_PATH": "ckpt"
