@@ -139,7 +139,10 @@ class OvercookedVisualizer:
 				(0.87, 0.50),
 				(0.12, 0.81),
 			)
-			tri_fn = rendering.rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5*math.pi*agent_dir_idx)
+			# A bit hacky, but needed so that actions order matches the one of Overcooked-AI
+			direction_reording = [3,1,0,2]
+			direction = direction_reording[agent_dir_idx]
+			tri_fn = rendering.rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5*math.pi*direction)
 			rendering.fill_coords(img, tri_fn, COLORS[color])
 		elif obj_type == OBJECT_TO_INDEX['empty']:
 			rendering.fill_coords(img, rendering.point_in_rect(0, 1, 0, 1), COLORS[color])
