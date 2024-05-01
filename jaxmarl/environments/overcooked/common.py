@@ -66,10 +66,6 @@ OBJECT_INDEX_TO_VEC = jnp.array([
 # Map of agent direction indices to vectors
 DIR_TO_VEC = jnp.array([
 	# Pointing right (positive X)
-	# (1, 0), # right
-	# (0, 1), # down
-	# (-1, 0), # left
-	# (0, -1), # up
 	(0, -1), # NORTH
 	(0, 1), # SOUTH
 	(1, 0), # EAST
