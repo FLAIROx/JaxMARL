@@ -15,6 +15,8 @@ import hydra
 from omegaconf import OmegaConf
 import flashbax as fbx
 import wandb
+from safetensors.flax import save_file
+from flax.traverse_util import flatten_dict
 
 from flax.training import orbax_utils
 from orbax.checkpoint import (
@@ -39,13 +41,13 @@ class QNetwork(nn.Module):
     @nn.compact
     def __call__(self, x: jnp.ndarray, train: bool = False):
         if self.norm_type == "batch_norm":
-            x = nn.BatchNorm(use_running_average=True)(x)
+            x = nn.BatchNorm(use_running_average=not train)(x)
         else:
-            x_dummy = nn.BatchNorm(use_running_average=True)(x)
-        for l in range(1, self.n_layers - 1):
+            x_dummy = nn.BatchNorm(use_running_average=not train)(x)
+        for l in range(self.n_layers):
             x = nn.Dense(self.hidden_size)(x)
             if self.norm_type == "batch_norm":
-                x = nn.BatchNorm(use_running_average=True)(x)
+                x = nn.BatchNorm(use_running_average=not train)(x)
             elif self.norm_type == "layer_norm":
                 x = nn.LayerNorm()(x)
             x = nn.relu(x)
@@ -87,15 +89,6 @@ def make_train(config, env):
         config["EPS_FINISH"],
         config["EPS_DECAY"] * config["NUM_UPDATES"],
     )
-
-    def get_greedy_actions(q_vals, valid_actions):
-        valid_actions = valid_actions.reshape(
-            *[1] * len(q_vals.shape[:-1]), -1
-        )  # reshape to match q_vals shape
-        valid_q_vals = jnp.where(
-            valid_actions.astype(bool), jax.lax.stop_gradient(q_vals), -1e6
-        )
-        return jnp.argmax(valid_q_vals, axis=-1)
 
     def get_greedy_actions(q_vals, valid_actions):
         unavail_actions = 1 - valid_actions
@@ -500,6 +493,36 @@ def single_run(config):
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
     outs = jax.block_until_ready(train_vjit(rngs))
+
+    # save only first run
+    def _save_network(rs_index, dir_name):
+        train_state = outs["runner_state"][rs_index]
+        train_state = jax.tree_map(lambda x: x[0], train_state) # save only params of the firt run
+        orbax_checkpointer = PyTreeCheckpointer()
+        options = CheckpointManagerOptions(max_to_keep=1, create=True)
+        path = os.path.join(wandb.run.dir, dir_name)
+        checkpoint_manager = CheckpointManager(path, orbax_checkpointer, options)
+        print(f"saved runner state to {path}")
+        save_args = orbax_utils.save_args_from_target(train_state)
+        checkpoint_manager.save(
+            f"{alg_name}_{env_name}_seed{config['SEED']}",
+            train_state,
+            save_kwargs={"save_args": save_args},
+        )
+
+    _save_network(0, "policies")
+
+    def save_params(params, filename) -> None:
+        flattened_dict = flatten_dict(params, sep=',')
+        save_file(flattened_dict, filename)
+
+    model_state = outs['runner_state'][0]
+    params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
+    save_dir = os.path.join(config['SAVE_PATH'], env_name)
+    os.makedirs(save_dir, exist_ok=True)
+    save_params(params, f'{save_dir}/{alg_name}.safetensors')
+    print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+
 
 
 def tune(default_config):
