@@ -342,7 +342,7 @@ if __name__ == "__main__":
     vec_step_env = jax.jit(env.step_env)
     jax.jit(env.step_env)
     import jaxmarl
-    env = jaxmarl.make("MPE_simple_pred_prey_v1")
+    env = jaxmarl.make("MPE_simple_facmac_v1")
     get_obs = jax.jit(env.get_obs)
 
     num_envs = 128
@@ -355,4 +355,5 @@ if __name__ == "__main__":
     rng_step = jax.random.split(_rng, num_envs)
     env_act = jnp.zeros((num_envs, 1))
     obsv, env_state, reward, done, info = jax.vmap(env.step)(rng_step, env_state, env_act)
+    print(info)
     pass
