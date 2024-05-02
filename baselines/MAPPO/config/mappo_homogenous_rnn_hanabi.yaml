@@ -24,3 +24,5 @@
 "WANDB_MODE": "online"
 "ENTITY": "amacrutherford"
 "PROJECT": "jaxmarl-hanabi"
+
+"SAVE_PATH": "baselines/MAPPO/checkpoints"
