@@ -267,7 +267,10 @@ def make_train(config):
                     action, env.agents, config["NUM_ENVS"], env.num_agents
                 )
                 # VALUE
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1), order="F")  # Order F to batch `batchify` orders
+                # output of wrapper is (num_envs, num_agents, world_state_size)
+                # swap axes to (num_agents, num_envs, world_state_size) before reshaping to (num_actors, world_state_size)
+                world_state = last_obs["world_state"].swapaxes(0,1)  
+                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],

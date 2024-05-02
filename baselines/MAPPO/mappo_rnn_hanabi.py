@@ -275,7 +275,10 @@ def make_train(config):
                 env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
 
                 # VALUE
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1), order="F")
+                # output of wrapper is (num_envs, num_agents, world_state_size)
+                # swap axes to (num_agents, num_envs, world_state_size) before reshaping to (num_actors, world_state_size)
+                world_state = last_obs["world_state"].swapaxes(0,1)  
+                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
