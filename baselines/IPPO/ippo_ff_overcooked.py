@@ -67,7 +67,6 @@ class Transition(NamedTuple):
     reward: jnp.ndarray
     log_prob: jnp.ndarray
     obs: jnp.ndarray
-    info: jnp.ndarray
 
 def get_rollout(train_state, config):
     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
@@ -88,6 +87,8 @@ def get_rollout(train_state, config):
 
     obs, state = env.reset(key_r)
     state_seq = [state]
+    rewards = []
+    shaped_rewards = []
     while not done:
         key, key_a0, key_a1, key_s = jax.random.split(key, 4)
 
@@ -105,8 +106,18 @@ def get_rollout(train_state, config):
         # STEP ENV
         obs, state, reward, done, info = env.step(key_s, state, actions)
         done = done["__all__"]
+        rewards.append(reward['agent_0'])
+        shaped_rewards.append(info["shaped_reward"]['agent_0'])
 
         state_seq.append(state)
+
+    from matplotlib import pyplot as plt
+
+    plt.plot(rewards, label="reward")
+    plt.plot(shaped_rewards, label="shaped_reward")
+    plt.legend()
+    plt.savefig("reward.png")
+    plt.show()
 
     return state_seq
 
@@ -198,11 +209,11 @@ def make_train(config):
                     rng_step, env_state, env_act
                 )
 
-                shaped_reward = info.pop("shaped_reward")
-                current_timestep = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
-                reward = jax.tree_map(lambda x,y: x+y*rew_shaping_anneal(current_timestep), reward, shaped_reward)
+                info["reward"] = reward["agent_0"]
 
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                current_timestep = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
+                reward = jax.tree_map(lambda x,y: x+y*rew_shaping_anneal(current_timestep), reward, info["shaped_reward"])
+
                 transition = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
                     action,
@@ -210,13 +221,11 @@ def make_train(config):
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
                     log_prob,
                     obs_batch,
-                    info
-                    
                 )
                 runner_state = (train_state, env_state, obsv, update_step, rng)
-                return runner_state, transition
+                return runner_state, (transition, info)
 
-            runner_state, traj_batch = jax.lax.scan(
+            runner_state, (traj_batch, info) = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
             
@@ -332,7 +341,11 @@ def make_train(config):
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
             train_state = update_state[0]
-            metric = traj_batch.info
+            metric = info
+            current_timestep = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
+            metric["shaped_reward"] = metric["shaped_reward"]["agent_0"]
+            metric["shaped_reward_annealed"] = metric["shaped_reward"]*rew_shaping_anneal(current_timestep)
+            
             rng = update_state[-1]
 
             def callback(metric):
@@ -378,6 +391,13 @@ def main(config):
     rngs = jax.random.split(rng, config["NUM_SEEDS"])    
     train_jit = jax.jit(make_train(config))
     out = jax.vmap(train_jit)(rngs)
+
+    filename = f'{config["ENV_NAME"]}_{layout_name}'
+    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
+    state_seq = get_rollout(train_state, config)
+    viz = OvercookedVisualizer()
+    # agent_view_size is hardcoded as it determines the padding around the layout.
+    viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
     
     
     """

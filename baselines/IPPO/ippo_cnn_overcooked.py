@@ -106,19 +106,12 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 
-def get_rollout(train_state, config):
+def get_rollout(params, config):
     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    # env_params = env.default_params
-    # env = LogWrapper(env)
 
     network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
-
-    init_x = jnp.zeros((1, *env.observation_space().shape))
-
-    network.init(key_a, init_x)
-    network_params = train_state.params
 
     done = False
 
@@ -127,19 +120,20 @@ def get_rollout(train_state, config):
     while not done:
         key, key_a0, key_a1, key_s = jax.random.split(key, 4)
 
-        # obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
-        # breakpoint()
-        obs = {k: v.flatten() for k, v in obs.items()}
+        obs_batch = jnp.stack([obs[a] for a in env.agents]).reshape(-1, *env.observation_space().shape)
 
-        pi_0, _ = network.apply(network_params, obs["agent_0"])
-        pi_1, _ = network.apply(network_params, obs["agent_1"])
+        pi, value = network.apply(params, obs_batch)
+        action = pi.sample(seed=key_a0)
+        env_act = unbatchify(
+            action, env.agents, 1, env.num_agents
+        )
 
-        actions = {
-            "agent_0": pi_0.sample(seed=key_a0),
-            "agent_1": pi_1.sample(seed=key_a1),
-        }
-        # env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-        # env_act = {k: v.flatten() for k, v in env_act.items()}
+        env_act = {k: v.flatten() for k, v in env_act.items()}
+
+        pi_0, _ = network.apply(params, obs["agent_0"])
+        pi_1, _ = network.apply(params, obs["agent_1"])
+
+        actions = {"agent_0": pi_0.sample(seed=key_a0), "agent_1": pi_1.sample(seed=key_a1)}
 
         # STEP ENV
         obs, state, reward, done, info = env.step(key_s, state, actions)
@@ -423,6 +417,13 @@ def single_run(config):
     out = jax.vmap(train_jit)(rngs)
 
     print("** Saving Results **")
+    filename = f'{config["ENV_NAME"]}_{layout_name}_seed{config["SEED"]}'
+    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
+    state_seq = get_rollout(train_state.params, config)
+    viz = OvercookedVisualizer()
+    # agent_view_size is hardcoded as it determines the padding around the layout.
+    viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
+    
     """
     filename = f'{config["ENV_NAME"]}_cramped_room_new'
     rewards = out["metrics"]["returned_episode_returns"].mean(-1).reshape((num_seeds, -1))

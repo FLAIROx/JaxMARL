@@ -446,6 +446,7 @@ class Overcooked(MultiAgentEnv):
                               alice_inv,
                               state.agent_inv[0])
         alice_reward = jax.lax.select(alice_interact, alice_reward, 0.)
+        alice_shaped_reward = jax.lax.select(alice_interact, alice_shaped_reward, 0.)
 
         candidate_maze_map, bob_inv, bob_reward, bob_shaped_reward = self.process_interact(maze_map, state.wall_map, fwd_pos, state.agent_inv, 1)
         maze_map = jax.lax.select(bob_interact,
@@ -455,6 +456,7 @@ class Overcooked(MultiAgentEnv):
                               bob_inv,
                               state.agent_inv[1])
         bob_reward = jax.lax.select(bob_interact, bob_reward, 0.)
+        bob_shaped_reward = jax.lax.select(bob_interact, bob_shaped_reward, 0.)
 
         agent_inv = jnp.array([alice_inv, bob_inv])
 
@@ -516,7 +518,7 @@ class Overcooked(MultiAgentEnv):
         fwd_pos = fwd_pos_all[player_idx]
         inventory = inventory_all[player_idx]
 
-        shaped_reward = 0
+        shaped_reward = 0.
 
         height = self.obs_shape[1]
         padding = (maze_map.shape[0] - height) // 2

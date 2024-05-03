@@ -14,10 +14,10 @@
 "ACTIVATION": "tanh"
 "ENV_NAME": "overcooked"
 "ENV_KWARGS": 
-  "layout" : "cramped_room"
+  "layout" : "coord_ring"
 "ANNEAL_LR": True
 "SEED": 30
-"NUM_SEEDS": 10
+"NUM_SEEDS": 1
 
 # WandB Params
 "ENTITY": "mttga"
