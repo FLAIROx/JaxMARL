@@ -664,40 +664,50 @@ def tune(default_config):
     import copy
     from multiprocessing import Process
 
+    env_name = default_config["env"]["ENV_NAME"]
+    alg_name = default_config["alg"]["ALG_NAME"]
+
     def wrapped_make_train():
         wandb.init(project=default_config["PROJECT"])
 
-        def run_experiment():
-            # update the default params
-            config = copy.deepcopy(default_config)
-            for k, v in dict(wandb.config).items():
-                config["alg"][k] = v
+        config = copy.deepcopy(default_config)
+        for k, v in dict(wandb.config).items():
+            config["alg"][k] = v
 
-            print("running experiment with params:", config["alg"])
+        # smac init neeeds a scenario
+        if "smax" in env_name.lower():
+            config["env"]["ENV_KWARGS"]["scenario"] = map_name_to_scenario(
+                config["env"]["MAP_NAME"]
+            )
+            env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
+            env = SMAXLogWrapper(env)
+        # overcooked needs a layout
+        elif "overcooked" in env_name.lower():
+            config["env"]["ENV_KWARGS"]["layout"] = overcooked_layouts[
+                config["env"]["ENV_KWARGS"]["layout"]
+            ]
+            env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
+            env = LogWrapper(env)
+        else:
+            env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
+            env = LogWrapper(env)
 
-            rng = jax.random.PRNGKey(config["SEED"])
+        print("running experiment with params:", config["alg"])
 
-            if config["NUM_SEEDS"] > 1:
-                rngs = jax.random.split(rng, config["NUM_SEEDS"])
-                train_vjit = jax.jit(jax.vmap(make_train(config["alg"])))
-                outs = jax.block_until_ready(train_vjit(rngs))
-            else:
-                outs = jax.jit(make_train(config["alg"]))(rng)
+        rng = jax.random.PRNGKey(config["SEED"])
 
-        p = Process(target=run_experiment)
-        p.start()
-        p.join(default_config["EXP_TIME_LIMIT"])  # Timeo
-
-        if p.is_alive():
-            print("Experiment timed out.")
-            p.terminate()
-            p.join()
+        if config["NUM_SEEDS"] > 1:
+            rngs = jax.random.split(rng, config["NUM_SEEDS"])
+            train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
+            outs = jax.block_until_ready(train_vjit(rngs))
+        else:
+            outs = jax.jit(make_train(config["alg"], env))(rng)
 
     sweep_config = {
         "name": "pqn_smax",
         "method": "bayes",
         "metric": {
-            "name": "returns",
+            "name": "returned_episode_returns",
             "goal": "maximize",
         },
         "parameters": {
@@ -720,7 +730,7 @@ def tune(default_config):
             "NUM_EPOCHS": {"values": [1, 2, 3, 4]},
             "NUM_ENVS": {"values": [32, 64, 512, 1024]},
             "MEMORY_WINDOW": {"values": [0, 4, 16, 32, 64, 128]},
-            "NUM_STEPS": {"values": [0, 4, 16, 32, 64, 128]},
+            "NUM_STEPS": {"values": [4, 16, 32, 64, 128]},
         },
     }
 
@@ -728,7 +738,7 @@ def tune(default_config):
     sweep_id = wandb.sweep(
         sweep_config, entity=default_config["ENTITY"], project=default_config["PROJECT"]
     )
-    wandb.agent(sweep_id, wrapped_make_train, count=500)
+    wandb.agent("n0f0x2a3", wrapped_make_train, count=1000)
 
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
