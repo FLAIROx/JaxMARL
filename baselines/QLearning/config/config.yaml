@@ -1,14 +1,14 @@
 # experiment params
-"NUM_SEEDS": 2
+"NUM_SEEDS": 1
 "SEED": 0
 
 # perform hyp tune
 "HYP_TUNE": True
-"EXP_TIME_LIMIT": 5000 # block the experiment after these seconds (include compilation time)
+"EXP_TIME_LIMIT": 50000 # block the experiment after these seconds (include compilation time)
 
 # wandb params
 "ENTITY": "mttga"
-"PROJECT": "qlupdate"
+"PROJECT": "pqn_jaxmarl"
 "WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)
