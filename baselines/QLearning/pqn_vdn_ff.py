@@ -349,12 +349,24 @@ def make_train(config, env):
             train_state = train_state.replace(n_updates=train_state.n_updates + 1)
             metrics = {
                 "env_step": train_state.timesteps,
-                "updates": train_state.n_updates,
+                "update_steps": train_state.n_updates,
                 "grad_steps": train_state.grad_steps,
                 "loss": loss.mean(),
                 "qvals": qvals.mean(),
-                "returns": infos["returned_episode_returns"].mean(),
+                "epsilon": eps_scheduler(train_state.n_updates),
             }
+            metrics.update(
+                jax.tree_map(
+                    lambda x: jnp.nanmean(
+                        jnp.where(
+                            infos["returned_episode"],
+                            x,
+                            jnp.nan,
+                        )
+                    ),
+                    infos,
+                )
+            )
 
             if config.get("TEST_DURING_TRAINING", True):
                 rng, _rng = jax.random.split(rng)
@@ -370,9 +382,7 @@ def make_train(config, env):
             if config.get("WANDB_LOG_DURING_TRAINING"):
 
                 def callback(metrics):
-                    metrics["env_step"] = metrics["updates"] * config["NUM_STEPS"] * config[
-                        "NUM_ENVS"
-                    ] # metrics["env_step"] can overflow in int32
+                    #metrics["env_step"] = metrics["updates"] * config["NUM_STEPS"] * config["NUM_ENVS"] # metrics["env_step"] can overflow in int32
                     wandb.log(metrics)
 
                 jax.debug.callback(callback, metrics)
