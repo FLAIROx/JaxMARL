@@ -3,12 +3,12 @@
 "SEED": 0
 
 # perform hyp tune
-"HYP_TUNE": True
+"HYP_TUNE": False
 "EXP_TIME_LIMIT": 50000 # block the experiment after these seconds (include compilation time)
 
 # wandb params
-"ENTITY": "mttga"
-"PROJECT": "pqn_jaxmarl"
+"ENTITY": "simplified-dqn"
+"PROJECT": "hanabi"
 "WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)
