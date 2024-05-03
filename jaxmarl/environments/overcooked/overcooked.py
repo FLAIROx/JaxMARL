@@ -32,10 +32,10 @@ BASE_REW_SHAPING_PARAMS = {
 
 class Actions(IntEnum):
     # Turn left, turn right, move forward
-    right = 0
+    up = 0
     down = 1
-    left = 2
-    up = 3
+    right = 2
+    left = 3
     stay = 4
     interact = 5
     done = 6
@@ -87,10 +87,10 @@ class Overcooked(MultiAgentEnv):
         self.agents = ["agent_0", "agent_1"]
 
         self.action_set = jnp.array([
-            Actions.right,
-            Actions.down,
-            Actions.left,
             Actions.up,
+            Actions.down,
+            Actions.right,
+            Actions.left,
             Actions.stay,
             Actions.interact,
         ])
