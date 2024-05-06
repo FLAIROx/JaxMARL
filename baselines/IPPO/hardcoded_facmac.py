@@ -23,6 +23,8 @@ from flax.training import checkpoints
 from safetensors.flax import save_file
 from flax.traverse_util import flatten_dict
 from typing import NamedTuple, Dict, Union
+import orbax.checkpoint
+from flax.training import orbax_utils
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -74,7 +76,6 @@ class Transition(NamedTuple):
 
 
 def batchify(x: dict, agent_list, num_actors):
-    print("batchify", x)
     max_dim = max([x[a].shape[-1] for a in agent_list])
     def pad(z, length):
         return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + [length - z.shape[-1]])], -1)
@@ -179,8 +180,9 @@ def make_train(config):
                     rng_step, env_state, env_act,
                 )
                 print("info before", info)
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 print("info", info)
+                print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, action0.shape, value0.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, log_prob0.shape, obs_batch[0].shape, jax.tree_map(lambda x: x[:,0], info))
                 transition0 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     action0,
@@ -188,7 +190,7 @@ def make_train(config):
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     log_prob0,
                     obs_batch[0],
-                    jax.tree_map(lambda x: x[0], info),
+                    jax.tree_map(lambda x: x[:,0], info),
                 )
                 transition1 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1],
@@ -197,7 +199,7 @@ def make_train(config):
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1],
                     log_prob1,
                     obs_batch[1],
-                    jax.tree_map(lambda x: x[1], info),
+                    jax.tree_map(lambda x: x[:,1], info),
                 )
                 runner_state = (train_state0, train_state1, env_state, obsv, rng)
                 return runner_state, (transition0, transition1)
@@ -365,16 +367,18 @@ def make_train(config):
                 print("config[NUM_MINIBATCHES]", config["NUM_MINIBATCHES"])
                 print("config[NUM_STEPS] // config[NUM_MINIBATCHES])",  config["NUM_STEPS"] // config["NUM_MINIBATCHES"])
                 assert (
-                        batch_size == config["NUM_STEPS"] # TODO
+                        batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 3 # TODO
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation0 = jax.random.permutation(_rng0, batch_size)
                 permutation1 = jax.random.permutation(_rng1, batch_size)
                 print("advantages", advantages0.shape, targets0.shape)
                 batch0 = (traj_batch0, advantages0, targets0)
                 batch1 = (traj_batch1, advantages1, targets1)
+                print("batch before", advantages0.shape, targets0.shape)
                 batch0 = jax.tree_util.tree_map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch0
                 )
+                print("batch after", advantages0.shape, targets0.shape)
                 batch1 = jax.tree_util.tree_map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch1
                 )
@@ -468,11 +472,23 @@ def main(config):
             save_file(flattened_dict, filename)
 
         model_state = out['runner_state'][0]
-        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name)
+        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "adversary0")
+        os.makedirs(save_dir, exist_ok=True)
+        save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        
+        model_state = out['runner_state'][1]
+        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "adversary1")
         os.makedirs(save_dir, exist_ok=True)
         save_params(params, f'{save_dir}/{alg_name}.safetensors')
         print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+        
+        # train_state = out['runner_state'][0]
+        # save_args = orbax_utils.save_args_from_target(train_state)
+        # orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+        # save_loc = 'tmp/orbax/checkpoint_rnn'
+        # orbax_checkpointer.save(save_loc, train_state, save_args=save_args)
 
     # logging
     updates_x0 = jnp.arange(out["metrics"]["agent0"]["total_loss"][0].shape[0])

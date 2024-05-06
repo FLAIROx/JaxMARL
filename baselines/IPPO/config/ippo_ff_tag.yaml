@@ -1,7 +1,7 @@
 "LR": 2.5e-4
-"NUM_ENVS": 160
-"NUM_STEPS": 1280
-"TOTAL_TIMESTEPS": 2e4
+"NUM_ENVS": 16
+"NUM_STEPS": 128
+"TOTAL_TIMESTEPS": 1e7
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -11,19 +11,14 @@
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "tanh"
-"ENV_NAME": "MPE_simple_facmac_v1"
-"ENV_KWARGS": 
-  "score_function": "min"
-  "num_adversaries": 2
+"ENV_NAME": "MPE_simple_tag_v3"
+"ENV_KWARGS": {num_good_agents: 1, num_adversaries: 1}
 "ANNEAL_LR": True
 "SEED": 30
-"NUM_SEEDS": 100
+"NUM_SEEDS": 10
 
 # WandB Params
 "ENTITY": "jaxmarl"
-"NAME": "ippo_ff_mpe_facmac"
+"NAME": "ippo_ff_mpe_simple_tag"
 "PROJECT": "neurips2024"
 "WANDB_MODE" : "online"
-
-# Checkpointing
-"SAVE_PATH": "ckpt"

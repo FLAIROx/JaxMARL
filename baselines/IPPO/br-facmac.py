@@ -27,6 +27,8 @@ from jaxmarl.environments import SimpleFacmacMPE
 from jaxmarl.environments.mpe.simple import State, SimpleMPE
 from functools import partial
 import chex
+from flax.traverse_util import flatten_dict, unflatten_dict
+from safetensors.flax import save_file, load_file
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -184,7 +186,13 @@ def make_train(config):
         init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
         print("init x", init_x)
         network_params0 = network0.init(_rng0, init_x)
-        network_params1 = network1.init(_rng1, init_x)
+        
+        def load_params(filename):
+            flattened_dict = load_file(filename)
+            return unflatten_dict(flattened_dict, sep=',')
+
+        network_params1 = load_params("ckpt/MPE_simple_facmac_v1/adversary1/IPPO.safetensors")
+        # network_params1 = network1.init(_rng1, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -242,7 +250,6 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
-                print("info before", info)
                 # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 print("info", info)
                 transition0 = Transition(
@@ -405,12 +412,12 @@ def make_train(config):
                         )
                         return total_loss, (value_loss, loss_actor, entropy, ratio)
 
-                    grad_fn = jax.value_and_grad(_loss_fn1, has_aux=True)
-                    total_loss, grads = grad_fn(
+                    # grad_fn = jax.value_and_grad(_loss_fn1, has_aux=True)
+                    total_loss = _loss_fn1(
                         train_state.params, traj_batch, advantages, targets
                     )
-                    train_state = train_state.apply_gradients(grads=grads)
-                    
+                    # train_state = train_state.apply_gradients(grads=grads)
+                    print("total_loss", total_loss)
                     loss_info = {
                         "total_loss": total_loss[0],
                         "actor_loss": total_loss[1][1],
@@ -533,16 +540,16 @@ def main(config):
 
         model_state = out['runner_state'][0]
         params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name, "adversary0")
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "BRadversary0")
         os.makedirs(save_dir, exist_ok=True)
         save_params(params, f'{save_dir}/{alg_name}.safetensors')
         
-        model_state = out['runner_state'][1]
-        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name, "adversary1")
-        os.makedirs(save_dir, exist_ok=True)
-        save_params(params, f'{save_dir}/{alg_name}.safetensors')
-        print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+        # model_state = out['runner_state'][1]
+        # params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
+        # save_dir = os.path.join(config['SAVE_PATH'], env_name, "adversary1")
+        # os.makedirs(save_dir, exist_ok=True)
+        # save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        # print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
 
     # logging
     updates_x0 = jnp.arange(out["metrics"]["agent0"]["total_loss"][0].shape[0])

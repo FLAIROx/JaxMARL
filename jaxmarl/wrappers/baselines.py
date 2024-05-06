@@ -46,9 +46,12 @@ class JaxMARLWrapper(object):
 class LogEnvState:
     env_state: State
     episode_returns: float
+    discounted_episode_returns: float
     episode_lengths: int
     returned_episode_returns: float
+    returned_discounted_episode_returns: float
     returned_episode_lengths: int
+    discount_factor: float
 
 
 class LogWrapper(JaxMARLWrapper):
@@ -69,6 +72,9 @@ class LogWrapper(JaxMARLWrapper):
             jnp.zeros((self._env.num_agents,)),
             jnp.zeros((self._env.num_agents,)),
             jnp.zeros((self._env.num_agents,)),
+            jnp.zeros((self._env.num_agents,)),
+            jnp.zeros((self._env.num_agents,)),
+            jnp.ones((self._env.num_agents,))*0.9, #TODO
         )
         return obs, state
 
@@ -85,18 +91,25 @@ class LogWrapper(JaxMARLWrapper):
         ep_done = done["__all__"]
         new_episode_return = state.episode_returns + self._batchify_floats(reward)
         new_episode_length = state.episode_lengths + 1
+        new_discount_factor = state.discount_factor * 0.9 # TODO
+        new_discounted_episode_return = state.discounted_episode_returns + new_discount_factor * self._batchify_floats(reward) #TODO
         state = LogEnvState(
             env_state=env_state,
             episode_returns=new_episode_return * (1 - ep_done),
+            discounted_episode_returns = new_discounted_episode_return * (1 - ep_done),
             episode_lengths=new_episode_length * (1 - ep_done),
             returned_episode_returns=state.returned_episode_returns * (1 - ep_done)
             + new_episode_return * ep_done,
+            returned_discounted_episode_returns=state.returned_discounted_episode_returns * (1 - ep_done)
+            + new_discounted_episode_return * ep_done,
             returned_episode_lengths=state.returned_episode_lengths * (1 - ep_done)
             + new_episode_length * ep_done,
+            discount_factor=new_discount_factor
         )
         if self.replace_info:
             info = {}
         info["returned_episode_returns"] = state.returned_episode_returns
+        info["returned_discounted_episode_returns"] = state.returned_discounted_episode_returns
         info["returned_episode_lengths"] = state.returned_episode_lengths
         info["returned_episode"] = jnp.full((self._env.num_agents,), ep_done)
         return obs, state, reward, done, info

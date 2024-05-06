@@ -337,23 +337,90 @@ class SimpleFacmacMPE(SimpleMPE):
         )
         return obs
 
+
+class MultiFacmacMPE(SimpleFacmacMPE):
+    """Log the episode returns and lengths.
+    NOTE for now for envs where agents terminate at the same time.
+    """
+
+    def __init__(
+        self,
+        num_good_agents=1,
+        num_adversaries=3,
+        num_landmarks=2,
+        view_radius=1.5,  # set -1 to deactivate
+        score_function="sum"
+    ):
+        super().__init__( 
+        num_good_agents,
+        num_adversaries,
+        num_landmarks,
+        view_radius, 
+        score_function)
+        
+    def rewards(self, state: State) -> Dict[str, float]:
+        @partial(jax.vmap, in_axes=(0, None))
+        def _collisions(agent_idx: int, other_idx: int):
+            return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
+                agent_idx,
+                other_idx,
+                state,
+            )
+
+        c = _collisions(
+            jnp.arange(self.num_good_agents) + self.num_adversaries,
+            jnp.arange(self.num_adversaries),
+        )  # [agent, adversary, collison]
+
+        def _good(aidx: int, collisions: chex.Array):
+            rew = -10 * jnp.sum(collisions[aidx])
+
+            mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
+            rew -= mr
+            return rew
+
+        # ad_rew = 10 * jnp.sum(c)
+        
+        def _adv(aidx: int, collisions: chex.Array):
+            rew = 10 * jnp.sum(collisions[:,aidx])
+            
+            return rew
+
+        rew = {a: _adv(i, c)
+                for i, a in enumerate(self.adversaries)}
+        
+        rew.update(
+            {
+                a: _good(i + self.num_adversaries, c)
+                for i, a in enumerate(self.good_agents)
+            }
+        )
+        # print("rewards!", rew)
+        return rew
+    
 if __name__ == "__main__":
     env = SimpleFacmacMPE(0)
     vec_step_env = jax.jit(env.step_env)
     jax.jit(env.step_env)
     import jaxmarl
     env = jaxmarl.make("MPE_simple_facmac_v1")
+    env = MultiFacmacMPE(num_adversaries=2)
     get_obs = jax.jit(env.get_obs)
 
-    num_envs = 128
+    num_envs = 1
     rng = jax.random.PRNGKey(30)
     rng, _rng = jax.random.split(rng)
     reset_rng = jax.random.split(_rng, num_envs)
     obsv, env_state = jax.vmap(env.reset)(reset_rng)
 
-    rng, _rng = jax.random.split(rng)
-    rng_step = jax.random.split(_rng, num_envs)
-    env_act = jnp.zeros((num_envs, 1))
-    obsv, env_state, reward, done, info = jax.vmap(env.step)(rng_step, env_state, env_act)
-    print(info)
+    while(True):
+        rng, _rng = jax.random.split(rng)
+        rng_step = jax.random.split(_rng, num_envs)
+        env_act = jax.random.normal(rng, (env.num_agents, num_envs, 5))
+        env_act = jnp.max(env_act, axis=2)
+        env_act = {a: env_act[i] for i, a in enumerate(env.agents)}
+        obsv, env_state, reward, done, info = jax.vmap(env.step)(rng_step, env_state, env_act)
+        print(reward)
+        if (reward['adversary_0']!=reward['adversary_1']):
+            break
     pass
