@@ -21,8 +21,8 @@
 "ANNEAL_LR": True
 
 # WandB Params
-"WANDB_MODE": "online"
-"ENTITY": "amacrutherford"
-"PROJECT": "jaxmarl-hanabi"
+"WANDB_MODE": "disabled"
+"ENTITY": ""
+"PROJECT": ""
 
 "SAVE_PATH": "baselines/MAPPO/checkpoints"
