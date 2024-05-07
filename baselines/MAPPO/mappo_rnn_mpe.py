@@ -307,7 +307,8 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
       
-            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1), order="F")
+            last_world_state = last_obs["world_state"].swapaxes(0,1)  
+            last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
