@@ -24,3 +24,5 @@
 "WANDB_MODE": "disabled"
 "ENTITY": ""
 "PROJECT": ""
+
+"SAVE_PATH": "baselines/MAPPO/checkpoints"

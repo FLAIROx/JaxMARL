@@ -233,7 +233,7 @@ def make_train(config):
             tx=actor_tx,
         )
         critic_train_state = TrainState.create(
-            apply_fn=actor_network.apply,
+            apply_fn=critic_network.apply,
             params=critic_network_params,
             tx=critic_tx,
         )
@@ -255,7 +255,6 @@ def make_train(config):
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
-
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
                     obs_batch[np.newaxis, :],
@@ -267,9 +266,11 @@ def make_train(config):
                 env_act = unbatchify(
                     action, env.agents, config["NUM_ENVS"], env.num_agents
                 )
-
                 # VALUE
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+                # output of wrapper is (num_envs, num_agents, world_state_size)
+                # swap axes to (num_agents, num_envs, world_state_size) before reshaping to (num_actors, world_state_size)
+                world_state = last_obs["world_state"].swapaxes(0,1)  
+                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
@@ -306,7 +307,8 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
       
-            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+            last_world_state = last_obs["world_state"].swapaxes(0,1)  
+            last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
@@ -369,8 +371,8 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
                         
                         # debug
                         approx_kl = ((ratio - 1) - logratio).mean()
@@ -380,7 +382,7 @@ def make_train(config):
                             loss_actor
                             - config["ENT_COEF"] * entropy
                         )
-                        return actor_loss, (loss_actor, entropy,  ratio, approx_kl, clip_frac)
+                        return actor_loss, (loss_actor, entropy, ratio, approx_kl, clip_frac)
                     
                     def _critic_loss_fn(critic_params, init_hstate, traj_batch, targets):
                         # RERUN NETWORK
@@ -393,7 +395,7 @@ def make_train(config):
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean(where=(1 - traj_batch.done))
+                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
                         critic_loss = config["VF_COEF"] * value_loss
                         return critic_loss, (value_loss)
