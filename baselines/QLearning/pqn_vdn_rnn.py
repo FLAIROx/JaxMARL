@@ -481,7 +481,8 @@ def make_train(config, env):
                 rng,
             )
 
-            return runner_state, None
+            returning_metrics = {k:v for k,v in metrics.items() if k in {"env_step","returned_won_episode", "test_returned_won_episode"}}
+            return runner_state, returning_metrics
 
         def get_greedy_metrics(rng, train_state):
             if not config.get("TEST_DURING_TRAINING", True):
@@ -669,6 +670,34 @@ def single_run(config):
         outs = jax.block_until_ready(train_vjit(rngs))
     else:
         outs = jax.jit(make_train(config["alg"], env))(rng)
+
+    if config["SAVE_METRICS"]:
+        # assumes you're not vmpagging seeds
+        import json
+        import os
+        env_steps = [int(x) for x in outs["metrics"]["env_step"]]
+        win_rate = [float(x) for x in outs["metrics"]["returned_won_episode"]]
+        test_win_rate = [float(x) for x in outs["metrics"]["test_returned_won_episode"]]
+        out = [{
+            "env_steps": env_steps[i],
+            "win_rate": win_rate[i],
+            "test_win_rate": test_win_rate[i],
+        } for i in range(len(env_steps))]
+        out_folder = config["SAVE_DIR"]
+        os.makedirs(out_folder, exist_ok=True)
+        filename = f'{alg_name}_{env_name}_seed{config["SEED"]}.json'
+        with open(os.path.join(out_folder, filename), "w") as f:
+            json.dump(out, f)
+
+        from matplotlib import pyplot as plt
+        
+        out_folder = os.path.join(out_folder, 'plots')
+        os.makedirs(out_folder, exist_ok=True)
+        name = f'{alg_name}_{env_name}_seed{config["SEED"]}'
+        plt.plot(win_rate)
+        plt.title(f'{name}')
+        plt.savefig(os.path.join(out_folder, f'{name}.png'), bbox_inches="tight")
+        plt.show()
 
 
 def tune(default_config):
