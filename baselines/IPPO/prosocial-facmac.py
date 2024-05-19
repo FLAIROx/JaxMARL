@@ -1,7 +1,6 @@
 """ 
 Based on PureJaxRL Implementation of PPO
 """
-
 import os
 import jax
 import jax.numpy as jnp
@@ -18,11 +17,15 @@ import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
 import wandb
-# import orbax.checkpoint
+import orbax.checkpoint as ocp
 from flax.training import checkpoints
 from safetensors.flax import save_file
 from flax.traverse_util import flatten_dict
 from typing import NamedTuple, Dict, Union
+from jaxmarl.environments import SimpleFacmacMPE
+from jaxmarl.environments.mpe.simple import State, SimpleMPE
+from functools import partial
+import chex
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -74,7 +77,6 @@ class Transition(NamedTuple):
 
 
 def batchify(x: dict, agent_list, num_actors):
-    print(x)
     max_dim = max([x[a].shape[-1] for a in agent_list])
     def pad(z, length):
         return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + [length - z.shape[-1]])], -1)
@@ -91,11 +93,12 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 def make_train(config):
     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
+    config["NUM_ADVERSARIES"] = env.num_adversaries * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
             config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
     config["MINIBATCH_SIZE"] = (
-            config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
+            config["NUM_ADVERSARIES"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
 
     # env = FlattenObservationWrapper(env) # NOTE need a batchify wrapper
@@ -109,12 +112,9 @@ def make_train(config):
 
         # INIT NETWORK
         # TODO doesn't work for non-homogenous agents
-        # print(env.action_space(env.agents[0]).shape[0])
         network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        print(env.observation_space(env.agents[0]).shape)
         init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
-        print("init x", init_x.shape)
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -140,15 +140,14 @@ def make_train(config):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, rng = runner_state
-
+                print("last_obs", last_obs)
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+                print("obs_batch", obs_batch.shape)
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
 
                 pi, value = network.apply(train_state.params, obs_batch)
-                print("pi", pi)
                 action = pi.sample(seed=_rng)
-                print("action", action)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 print("env_act", env_act)
@@ -158,16 +157,16 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
-                print("info", info)
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze().shape, action.shape, value.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze().shape, log_prob.shape, obs_batch.shape, info)
+                info = jax.tree_map(lambda x: x[:,:env.num_adversaries].reshape((config["NUM_ADVERSARIES"])), info)
+                
                 transition = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
-                    action,
-                    value,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
-                    log_prob,
-                    obs_batch,
+                    batchify(done, env.agents[:env.num_adversaries], config["NUM_ADVERSARIES"]).squeeze(),
+                    action[:config["NUM_ADVERSARIES"]],
+                    value[:config["NUM_ADVERSARIES"]],
+                    batchify(reward, env.agents[:env.num_adversaries], config["NUM_ADVERSARIES"]).squeeze(),
+                    log_prob[:config["NUM_ADVERSARIES"]],
+                    obs_batch[:config["NUM_ADVERSARIES"]],
                     info,
                 )
                 runner_state = (train_state, env_state, obsv, rng)
@@ -179,7 +178,7 @@ def make_train(config):
 
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, rng = runner_state
-            last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+            last_obs_batch = batchify(last_obs, env.agents[:env.num_adversaries], config["NUM_ADVERSARIES"])
             _, last_val = network.apply(train_state.params, last_obs_batch)
 
             def _calculate_gae(traj_batch, last_val):
@@ -190,6 +189,7 @@ def make_train(config):
                         transition.value,
                         transition.reward,
                     )
+                    print("SHAPE CHECK:", done.shape, value.shape, reward.shape, next_value.shape)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                             delta
@@ -249,7 +249,7 @@ def make_train(config):
                                 + config["VF_COEF"] * value_loss
                                 - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy, ratio)
+                        return total_loss, (value_loss, loss_actor, entropy)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
@@ -262,28 +262,21 @@ def make_train(config):
                         "actor_loss": total_loss[1][1],
                         "critic_loss": total_loss[1][0],
                         "entropy": total_loss[1][2],
-                        "ratio": total_loss[1][3],
                     }
                     
-                    return train_state,  loss_info
+                    return train_state, loss_info
 
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
                 batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
-                print("batch_size", batch_size)
-                print("config[MINIBATCH_SIZE]", config["MINIBATCH_SIZE"])
-                print("config[NUM_MINIBATCHES]", config["NUM_MINIBATCHES"])
-                print("config[NUM_STEPS] // config[NUM_MINIBATCHES])",  config["NUM_STEPS"] // config["NUM_MINIBATCHES"])
                 assert (
-                        batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"]
+                        batch_size == config["NUM_STEPS"] * config["NUM_ADVERSARIES"]
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
-                print("batch before", advantages.shape, targets.shape)
                 batch = jax.tree_util.tree_map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
-                print("batch after", advantages.shape, targets.shape)
                 shuffled_batch = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
                 )
@@ -298,12 +291,12 @@ def make_train(config):
                 )
                 update_state = (train_state, traj_batch, advantages, targets, rng)
                 return update_state, loss_info
-            
+
             def callback(metric):
                 wandb.log(
                     metric
                 )
-
+                
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
@@ -312,12 +305,12 @@ def make_train(config):
             metric = traj_batch.info
             rng = update_state[-1]
 
-            r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
-            # jax.debug.print('ratio0 {x}', x=r0["ratio0"])
+
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
             metric = jax.tree_map(lambda x: x.mean(), metric)
-            metric = {**metric, **loss_info, **r0}
+            metric = {**metric, **loss_info}
             jax.experimental.io_callback(callback, None, metric)
+            
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
 
@@ -337,7 +330,7 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        name=config["NAME"],
+        name="prosocial-shareparam",
         tags=["IPPO", "FF"],
         config=config,
         mode=config["WANDB_MODE"],
@@ -356,18 +349,27 @@ def main(config):
         def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
             flattened_dict = flatten_dict(params, sep=',')
             save_file(flattened_dict, filename)
+            
+        
 
         model_state = out['runner_state'][0]
         params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name)
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial")
         os.makedirs(save_dir, exist_ok=True)
+        
+        # path = ocp.test_utils.erase_and_create_empty('/tmp/my-checkpoints/')
+        # checkpointer = ocp.StandardCheckpointer()
+        # # 'checkpoint_name' must not already exist.
+        # checkpointer.save(path / 'checkpoint_name', params)
+        
         save_params(params, f'{save_dir}/{alg_name}.safetensors')
         print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
 
     # logging
+    print("updates shape", out["metrics"]["returned_episode_returns"][0].shape[0])
     updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
-    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
-    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
+    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0)], axis=1)    
+    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy"])
     updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
     returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
@@ -378,13 +380,12 @@ def main(config):
         "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
         "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
         "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
-        "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
     })
     
     # import pdb;
 
     # pdb.set_trace()
-
-
+    
+    
 if __name__ == "__main__":
     main()

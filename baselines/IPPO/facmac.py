@@ -294,12 +294,12 @@ def make_train(config):
 
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
-                batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // 4 # TODO
+                batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // 3 # TODO
                 print("batch_size", batch_size)
                 print("config[MINIBATCH_SIZE]", config["MINIBATCH_SIZE"])
                 print("config[NUM_MINIBATCHES]", config["NUM_MINIBATCHES"])
                 assert (
-                        batch_size == config["NUM_STEPS"]
+                        batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // env.num_agents # TODO
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)

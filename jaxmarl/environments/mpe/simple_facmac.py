@@ -83,6 +83,10 @@ class SimpleFacmacMPE(SimpleMPE):
         )
 
         # Overwrite action and observation spaces
+        # obs_dim = 2 + 2 + 2 * num_landmarks + 4 * (num_adversaries - 1) + 2 * num_good_agents
+        # self.observation_spaces = {
+        #     i: Box(-jnp.inf, jnp.inf, (obs_dim,)) for i in self.adversaries
+        # }
         self.observation_spaces = {
             i: Box(-jnp.inf, jnp.inf, (14,)) for i in self.adversaries
         }
