@@ -80,7 +80,7 @@ class QNetwork(nn.Module):
 
         if self.norm_type != "batch_norm":
             # dummy normalize input if not using batch norm just for global compatibility
-            x_dummy = nn.BatchNorm(use_running_average=not train)(x)
+            x = nn.BatchNorm(use_running_average=not train)(x)
 
         for l in range(self.n_layers):
             x = nn.Dense(self.hidden_size)(x)
@@ -89,7 +89,7 @@ class QNetwork(nn.Module):
 
         rnn_in = (x, dones)
         hidden, x = ScannedRNN()(hidden, rnn_in)
-        x = normalize(x)
+        #x = normalize(x)
 
         if self.dueling:
             adv = nn.Dense(self.action_dim)(x)
@@ -283,7 +283,7 @@ def make_train(config, env):
                     last_hs=hs,  # (num_agents, num_envs, hidden_size)
                     obs=batchify(last_obs),  # (num_agents, num_envs, obs_shape)
                     action=batchify(new_action),  # (num_agents, num_envs,)
-                    reward=reward["__all__"][np.newaxis],  # (1, num_envs,)
+                    reward=config["REW_SCALING"]*reward["__all__"][np.newaxis],  # (1, num_envs,)
                     done=new_done["__all__"][np.newaxis],  # (1, num_envs,)
                     last_done=batchify(last_dones),  # (num_agents, num_envs,)
                     avail_actions=batchify(
@@ -337,7 +337,27 @@ def make_train(config, env):
                     agent_in = jax.tree_util.tree_map(
                         lambda x: x.reshape(x.shape[0], -1, *x.shape[3:]), agent_in
                     )  # (num_steps, num_agents*batch_size, ...)
-                    
+
+                    def _compute_targets(q_vals, reward, done):
+                        def _get_target(lambda_returns_and_next_q, rew_q_done):
+                            reward, q, done  = rew_q_done
+                            lambda_returns, next_q = lambda_returns_and_next_q
+                            target_bootstrap = reward + config["GAMMA"]*(1-done)*next_q
+                            delta = lambda_returns - next_q
+                            lambda_returns = target_bootstrap + config["GAMMA"]*config["LAMBDA"]*delta
+                            lambda_returns = (1-done)*lambda_returns + done*reward
+                            next_q = next_q = jnp.max(q, axis=-1)
+                            return (lambda_returns, next_q), lambda_returns
+
+                        last_q = jnp.max(q_vals[-1], axis=-1) * (1-done[-1])
+                        lambda_returns = reward[-1] + config["GAMMA"]*last_q
+                        _, targets = jax.lax.scan(
+                            _get_target,
+                            (lambda_returns, last_q),
+                            jax.tree_map(lambda x:x[:-1], (reward, q_vals, done)),
+                            reverse=True,
+                        )
+                        return targets
 
                     def _loss_fn(params):
                         (_, q_vals), updates = partial(network.apply, train=True,mutable=["batch_stats"])(
@@ -346,6 +366,15 @@ def make_train(config, env):
                             *agent_in,
                         )  # (num_steps, num_agents*batch_size, num_actions)
                         q_vals = q_vals.reshape(q_vals.shape[0], env.num_agents, -1, q_vals.shape[-1])  # (num_steps, num_agents, batch_size, num_actions)
+
+                        q_target = jax.lax.stop_gradient(q_vals)
+                        unavailable_actions = 1 - minibatch.avail_actions
+                        valid_q_vals = q_target - (unavailable_actions * 1e10)
+                        target = _compute_targets(
+                            valid_q_vals.sum(axis=1), # vdn sum
+                            minibatch.reward[:, 0], # _all_
+                            minibatch.done[:, 0], # _all_
+                        ).reshape(-1) # (num_steps-1*batch_size,)
 
                         chosen_action_qvals = jnp.take_along_axis(
                             q_vals,
@@ -356,29 +385,12 @@ def make_train(config, env):
                         )  # (num_steps, num_agents, batch_size,)
                         vdn_chosen_action_qvals = jnp.sum(chosen_action_qvals, axis=1)[
                             :-1
-                        ]  # (num_steps-1, batch_size,)
-
-                        q_next = jax.lax.stop_gradient(q_vals)
-                        unavailable_actions = 1 - minibatch.avail_actions
-                        valid_q_vals = q_next - (unavailable_actions * 1e10)
-                        q_next = jnp.max(
-                            valid_q_vals, axis=-1
-                        )  # (num_steps, num_agents, batch_size,)
-
-                        vdn_q_next = jnp.sum(q_next, axis=1)  # (num_steps, batch_size,)
-                        target = (
-                            minibatch.reward[
-                                :-1, 0
-                            ]  # [:-1, 0 is __all__, is all but the last step]
-                            + (1 - minibatch.done[:-1, 0])
-                            * config["GAMMA"]
-                            * vdn_q_next[1:]
-                        )  # (num_steps-1, batch_size,)
+                        ].reshape(-1)  # (num_steps-1*batch_size,)
 
                         loss = jnp.mean(
-                            (vdn_chosen_action_qvals - jax.lax.stop_gradient(target))
-                            ** 2
+                            (vdn_chosen_action_qvals - jax.lax.stop_gradient(target)) ** 2
                         )
+
                         return loss, (updates, chosen_action_qvals)
 
                     (loss, (updates, qvals)), grads = jax.value_and_grad(
@@ -666,6 +678,7 @@ def tune(default_config):
 
     env_name = default_config["env"]["ENV_NAME"]
     alg_name = default_config["alg"]["ALG_NAME"]
+    task_name = f"{default_config['env']['ENV_NAME']}_{default_config['env']['MAP_NAME']}"
 
     def wrapped_make_train():
         wandb.init(project=default_config["PROJECT"])
@@ -704,7 +717,7 @@ def tune(default_config):
             outs = jax.jit(make_train(config["alg"], env))(rng)
 
     sweep_config = {
-        "name": "pqn_smax",
+        "name": task_name,
         "method": "bayes",
         "metric": {
             "name": "returned_episode_returns",
@@ -728,9 +741,9 @@ def tune(default_config):
             "MAX_GRAD_NORM": {"values": [0.5, 1, 10, 20]},
             "NUM_MINIBATCHES": {"values": [1, 2, 4, 8, 16]},
             "NUM_EPOCHS": {"values": [1, 2, 3, 4]},
-            "NUM_ENVS": {"values": [32, 64, 512, 1024]},
-            "MEMORY_WINDOW": {"values": [0, 4, 16, 32, 64, 128]},
-            "NUM_STEPS": {"values": [4, 16, 32, 64, 128]},
+            "NUM_ENVS": {"values": [32, 64, 128, 256]},
+            "LAMBDA": {"values": [0.7, 0.8, 0.9, 0.95]},
+            "NUM_STEPS": {"values": [16, 32, 64, 128]},
         },
     }
 
@@ -738,7 +751,7 @@ def tune(default_config):
     sweep_id = wandb.sweep(
         sweep_config, entity=default_config["ENTITY"], project=default_config["PROJECT"]
     )
-    wandb.agent("n0f0x2a3", wrapped_make_train, count=1000)
+    wandb.agent("f2yduc0h", wrapped_make_train, count=1000)
 
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
