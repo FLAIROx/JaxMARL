@@ -88,7 +88,7 @@ class SimpleFacmacMPE(SimpleMPE):
         #     i: Box(-jnp.inf, jnp.inf, (obs_dim,)) for i in self.adversaries
         # }
         self.observation_spaces = {
-            i: Box(-jnp.inf, jnp.inf, (48,)) for i in self.adversaries
+            i: Box(-jnp.inf, jnp.inf, (14,)) for i in self.adversaries
         }
         self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in self.adversaries}
 

@@ -1,7 +1,7 @@
 "LR": 2.5e-4
 "NUM_ENVS": 16
 "NUM_STEPS": 128
-"TOTAL_TIMESTEPS": 5e6
+"TOTAL_TIMESTEPS": 5e4
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -15,3 +15,11 @@
 "ENV_KWARGS": 
   "layout" : "cramped_room"
 "ANNEAL_LR": True
+
+"SAVE_PATH": "ckpt"
+
+# WandB Params
+"ENTITY": "jaxmarl"
+"NAME": "ippo_ff_overcooked"
+"PROJECT": "neurips2024"
+"WANDB_MODE" : "online"

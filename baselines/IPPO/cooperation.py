@@ -30,6 +30,12 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from safetensors.flax import save_file, load_file
 import pandas as pd
 import seaborn as sns
+from typing import NamedTuple, Dict, Union
+from jaxmarl.environments import SimpleFacmacMPE
+from jaxmarl.environments.mpe.simple import State, SimpleMPE
+from functools import partial
+import chex
+
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -79,7 +85,66 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
+class MultiFacmacMPE(SimpleFacmacMPE):
+    """Log the episode returns and lengths.
+    NOTE for now for envs where agents terminate at the same time.
+    """
 
+    def __init__(
+        self,
+        num_good_agents=1,
+        num_adversaries=3,
+        num_landmarks=2,
+        view_radius=1.5,  # set -1 to deactivate
+        score_function="sum"
+    ):
+        super().__init__( 
+        num_good_agents,
+        num_adversaries,
+        num_landmarks,
+        view_radius, 
+        score_function)
+        
+    def rewards(self, state: State) -> Dict[str, float]:
+        @partial(jax.vmap, in_axes=(0, None))
+        def _collisions(agent_idx: int, other_idx: int):
+            return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
+                agent_idx,
+                other_idx,
+                state,
+            )
+
+        c = _collisions(
+            jnp.arange(self.num_good_agents) + self.num_adversaries,
+            jnp.arange(self.num_adversaries),
+        )  # [agent, adversary, collison]
+
+        def _good(aidx: int, collisions: chex.Array):
+            rew = -10 * jnp.sum(collisions[aidx])
+
+            mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
+            rew -= mr
+            return rew
+
+        # ad_rew = 10 * jnp.sum(c)
+        
+        def _adv(aidx: int, collisions: chex.Array):
+            rew = 10 * jnp.sum(collisions[:,aidx])
+            
+            return rew
+
+        rew = {a: _adv(i, c)
+                for i, a in enumerate(self.adversaries)}
+        
+        rew.update(
+            {
+                a: _good(i + self.num_adversaries, c)
+                for i, a in enumerate(self.good_agents)
+            }
+        )
+        # print("rewards!", rew)
+        return rew
+    
 def batchify(x: dict, agent_list, num_actors):
     max_dim = max([x[a].shape[-1] for a in agent_list])
     def pad(z, length):
@@ -88,6 +153,8 @@ def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] if x[a].shape[-1] == max_dim else pad(x[a]) for a in agent_list])
     return x
 
+def flatten_agents(x):
+    return x.reshape((x.shape[0]*x.shape[1], ))
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
@@ -95,7 +162,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config, path0, path1):
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = MultiFacmacMPE(**config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
             1
@@ -166,18 +233,22 @@ def make_train(config, path0, path1):
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
                 # print("obs batch shapes", obs_batch, obs_batch[0:1], obs_batch[1:env.num_adversaries])
-                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1])
-                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries])
+                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)))
+                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)))
                 # print("pi", pi)
                 action0 = pi0.sample(seed=_rng)
                 action1 = pi1.sample(seed=_rng)
                 # print("action", action0, action1)
+                action = jnp.concatenate([action0, action1], axis=0)
+                for _ in range(env.num_good_agents):
+                    action = jnp.concatenate([action, jnp.zeros(action0.shape)], axis=0)
+                # print("action", action.shape)
+                # action0 = action0.reshape((action0.shape[0]*action0.shape[1], -1))
+                # action1 = action1.reshape((action1.shape[0]*action1.shape[1], -1))
+                # print("action after", action0, action1)
                 log_prob0 = pi0.log_prob(action0)
                 log_prob1 = pi1.log_prob(action1)
-                action = [action0, action1]
-                for _ in range(env.num_good_agents):
-                    action.append(jnp.zeros(action0.shape))
-                action = jnp.stack([a for a in action])
+                
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 # print("env_act", env_act)
                 # STEP ENV
@@ -186,27 +257,27 @@ def make_train(config, path0, path1):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
-                # print("info before", info)
+                # print("reward, done, info", reward, done, info)
                 # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 # print("info", info)
-                # print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, action0.shape, value0.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, log_prob0.shape, obs_batch[0].shape, jax.tree_map(lambda x: x[:,0], info))
+                # print("obs_batch before transition", obs_batch.shape)
                 transition0 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     action0,
                     value0,
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     log_prob0,
-                    obs_batch[0],
+                    obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)),
                     jax.tree_map(lambda x: x[:,0], info),
                 )
                 transition1 = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries],
+                    flatten_agents(batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     action1,
                     value1,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries],
+                    flatten_agents(batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     log_prob1,
-                    obs_batch[1:env.num_adversaries],
-                    jax.tree_map(lambda x: x[:,1:env.num_adversaries], info),
+                    obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)),
+                    jax.tree_map(lambda x: flatten_agents(x[:,1:env.num_adversaries]), info),
                 )
                 runner_state = (train_state0, train_state1, env_state, obsv, rng)
                 return runner_state, (transition0, transition1)
@@ -343,7 +414,7 @@ def main(config):
     sns.heatmap(data=df, annot=True, fmt='.1f', linewidths=0.5, cmap='RdYlGn', center=0)
     plt.ylabel('Context Policy')
     plt.xlabel('Evaluated Policy')
-    plt.savefig('facmac-10adv-10good.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig('facmac-test.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
     
     # print("returned episode returns", out_actual["metrics"]["agent0"]["returned_discounted_episode_returns"].shape)

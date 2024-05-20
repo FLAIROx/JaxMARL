@@ -14,11 +14,12 @@
 "ENV_NAME": "MPE_simple_facmac_v1"
 "ENV_KWARGS": 
   "score_function": "min"
-  "num_adversaries": 10
-  "num_good_agents": 10
+  num_adversaries: 2
+  # "num_adversaries": 10
+  # "num_good_agents": 10
 "ANNEAL_LR": True
 "SEED": 30
-"NUM_SEEDS": 10
+"NUM_SEEDS": 
 
 # WandB Params
 "ENTITY": "jaxmarl"
