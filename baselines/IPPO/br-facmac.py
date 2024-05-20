@@ -146,6 +146,10 @@ def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] if x[a].shape[-1] == max_dim else pad(x[a]) for a in agent_list])
     return x
 
+def flatten_agents(x):
+    print("FLATTEN SHAPE", x.shape)
+    return x.reshape((x.shape[0]*x.shape[1], ))
+
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
@@ -230,18 +234,22 @@ def make_train(config):
                 # SELECT ACTION
                 rng, _rng0, _rng1 = jax.random.split(rng, num=3)
 
-                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1])
-                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries])
+                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)))
+                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)))
                 # print("pi", pi)
                 action0 = pi0.sample(seed=_rng0)
                 action1 = pi1.sample(seed=_rng1)
                 print("action", action0, action1)
+                action = jnp.concatenate([action0, action1], axis=0)
+                for _ in range(env.num_good_agents):
+                    action = jnp.concatenate([action, jnp.zeros(action0.shape)], axis=0)
+                print("action", action.shape)
+                # action0 = action0.reshape((action0.shape[0]*action0.shape[1], -1))
+                # action1 = action1.reshape((action1.shape[0]*action1.shape[1], -1))
+                # print("action after", action0, action1)
                 log_prob0 = pi0.log_prob(action0)
                 log_prob1 = pi1.log_prob(action1)
-                action = [action0, action1]
-                for _ in range(env.num_good_agents):
-                    action.append(jnp.zeros(action0.shape))
-                action = jnp.stack([a for a in action])
+                
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 # print("env_act", env_act)
                 # STEP ENV
@@ -250,25 +258,27 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
+                # print("reward, done, info", reward, done, info)
                 # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 # print("info", info)
+                print("obs_batch before transition", obs_batch.shape)
                 transition0 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     action0,
                     value0,
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     log_prob0,
-                    obs_batch[0],
+                    obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)),
                     jax.tree_map(lambda x: x[:,0], info),
                 )
                 transition1 = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries],
+                    flatten_agents(batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     action1,
                     value1,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries],
+                    flatten_agents(batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     log_prob1,
-                    obs_batch[1:env.num_adversaries],
-                    jax.tree_map(lambda x: x[:,1:env.num_adversaries], info),
+                    obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)),
+                    jax.tree_map(lambda x: flatten_agents(x[:,1:env.num_adversaries]), info),
                 )
                 runner_state = (train_state0, train_state1, env_state, obsv, rng)
                 return runner_state, (transition0, transition1)
@@ -280,8 +290,8 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state0, train_state1, env_state, last_obs, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            _, last_val0 = network0.apply(train_state0.params, last_obs_batch[0:1])
-            _, last_val1 = network1.apply(train_state1.params, last_obs_batch[1:env.num_adversaries])
+            _, last_val0 = network0.apply(train_state0.params, last_obs_batch[0:1].reshape((last_obs_batch[0:1].shape[0]*last_obs_batch[0:1].shape[1], -1)))
+            _, last_val1 = network1.apply(train_state1.params, last_obs_batch[1:env.num_adversaries].reshape((last_obs_batch[1:env.num_adversaries].shape[0]*last_obs_batch[1:env.num_adversaries].shape[1], -1)))
 
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
@@ -291,6 +301,7 @@ def make_train(config):
                         transition.value,
                         transition.reward,
                     )
+                    print("gae shapes", done.shape, value.shape, reward.shape)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                             delta
@@ -307,10 +318,12 @@ def make_train(config):
                 )
                 return advantages, advantages + traj_batch.value
 
-            print("traj batch last val", type(traj_batch0), last_val0.shape)
+            print("traj batch last val", traj_batch1, last_val1.shape)
             advantages0, targets0 = _calculate_gae(traj_batch0, last_val0)
-            print("advantages", advantages0.shape)
+            print("advantages and targets", advantages0.shape, targets0.shape)
             advantages1, targets1 = _calculate_gae(traj_batch1, last_val1)
+            # advantages0, targets0 = advantages0.reshape((advantages0.shape[0], -1)), targets0.reshape((targets0.shape[0], -1))
+            # advantages1 = advantages1.reshape((advantages1.shape[0], -1)), targets1.reshape((targets1.shape[0], -1))
 
             # UPDATE NETWORK
             def _update_epoch(update_state, unused):
@@ -436,14 +449,15 @@ def make_train(config):
                 print("config[MINIBATCH_SIZE]", config["MINIBATCH_SIZE"])
                 print("config[NUM_MINIBATCHES]", config["NUM_MINIBATCHES"])
                 print("config[NUM_STEPS] // config[NUM_MINIBATCHES])",  config["NUM_STEPS"] // config["NUM_MINIBATCHES"])
-                assert (
-                        batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 3 # TODO
-                ), "batch size must be equal to number of steps * number of actors"
+                # assert (
+                #         batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 3 # TODO
+                # ), "batch size must be equal to number of steps * number of actors"
                 permutation0 = jax.random.permutation(_rng0, batch_size0)
                 permutation1 = jax.random.permutation(_rng1, batch_size1)
-                print("advantages", advantages0.shape, targets0.shape)
+                print("advantages", advantages1.shape, targets1.shape)
                 batch0 = (traj_batch0, advantages0, targets0)
                 batch1 = (traj_batch1, advantages1, targets1)
+                print("batch1", traj_batch1)
                 batch0 = jax.tree_util.tree_map(
                     lambda x: x.reshape((batch_size0,) + x.shape[2:]), batch0
                 )
@@ -520,7 +534,7 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        name=config["NAME"],
+        name="best-response",
         tags=["IPPO", "FF"],
         config=config,
         mode=config["WANDB_MODE"],
@@ -534,19 +548,19 @@ def main(config):
     # save params
     env_name = config["ENV_NAME"]
     alg_name = "IPPO"
-    # if config['SAVE_PATH'] is not None:
+    if config['SAVE_PATH'] is not None:
 
-    #     def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
-    #         flattened_dict = flatten_dict(params, sep=',')
-    #         save_file(flattened_dict, filename)
+        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+            flattened_dict = flatten_dict(params, sep=',')
+            save_file(flattened_dict, filename)
 
-    #     model_state = out['runner_state'][0]
-    #     params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
-    #     save_dir = os.path.join(config['SAVE_PATH'], env_name, "br-prosocial")
-    #     os.makedirs(save_dir, exist_ok=True)
-    #     save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        model_state = out['runner_state'][0]
+        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "br-prosocial")
+        os.makedirs(save_dir, exist_ok=True)
+        save_params(params, f'{save_dir}/{alg_name}.safetensors')
         
-    #     print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+        print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
     print(print("returns shape", out["metrics"]["agent0"]["returned_episode_returns"].shape))
     # logging
     updates_x0 = jnp.arange(out["metrics"]["agent0"]["total_loss"][0].shape[0])

@@ -343,7 +343,7 @@ def main(config):
     sns.heatmap(data=df, annot=True, fmt='.1f', linewidths=0.5, cmap='RdYlGn', center=0)
     plt.ylabel('Context Policy')
     plt.xlabel('Evaluated Policy')
-    plt.savefig('facmac-parametersharing.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig('facmac-10adv-10good.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
     
     # print("returned episode returns", out_actual["metrics"]["agent0"]["returned_discounted_episode_returns"].shape)

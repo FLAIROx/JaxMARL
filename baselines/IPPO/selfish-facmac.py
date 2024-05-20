@@ -133,7 +133,7 @@ class MultiFacmacMPE(SimpleFacmacMPE):
                 for i, a in enumerate(self.good_agents)
             }
         )
-        print("rewards!", rew)
+        # print("rewards!", rew)
         return rew
     
 def batchify(x: dict, agent_list, num_actors):
@@ -208,6 +208,7 @@ def make_train(config):
 
                 pi, value = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=_rng)
+                # print("action and pi", action.shape, pi.shape)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 print("env_act", env_act)
@@ -266,8 +267,10 @@ def make_train(config):
                 )
                 return advantages, advantages + traj_batch.value
 
+            print("traj batch last val", traj_batch, last_val.shape)
             advantages, targets = _calculate_gae(traj_batch, last_val)
-
+            print("advantages", advantages.shape)
+            
             # UPDATE NETWORK
             def _update_epoch(update_state, unused):
                 def _update_minbatch(train_state, batch_info):
@@ -334,6 +337,7 @@ def make_train(config):
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
+                # print("traj_batch shape", traj_batch)
                 batch = jax.tree_util.tree_map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
@@ -367,15 +371,15 @@ def make_train(config):
 
 
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
-            print("metric before", metric)
+            # print("metric before", metric)
             metric = jax.tree_map(lambda x: x.reshape((config["NUM_STEPS"], config["NUM_ENVS"], -1)), metric)
-            print("metric after", metric)
+            # print("metric after", metric)
             metrics = {}
             for i in range(env.num_adversaries):
                 m = jax.tree_map(lambda x: x[:,:,i].mean(), metric)
                 agentname = "agent" + str(i)
                 metrics.update({agentname:{**m, **loss_info}})
-                print(metrics)
+                # print(metrics)
             jax.experimental.io_callback(callback, None, metrics)
             
             runner_state = (train_state, env_state, last_obs, rng)
