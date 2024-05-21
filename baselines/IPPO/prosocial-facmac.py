@@ -1,6 +1,7 @@
 """ 
 Based on PureJaxRL Implementation of PPO
 """
+
 import os
 import jax
 import jax.numpy as jnp
@@ -140,9 +141,8 @@ def make_train(config):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, rng = runner_state
-                print("last_obs", last_obs)
+
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                print("obs_batch", obs_batch.shape)
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
 
@@ -150,16 +150,16 @@ def make_train(config):
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-                print("env_act", env_act)
+
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
-                print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze().shape, action.shape, value.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze().shape, log_prob.shape, obs_batch.shape, info)
+
+                print("info", info)
                 info = jax.tree_map(lambda x: x[:,:env.num_adversaries].reshape((config["NUM_ADVERSARIES"])), info)
-                
                 transition = Transition(
                     batchify(done, env.agents[:env.num_adversaries], config["NUM_ADVERSARIES"]).squeeze(),
                     action[:config["NUM_ADVERSARIES"]],
@@ -189,7 +189,6 @@ def make_train(config):
                         transition.value,
                         transition.reward,
                     )
-                    print("SHAPE CHECK:", done.shape, value.shape, reward.shape, next_value.shape)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                             delta
@@ -256,15 +255,7 @@ def make_train(config):
                         train_state.params, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
-                    
-                    loss_info = {
-                        "total_loss": total_loss[0],
-                        "actor_loss": total_loss[1][1],
-                        "critic_loss": total_loss[1][0],
-                        "entropy": total_loss[1][2],
-                    }
-                    
-                    return train_state, loss_info
+                    return train_state, total_loss
 
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
@@ -286,17 +277,17 @@ def make_train(config):
                     ),
                     shuffled_batch,
                 )
-                train_state, loss_info = jax.lax.scan(
+                train_state, total_loss = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (train_state, traj_batch, advantages, targets, rng)
-                return update_state, loss_info
-
+                return update_state, total_loss
+            
             def callback(metric):
                 wandb.log(
                     metric
                 )
-                
+
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
@@ -304,13 +295,14 @@ def make_train(config):
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
-
-
-            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
-            metric = jax.tree_map(lambda x: x.mean(), metric)
-            metric = {**metric, **loss_info}
-            jax.experimental.io_callback(callback, None, metric)
             
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            # print(metric)
+            metric = jax.tree_map(lambda x: x[-2,:].reshape((config["NUM_ENVS"], env.num_adversaries)), metric)
+            # print("after metric", metric)
+            metric = {**metric}
+            jax.experimental.io_callback(callback, None, metric)
+
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
 
@@ -326,7 +318,7 @@ def make_train(config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_mpe_facmac")
 def main(config):
     config = OmegaConf.to_container(config)
-
+    
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
@@ -335,56 +327,70 @@ def main(config):
         config=config,
         mode=config["WANDB_MODE"],
     )
-    
+
     rng = jax.random.PRNGKey(config["SEED"])
-    rngs = jax.random.split(rng, config["NUM_SEEDS"])    
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])   
     train_jit = jax.jit(make_train(config))
     out = jax.vmap(train_jit)(rngs)
-    # print(out)
-    # save params
-    env_name = config["ENV_NAME"]
-    alg_name = "IPPO"
-    if config['SAVE_PATH'] is not None:
-
-        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
-            flattened_dict = flatten_dict(params, sep=',')
-            save_file(flattened_dict, filename)
-            
-        
-
-        model_state = out['runner_state'][0]
-        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial")
-        os.makedirs(save_dir, exist_ok=True)
-        
-        # path = ocp.test_utils.erase_and_create_empty('/tmp/my-checkpoints/')
-        # checkpointer = ocp.StandardCheckpointer()
-        # # 'checkpoint_name' must not already exist.
-        # checkpointer.save(path / 'checkpoint_name', params)
-        
-        save_params(params, f'{save_dir}/{alg_name}.safetensors')
-        print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
-
-    # logging
-    print("updates shape", out["metrics"]["returned_episode_returns"][0].shape[0])
-    updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
-    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0)], axis=1)    
-    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy"])
-    updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
-    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
-    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
-    wandb.log({
-        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
-        # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
-        "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
-        "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
-        "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
-        "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
-    })
     
-    # import pdb;
+    # if config['SAVE_PATH'] is not None:
 
-    # pdb.set_trace()
+    #     def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+    #         flattened_dict = flatten_dict(params, sep=',')
+    #         save_file(flattened_dict, filename)
+
+    #     model_state = out['runner_state'][0]
+    #     params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
+    #     save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial")
+    #     os.makedirs(save_dir, exist_ok=True)
+        
+    #     # path = ocp.test_utils.erase_and_create_empty('/tmp/my-checkpoints/')
+    #     # checkpointer = ocp.StandardCheckpointer()
+    #     # # 'checkpoint_name' must not already exist.
+    #     # checkpointer.save(path / 'checkpoint_name', params)
+        
+    #     save_params(params, f'{save_dir}/{alg_name}.safetensors')
+    #     print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+    print(out["metrics"].keys())
+    print("updates shape", out["metrics"]["episode_returns"].shape)
+    print(out["metrics"]["episode_returns"][:,-1,:,0]) # seed, steps, envs, agents
+    print(out["metrics"]["episode_returns"][:,-1,:,0].mean(axis=1)) # seed, steps, envs, agents
+    
+    # show trajectory of returns
+    # print("returns end", out["metrics"]["episode_returns"][0,-1,:,0])
+    # print("returns middle", out["metrics"]["episode_returns"][0,4,:,0])
+    # print("episode lengths", out["metrics"]["episode_lengths"][0,-1,:,0])
+    # print("episode lengths beginning", out["metrics"]["episode_lengths"][0,0,:,0])
+    
+    #logging
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    updates_x = jnp.expand_dims(jnp.arange(out["metrics"]["episode_returns"].shape[1]),1)
+    # returns_table = jnp.concatenate([updates_x, out["metrics"]["episode_returns"].mean(axis=(0,2))], axis=1)
+    # returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates"] + env.agents[:env.num_adversaries])
+    for i in range(env.num_adversaries):
+        returns_table = jnp.concatenate([updates_x, jnp.expand_dims(out["metrics"]["episode_returns"].mean(axis=(0,2))[:,i], 1)], axis=1)
+        returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"+str(i)])
+        wandb.log({
+            # "returns_plot": wandb.plot.line_series(xs=jnp.arange(out["metrics"]["episode_returns"].shape[1]).tolist(), ys=out["metrics"]["episode_returns"].mean(axis=(0,2)).T.tolist(), keys = env.agents[:env.num_adversaries], title="Returns vs Updates", xname="Updates")
+            "returns"+str(i)+"_plot": wandb.plot.line(returns_table, "updates", "returns"+str(i), title="returns"+str(i)+"_vs_updates"),
+            # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+            # "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+            # "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+            # "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+            # "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+        })
+    
+    returns_table = jnp.concatenate([updates_x, out["metrics"]["episode_returns"].mean(axis=(0,2))], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates"] + env.agents[:env.num_adversaries])
+    wandb.log({
+        "returns_plot": wandb.plot.line_series(xs=jnp.arange(out["metrics"]["episode_returns"].shape[1]).tolist(), ys=out["metrics"]["episode_returns"].mean(axis=(0,2)).T.tolist(), keys = env.agents[:env.num_adversaries], title="Returns vs Updates", xname="Updates")
+        # "returns"+str(i)+"_plot": wandb.plot.line(returns_table, "updates", "returns"+str(i), title="returns"+str(i)+"_vs_updates"),
+        # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+        # "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+        # "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+        # "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+        # "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+    })
     
     
 if __name__ == "__main__":

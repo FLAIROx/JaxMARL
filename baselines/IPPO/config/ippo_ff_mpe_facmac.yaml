@@ -19,7 +19,7 @@
   # "num_good_agents": 10
 "ANNEAL_LR": True
 "SEED": 30
-"NUM_SEEDS": 
+"NUM_SEEDS": 10
 
 # WandB Params
 "ENTITY": "jaxmarl"
