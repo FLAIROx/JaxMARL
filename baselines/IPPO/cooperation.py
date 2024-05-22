@@ -30,12 +30,16 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from safetensors.flax import save_file, load_file
 import pandas as pd
 import seaborn as sns
+from flax.training import checkpoints
+from safetensors.flax import save_file
+from flax.traverse_util import flatten_dict
 from typing import NamedTuple, Dict, Union
 from jaxmarl.environments import SimpleFacmacMPE
 from jaxmarl.environments.mpe.simple import State, SimpleMPE
 from functools import partial
 import chex
-
+from flax.traverse_util import flatten_dict, unflatten_dict
+from safetensors.flax import save_file, load_file
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -153,8 +157,6 @@ def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] if x[a].shape[-1] == max_dim else pad(x[a]) for a in agent_list])
     return x
 
-def flatten_agents(x):
-    return x.reshape((x.shape[0]*x.shape[1], ))
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
@@ -181,7 +183,7 @@ def make_train(config, path0, path1):
         # print(env.action_space(env.agents[0]).shape[0])
         network0 = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         network1 = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
-        rng, _rng = jax.random.split(rng)
+        rng, _rng0, _rng1 = jax.random.split(rng, num=3)
         # print("randoms", _rng0, _rng1)
         # print(env.observation_space(env.agents[0]).shape)
         # print(env.agents)
@@ -231,24 +233,20 @@ def make_train(config, path0, path1):
                 # print("obs_batch values", obs_batch)
 
                 # SELECT ACTION
-                rng, _rng = jax.random.split(rng)
-                # print("obs batch shapes", obs_batch, obs_batch[0:1], obs_batch[1:env.num_adversaries])
-                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)))
-                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)))
+                rng, _rng0, _rng1 = jax.random.split(rng, num=3)
+
+                pi0, value0 = network0.apply(train_state0.params, obs_batch[0])
+                pi1, value1 = network1.apply(train_state1.params, obs_batch[1])
                 # print("pi", pi)
-                action0 = pi0.sample(seed=_rng)
-                action1 = pi1.sample(seed=_rng)
+                action0 = pi0.sample(seed=_rng0)
+                action1 = pi1.sample(seed=_rng1)
                 # print("action", action0, action1)
-                action = jnp.concatenate([action0, action1], axis=0)
-                for _ in range(env.num_good_agents):
-                    action = jnp.concatenate([action, jnp.zeros(action0.shape)], axis=0)
-                # print("action", action.shape)
-                # action0 = action0.reshape((action0.shape[0]*action0.shape[1], -1))
-                # action1 = action1.reshape((action1.shape[0]*action1.shape[1], -1))
-                # print("action after", action0, action1)
                 log_prob0 = pi0.log_prob(action0)
                 log_prob1 = pi1.log_prob(action1)
-                
+                action = [action0, action1]
+                for _ in range(env.num_good_agents):
+                    action.append(jnp.zeros(action0.shape))
+                action = jnp.stack([a for a in action])
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 # print("env_act", env_act)
                 # STEP ENV
@@ -257,27 +255,27 @@ def make_train(config, path0, path1):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
-                # print("reward, done, info", reward, done, info)
+                # print("info before", info)
                 # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 # print("info", info)
-                # print("obs_batch before transition", obs_batch.shape)
+                # print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, action0.shape, value0.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, log_prob0.shape, obs_batch[0].shape, jax.tree_map(lambda x: x[:,0], info))
                 transition0 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     action0,
                     value0,
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     log_prob0,
-                    obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)),
+                    obs_batch[0],
                     jax.tree_map(lambda x: x[:,0], info),
                 )
                 transition1 = Transition(
-                    flatten_agents(batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
+                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1],
                     action1,
                     value1,
-                    flatten_agents(batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
+                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1],
                     log_prob1,
-                    obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)),
-                    jax.tree_map(lambda x: flatten_agents(x[:,1:env.num_adversaries]), info),
+                    obs_batch[1],
+                    jax.tree_map(lambda x: x[:,1], info),
                 )
                 runner_state = (train_state0, train_state1, env_state, obsv, rng)
                 return runner_state, (transition0, transition1)
@@ -288,10 +286,10 @@ def make_train(config, path0, path1):
             
             train_state0, train_state1, env_state, last_obs, rng = runner_state
             
-            # def callback(metric):
-            #     wandb.log(
-            #         metric
-            #     )
+            def callback(metric):
+                wandb.log(
+                    metric
+                )
 
             update_state = (train_state0, train_state1, traj_batch0, traj_batch1, rng)
 
@@ -308,7 +306,7 @@ def make_train(config, path0, path1):
             # metric0 = jax.tree_map(lambda x: x.mean(), metric0)
             # metric1 = jax.tree_map(lambda x: x.mean(), metric1)
             metric = {"agent0":{**metric0}, "agent1":{**metric1}}
-            # jax.experimental.io_callback(callback, None, metric)
+            jax.experimental.io_callback(callback, None, metric)
             runner_state = (train_state0, train_state1, env_state, last_obs, rng)
             return runner_state, metric
 
@@ -325,14 +323,14 @@ def make_train(config, path0, path1):
 def main(config):
     config = OmegaConf.to_container(config)
 
-    # wandb.init(
-    #     entity=config["ENTITY"],
-    #     project=config["PROJECT"],
-    #     name=config["NAME"],
-    #     tags=["IPPO", "FF"],
-    #     config=config,
-    #     mode=config["WANDB_MODE"],
-    # )
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        name=config["NAME"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
     
     pi_s = "ckpt/MPE_simple_facmac_v1/selfish/IPPO.safetensors"
     br_pi_s = "ckpt/MPE_simple_facmac_v1/br-selfish/IPPO.safetensors"
@@ -347,14 +345,12 @@ def main(config):
     train_jit_br = jax.jit(make_train(config, br_pi_s, pi_s))
     out_actual = jax.vmap(train_jit_actual)(rngs)
     out_br = jax.vmap(train_jit_br)(rngs)
-    print("returns shape", out_actual["metrics"]["agent1"]["returned_episode_returns"].shape)
-    w_actual = out_actual["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_actual["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
-    w_br = out_br["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_br["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
+    w_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
+    w_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
     c_s_s = w_actual - w_br
     print("Actual Outcome", w_actual)
-    print("BR Outcome", w_br)
+    print("Selfish Outcome", w_br)
     print("C(pi_s, pi_s)", c_s_s)
-    print("-------------------")
     
     # C(pi_p, pi_s)
     rng = jax.random.PRNGKey(config["SEED"])
@@ -363,13 +359,12 @@ def main(config):
     train_jit_br = jax.jit(make_train(config, br_pi_s, pi_s))
     out_actual = jax.vmap(train_jit_actual)(rngs)
     out_br = jax.vmap(train_jit_br)(rngs)
-    w_actual = out_actual["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_actual["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
-    w_br = out_br["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_br["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
+    w_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
+    w_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
     c_p_s = w_actual - w_br
     print("Actual Outcome", w_actual)
-    print("BR Outcome", w_br)
+    print("Selfish Outcome", w_br)
     print("C(pi_p, pi_s)", c_p_s)
-    print("-------------------")
     
     # C(pi_s, pi_p)
     rng = jax.random.PRNGKey(config["SEED"])
@@ -378,13 +373,12 @@ def main(config):
     train_jit_br = jax.jit(make_train(config, br_pi_p, pi_p))
     out_actual = jax.vmap(train_jit_actual)(rngs)
     out_br = jax.vmap(train_jit_br)(rngs)
-    w_actual = out_actual["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_actual["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
-    w_br = out_br["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_br["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
+    w_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
+    w_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
     c_s_p = w_actual - w_br
     print("Actual Outcome", w_actual)
-    print("BR Outcome", w_br)
+    print("Selfish Outcome", w_br)
     print("C(pi_s, pi_p)",c_s_p)
-    print("-------------------")
     
     # C(pi_p, pi_p)
     rng = jax.random.PRNGKey(config["SEED"])
@@ -393,15 +387,14 @@ def main(config):
     train_jit_br = jax.jit(make_train(config, br_pi_p, pi_p))
     out_actual = jax.vmap(train_jit_actual)(rngs)
     out_br = jax.vmap(train_jit_br)(rngs)
-    w_actual = out_actual["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_actual["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
-    w_br = out_br["metrics"]["agent0"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean() + out_br["metrics"]["agent1"]["returned_episode_returns"][:,:,-1,:].sum(axis=1).mean()
+    w_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
+    w_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:].mean()
     c_p_p = w_actual - w_br
     print("Actual Outcome", w_actual)
-    print("BR Outcome", w_br)
+    print("Selfish Outcome", w_br)
     print("C(pi_p, pi_p)", c_p_p)
-    print("-------------------")
     
-    scores = np.array([[c_s_s, c_p_s], [c_s_p, c_p_p]])
+    scores = np.array([[c_s_s, c_p_s], [c_s_p, c_p_p]]).T
 
     plt.figure(figsize=(10,8))
     sns.set(font_scale=1.5)
@@ -412,9 +405,9 @@ def main(config):
                   index = ["pi_s", "pi_p"],  
                   columns = ["pi_s", "pi_p"]) 
     sns.heatmap(data=df, annot=True, fmt='.1f', linewidths=0.5, cmap='RdYlGn', center=0)
-    plt.ylabel('Context Policy')
-    plt.xlabel('Evaluated Policy')
-    plt.savefig('facmac-test.pdf', format='pdf', bbox_inches='tight')
+    plt.ylabel('Evaluated Policy')
+    plt.xlabel('Context Policy')
+    plt.savefig('facmac-parametersharing.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
     
     # print("returned episode returns", out_actual["metrics"]["agent0"]["returned_discounted_episode_returns"].shape)

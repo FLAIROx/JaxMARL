@@ -333,24 +333,26 @@ def main(config):
     train_jit = jax.jit(make_train(config))
     out = jax.vmap(train_jit)(rngs)
     
-    # if config['SAVE_PATH'] is not None:
+    if config['SAVE_PATH'] is not None:
+        env_name = config["ENV_NAME"]
+        alg_name = "IPPO"
+        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+            flattened_dict = flatten_dict(params, sep=',')
+            save_file(flattened_dict, filename)
 
-    #     def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
-    #         flattened_dict = flatten_dict(params, sep=',')
-    #         save_file(flattened_dict, filename)
-
-    #     model_state = out['runner_state'][0]
-    #     params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
-    #     save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial")
-    #     os.makedirs(save_dir, exist_ok=True)
+        model_state = out['runner_state'][0]
+        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the firt run
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial")
+        os.makedirs(save_dir, exist_ok=True)
         
-    #     # path = ocp.test_utils.erase_and_create_empty('/tmp/my-checkpoints/')
-    #     # checkpointer = ocp.StandardCheckpointer()
-    #     # # 'checkpoint_name' must not already exist.
-    #     # checkpointer.save(path / 'checkpoint_name', params)
+        # path = ocp.test_utils.erase_and_create_empty('/tmp/my-checkpoints/')
+        # checkpointer = ocp.StandardCheckpointer()
+        # # 'checkpoint_name' must not already exist.
+        # checkpointer.save(path / 'checkpoint_name', params)
         
-    #     save_params(params, f'{save_dir}/{alg_name}.safetensors')
-    #     print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+        save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
+        
     print(out["metrics"].keys())
     print("updates shape", out["metrics"]["episode_returns"].shape)
     print(out["metrics"]["episode_returns"][:,-1,:,0]) # seed, steps, envs, agents
