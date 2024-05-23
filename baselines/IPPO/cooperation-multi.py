@@ -162,6 +162,9 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
 
+def flatten_agents(x):
+    # print("FLATTEN SHAPE", x.shape)
+    return x.reshape((x.shape[0]*x.shape[1], ))
 
 def make_train(config, path0, path1):
     env = MultiFacmacMPE(**config["ENV_KWARGS"])
@@ -235,18 +238,19 @@ def make_train(config, path0, path1):
                 # SELECT ACTION
                 rng, _rng0, _rng1 = jax.random.split(rng, num=3)
 
-                pi0, value0 = network0.apply(train_state0.params, obs_batch[0])
-                pi1, value1 = network1.apply(train_state1.params, obs_batch[1])
-                # print("pi", pi)
+                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)))
+                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)))
+                # print("value", value0, value1)
                 action0 = pi0.sample(seed=_rng0)
                 action1 = pi1.sample(seed=_rng1)
                 # print("action", action0, action1)
+                action = jnp.concatenate([action0, action1], axis=0)
+                for _ in range(env.num_good_agents):
+                    action = jnp.concatenate([action, jnp.zeros(action0.shape)], axis=0)
+                # print("action", action.shape)
                 log_prob0 = pi0.log_prob(action0)
                 log_prob1 = pi1.log_prob(action1)
-                action = [action0, action1]
-                for _ in range(env.num_good_agents):
-                    action.append(jnp.zeros(action0.shape))
-                action = jnp.stack([a for a in action])
+                
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 # print("env_act", env_act)
                 # STEP ENV
@@ -256,8 +260,8 @@ def make_train(config, path0, path1):
                     rng_step, env_state, env_act,
                 )
                 # print("info before", info)
-                # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
-                # print("info", info)
+                # info = jax.tree_map(lambda x: x[:,:env.num_adversaries].reshape((config["NUM_ADVERSARIES"])), info)
+                # print("info after", info)
                 # print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, action0.shape, value0.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, log_prob0.shape, obs_batch[0].shape, jax.tree_map(lambda x: x[:,0], info))
                 transition0 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0],
@@ -265,21 +269,21 @@ def make_train(config, path0, path1):
                     value0,
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     log_prob0,
-                    obs_batch[0],
+                    obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)),
                     jax.tree_map(lambda x: x[:,0], info),
                 )
                 transition1 = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1],
+                    flatten_agents(batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     action1,
                     value1,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1],
+                    flatten_agents(batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     log_prob1,
-                    obs_batch[1],
-                    jax.tree_map(lambda x: x[:,1], info),
+                    obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)),
+                    jax.tree_map(lambda x: flatten_agents(x[:,1:env.num_adversaries]), info),
                 )
                 runner_state = (train_state0, train_state1, env_state, obsv, rng)
                 return runner_state, (transition0, transition1)
-
+            
             runner_state, (traj_batch0, traj_batch1) = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
@@ -332,10 +336,10 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
     
-    pi_s = "ckpt/2pred1preyfinal/selfish/IPPO.safetensors"
-    br_pi_s = "ckpt/2pred1preyfinal/br-selfish/IPPO.safetensors"
-    pi_p = "ckpt/2pred1preyfinal/prosocial/IPPO.safetensors"
-    br_pi_p = "ckpt/2pred1preyfinal/br-prosocial/IPPO.safetensors"
+    pi_s = "ckpt/MPE_simple_facmac_v1/selfish/IPPO.safetensors"
+    br_pi_s = "ckpt/MPE_simple_facmac_v1/br-selfish/IPPO.safetensors"
+    pi_p = "ckpt/MPE_simple_facmac_v1/prosocial/IPPO.safetensors"
+    br_pi_p = "ckpt/MPE_simple_facmac_v1/br-prosocial/IPPO.safetensors"
     
     
     # C(pi_s, pi_s)
@@ -347,8 +351,12 @@ def main(config):
     out_br = jax.vmap(train_jit_br)(rngs)
     agent0_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_actual = out_actual["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_actual = agent1_actual.reshape((agent1_actual.shape[0], agent1_actual.shape[1], config["NUM_ENVS"], -1))
+    agent1_actual = jnp.sum(agent1_actual, axis=3)
     agent0_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_br = out_br["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_br = agent1_br.reshape((agent1_br.shape[0], agent1_br.shape[1], config["NUM_ENVS"], -1))
+    agent1_br = jnp.sum(agent1_br, axis=3)
     w_actual = agent0_actual.mean()+agent1_actual.mean()
     w_br = agent0_br.mean() + agent1_br.mean()
     c_s_s = w_actual - w_br
@@ -377,8 +385,12 @@ def main(config):
     out_br = jax.vmap(train_jit_br)(rngs)
     agent0_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_actual = out_actual["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_actual = agent1_actual.reshape((agent1_actual.shape[0], agent1_actual.shape[1], config["NUM_ENVS"], -1))
+    agent1_actual = jnp.sum(agent1_actual, axis=3)
     agent0_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_br = out_br["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_br = agent1_br.reshape((agent1_br.shape[0], agent1_br.shape[1], config["NUM_ENVS"], -1))
+    agent1_br = jnp.sum(agent1_br, axis=3)
     w_actual = agent0_actual.mean()+agent1_actual.mean()
     w_br = agent0_br.mean() + agent1_br.mean()
     c_p_s = w_actual - w_br
@@ -401,8 +413,12 @@ def main(config):
     out_br = jax.vmap(train_jit_br)(rngs)
     agent0_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_actual = out_actual["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_actual = agent1_actual.reshape((agent1_actual.shape[0], agent1_actual.shape[1], config["NUM_ENVS"], -1))
+    agent1_actual = jnp.sum(agent1_actual, axis=3)
     agent0_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_br = out_br["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_br = agent1_br.reshape((agent1_br.shape[0], agent1_br.shape[1], config["NUM_ENVS"], -1))
+    agent1_br = jnp.sum(agent1_br, axis=3)
     w_actual = agent0_actual.mean()+agent1_actual.mean()
     w_br = agent0_br.mean() + agent1_br.mean()
     c_s_p = w_actual - w_br
@@ -429,8 +445,12 @@ def main(config):
     out_br = jax.vmap(train_jit_br)(rngs)
     agent0_actual = out_actual["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_actual = out_actual["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_actual = agent1_actual.reshape((agent1_actual.shape[0], agent1_actual.shape[1], config["NUM_ENVS"], -1))
+    agent1_actual = jnp.sum(agent1_actual, axis=3)
     agent0_br = out_br["metrics"]["agent0"]["episode_returns"][:,:,-2,:]
     agent1_br = out_br["metrics"]["agent1"]["episode_returns"][:,:,-2,:]
+    agent1_br = agent1_br.reshape((agent1_br.shape[0], agent1_br.shape[1], config["NUM_ENVS"], -1))
+    agent1_br = jnp.sum(agent1_br, axis=3)
     w_actual = agent0_actual.mean()+agent1_actual.mean()
     w_br = agent0_br.mean() + agent1_br.mean()
     c_p_p = w_actual - w_br
@@ -446,7 +466,7 @@ def main(config):
     
     df = pd.concat([df1, df2, df3, df4]).reset_index(drop=True)
     print('length of df', len(df))
-    df.to_csv('results/2pred-1prey.csv')
+    df.to_csv('results/5pred-5prey.csv')
     
     scores = np.array([[c_s_s, c_p_s], [c_s_p, c_p_p]]).T
 
@@ -461,7 +481,7 @@ def main(config):
     sns.heatmap(data=df, annot=True, fmt='.1f', linewidths=0.5, cmap='RdYlGn', center=0)
     plt.ylabel('Evaluated Policy')
     plt.xlabel('Context Policy')
-    plt.savefig('facmac-2pred-1prey-final.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig('facmac-5pred-5prey-total_return.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
     
     # print("returned episode returns", out_actual["metrics"]["agent0"]["returned_discounted_episode_returns"].shape)

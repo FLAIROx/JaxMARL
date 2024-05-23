@@ -1,7 +1,7 @@
-"LR": 2.5e-4
-"NUM_ENVS": 16
+"LR": 2.5e-5
+"NUM_ENVS": 160
 "NUM_STEPS": 128
-"TOTAL_TIMESTEPS": 2e7
+"TOTAL_TIMESTEPS": 2e8
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -14,12 +14,12 @@
 "ENV_NAME": "MPE_simple_facmac_v1"
 "ENV_KWARGS": 
   "score_function": "min"
-  num_adversaries: 2
-  # "num_adversaries": 10
-  # "num_good_agents": 10
+  # num_adversaries: 2
+  "num_adversaries": 5
+  "num_good_agents": 5
 "ANNEAL_LR": True
 "SEED": 30
-"NUM_SEEDS": 10
+"NUM_SEEDS": 1
 
 # WandB Params
 "ENTITY": "jaxmarl"

@@ -1,0 +1,15 @@
+WARNING:absl:Type handler registry overriding type "<class 'float'>" collision on scalar
+WARNING:absl:Type handler registry overriding type "<class 'bytes'>" collision on scalar
+WARNING:absl:Type handler registry overriding type "<class 'numpy.number'>" collision on scalar
+WARNING:absl:Tensorflow library not found, tensorflow.io.gfile operations will use native shim calls. GCS paths (i.e. 'gs://...') cannot be accessed.
+wandb: Currently logged in as: kwantlin (jaxmarl). Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.17.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.12.21
+wandb: Run data is saved locally in /n/fs/klips/JaxMARL/baselines/IPPO/wandb/run-20240522_083721-xrc55uy1
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run prosocial-shareparam
+wandb: ⭐️ View project at https://wandb.ai/jaxmarl/neurips2024
+wandb: 🚀 View run at https://wandb.ai/jaxmarl/neurips2024/runs/xrc55uy1
+/n/fs/klips/anaconda3/envs/jaxmarl/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

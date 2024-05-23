@@ -23,8 +23,12 @@ from flax.training import checkpoints
 from safetensors.flax import save_file
 from flax.traverse_util import flatten_dict
 from typing import NamedTuple, Dict, Union
-import orbax.checkpoint
-from flax.training import orbax_utils
+from jaxmarl.environments import SimpleFacmacMPE
+from jaxmarl.environments.mpe.simple import State, SimpleMPE
+from functools import partial
+import chex
+from flax.traverse_util import flatten_dict, unflatten_dict
+from safetensors.flax import save_file, load_file
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -74,7 +78,66 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
+class MultiFacmacMPE(SimpleFacmacMPE):
+    """Log the episode returns and lengths.
+    NOTE for now for envs where agents terminate at the same time.
+    """
 
+    def __init__(
+        self,
+        num_good_agents=1,
+        num_adversaries=3,
+        num_landmarks=2,
+        view_radius=1.5,  # set -1 to deactivate
+        score_function="sum"
+    ):
+        super().__init__( 
+        num_good_agents,
+        num_adversaries,
+        num_landmarks,
+        view_radius, 
+        score_function)
+        
+    def rewards(self, state: State) -> Dict[str, float]:
+        @partial(jax.vmap, in_axes=(0, None))
+        def _collisions(agent_idx: int, other_idx: int):
+            return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
+                agent_idx,
+                other_idx,
+                state,
+            )
+
+        c = _collisions(
+            jnp.arange(self.num_good_agents) + self.num_adversaries,
+            jnp.arange(self.num_adversaries),
+        )  # [agent, adversary, collison]
+
+        def _good(aidx: int, collisions: chex.Array):
+            rew = -10 * jnp.sum(collisions[aidx])
+
+            mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
+            rew -= mr
+            return rew
+
+        # ad_rew = 10 * jnp.sum(c)
+        
+        def _adv(aidx: int, collisions: chex.Array):
+            rew = 10 * jnp.sum(collisions[:,aidx])
+            
+            return rew
+
+        rew = {a: _adv(i, c)
+                for i, a in enumerate(self.adversaries)}
+        
+        rew.update(
+            {
+                a: _good(i + self.num_adversaries, c)
+                for i, a in enumerate(self.good_agents)
+            }
+        )
+        # print("rewards!", rew)
+        return rew
+        
 def batchify(x: dict, agent_list, num_actors):
     max_dim = max([x[a].shape[-1] for a in agent_list])
     def pad(z, length):
@@ -86,11 +149,16 @@ def batchify(x: dict, agent_list, num_actors):
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
+    print("unbatchify", x.shape)
     return {a: x[i] for i, a in enumerate(agent_list)}
 
+def flatten_agents(x):
+    # print("FLATTEN SHAPE", x.shape)
+    return x.reshape((x.shape[0]*x.shape[1], ))
 
 def make_train(config):
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = MultiFacmacMPE(**config["ENV_KWARGS"])
+    print("made env")
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
             config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -114,13 +182,20 @@ def make_train(config):
         # print(env.action_space(env.agents[0]).shape[0])
         network0 = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
         network1 = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
-        rng, _rng = jax.random.split(rng)
-        print("obs space", env.observation_space)
+        rng, _rng0, _rng1 = jax.random.split(rng, num=3)
+        print("randoms", _rng0, _rng1)
+        print(env.observation_space(env.agents[0]).shape)
         print(env.agents)
         init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
         print("init x", init_x)
-        network_params0 = network0.init(_rng, init_x)
-        network_params1 = network1.init(_rng, init_x)
+        network_params0 = network0.init(_rng0, init_x)
+        
+        def load_params(filename):
+            flattened_dict = load_file(filename)
+            return unflatten_dict(flattened_dict, sep=',')
+
+        network_params1 = load_params("ckpt/MPE_simple_facmac_v1/selfish/IPPO.safetensors")
+        # network_params1 = network1.init(_rng1, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -150,26 +225,27 @@ def make_train(config):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
                 train_state0, train_state1, env_state, last_obs, rng = runner_state
-                print("last_obs", last_obs)
+
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 print("obs_batch", obs_batch.shape)
                 print("obs_batch values", obs_batch)
 
                 # SELECT ACTION
-                rng, _rng = jax.random.split(rng)
+                rng, _rng0, _rng1 = jax.random.split(rng, num=3)
 
-                pi0, value0 = network0.apply(train_state0.params, obs_batch[0])
-                pi1, value1 = network1.apply(train_state1.params, obs_batch[1])
-                # print("pi", pi)
-                action0 = pi0.sample(seed=_rng)
-                action1 = pi1.sample(seed=_rng)
+                pi0, value0 = network0.apply(train_state0.params, obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)))
+                pi1, value1 = network1.apply(train_state1.params, obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)))
+                print("value", value0, value1)
+                action0 = pi0.sample(seed=_rng0)
+                action1 = pi1.sample(seed=_rng1)
                 print("action", action0, action1)
+                action = jnp.concatenate([action0, action1], axis=0)
+                for _ in range(env.num_good_agents):
+                    action = jnp.concatenate([action, jnp.zeros(action0.shape)], axis=0)
+                print("action", action.shape)
                 log_prob0 = pi0.log_prob(action0)
                 log_prob1 = pi1.log_prob(action1)
-                action = [action0, action1]
-                for _ in range(env.num_good_agents):
-                    action.append(jnp.zeros(action0.shape))
-                action = jnp.stack([a for a in action])
+                
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 # print("env_act", env_act)
                 # STEP ENV
@@ -178,27 +254,26 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, env_state, env_act,
                 )
-                print("info before", info)
                 # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
-                print("info", info)
-                print("SHAPE CHECK", batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, action0.shape, value0.shape, batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0].shape, log_prob0.shape, obs_batch[0].shape, jax.tree_map(lambda x: x[:,0], info))
+                # print("info", info)
+                print("obs_batch before transition", obs_batch.shape)
                 transition0 = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     action0,
                     value0,
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[0],
                     log_prob0,
-                    obs_batch[0],
+                    obs_batch[0:1].reshape((obs_batch[0:1].shape[0]*obs_batch[0:1].shape[1], -1)),
                     jax.tree_map(lambda x: x[:,0], info),
                 )
                 transition1 = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1],
+                    flatten_agents(batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     action1,
                     value1,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1],
+                    flatten_agents(batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze()[1:env.num_adversaries]),
                     log_prob1,
-                    obs_batch[1],
-                    jax.tree_map(lambda x: x[:,1], info),
+                    obs_batch[1:env.num_adversaries].reshape((obs_batch[1:env.num_adversaries].shape[0]*obs_batch[1:env.num_adversaries].shape[1], -1)),
+                    jax.tree_map(lambda x: flatten_agents(x[:,1:env.num_adversaries]), info),
                 )
                 runner_state = (train_state0, train_state1, env_state, obsv, rng)
                 return runner_state, (transition0, transition1)
@@ -210,8 +285,8 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state0, train_state1, env_state, last_obs, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            _, last_val0 = network0.apply(train_state0.params, last_obs_batch[0])
-            _, last_val1 = network1.apply(train_state1.params, last_obs_batch[1])
+            _, last_val0 = network0.apply(train_state0.params, last_obs_batch[0:1].reshape((last_obs_batch[0:1].shape[0]*last_obs_batch[0:1].shape[1], -1)))
+            _, last_val1 = network1.apply(train_state1.params, last_obs_batch[1:env.num_adversaries].reshape((last_obs_batch[1:env.num_adversaries].shape[0]*last_obs_batch[1:env.num_adversaries].shape[1], -1)))
 
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
@@ -221,7 +296,6 @@ def make_train(config):
                         transition.value,
                         transition.reward,
                     )
-                    print("SHAPE CHECK:", done.shape, value.shape, reward.shape, next_value.shape)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                             delta
@@ -238,9 +312,9 @@ def make_train(config):
                 )
                 return advantages, advantages + traj_batch.value
 
-            print("traj batch last val", type(traj_batch0), last_val0.shape)
+            # print("traj batch last val", type(traj_batch0), last_val0.shape)
             advantages0, targets0 = _calculate_gae(traj_batch0, last_val0)
-            print("advantages", advantages0.shape)
+            # print("advantages", advantages0.shape)
             advantages1, targets1 = _calculate_gae(traj_batch1, last_val1)
 
             # UPDATE NETWORK
@@ -343,12 +417,12 @@ def make_train(config):
                         )
                         return total_loss, (value_loss, loss_actor, entropy, ratio)
 
-                    grad_fn = jax.value_and_grad(_loss_fn1, has_aux=True)
-                    total_loss, grads = grad_fn(
+                    # grad_fn = jax.value_and_grad(_loss_fn1, has_aux=True)
+                    total_loss = _loss_fn1(
                         train_state.params, traj_batch, advantages, targets
                     )
-                    train_state = train_state.apply_gradients(grads=grads)
-                    
+                    # train_state = train_state.apply_gradients(grads=grads)
+                    print("total_loss", total_loss)
                     loss_info = {
                         "total_loss": total_loss[0],
                         "actor_loss": total_loss[1][1],
@@ -360,27 +434,27 @@ def make_train(config):
                     return train_state,  loss_info
 
                 train_state0, train_state1, traj_batch0, traj_batch1, advantages0, advantages1, targets0, targets1, rng = update_state
-                rng, _rng = jax.random.split(rng)
-                batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // 3 # TODO
-                print("batch_size", batch_size)
+                rng, _rng0, _rng1 = jax.random.split(rng, 3)
+                batch_size0 = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // env.num_agents # TODO
+                batch_size1 = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // env.num_agents * (env.num_adversaries - 1) # TODO
+                print("batch_size", batch_size0)
                 print("config[MINIBATCH_SIZE]", config["MINIBATCH_SIZE"])
                 print("config[NUM_MINIBATCHES]", config["NUM_MINIBATCHES"])
                 print("config[NUM_STEPS] // config[NUM_MINIBATCHES])",  config["NUM_STEPS"] // config["NUM_MINIBATCHES"])
-                assert (
-                        batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 3 # TODO
-                ), "batch size must be equal to number of steps * number of actors"
-                permutation0 = jax.random.permutation(_rng, batch_size)
-                permutation1 = jax.random.permutation(_rng, batch_size)
-                print("advantages", advantages0.shape, targets0.shape)
+                # assert (
+                #         batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 3 # TODO
+                # ), "batch size must be equal to number of steps * number of actors"
+                permutation0 = jax.random.permutation(_rng0, batch_size0)
+                permutation1 = jax.random.permutation(_rng1, batch_size1)
+                print("advantages", advantages1.shape, targets1.shape)
                 batch0 = (traj_batch0, advantages0, targets0)
                 batch1 = (traj_batch1, advantages1, targets1)
-                print("batch before", advantages0.shape, targets0.shape)
+                print("batch1", traj_batch1)
                 batch0 = jax.tree_util.tree_map(
-                    lambda x: x.reshape((batch_size,) + x.shape[2:]), batch0
+                    lambda x: x.reshape((batch_size0,) + x.shape[2:]), batch0
                 )
-                print("batch after", advantages0.shape, targets0.shape)
                 batch1 = jax.tree_util.tree_map(
-                    lambda x: x.reshape((batch_size,) + x.shape[2:]), batch1
+                    lambda x: x.reshape((batch_size1,) + x.shape[2:]), batch1
                 )
                 shuffled_batch0 = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation0, axis=0), batch0
@@ -428,9 +502,8 @@ def make_train(config):
             # jax.debug.print('ratio0 {x}', x=r0["ratio0"])
             loss_info0 = jax.tree_map(lambda x: x.mean(), loss_info0)
             loss_info1 = jax.tree_map(lambda x: x.mean(), loss_info1)
-            print("metric0", metric0)
-            metric0 = jax.tree_map(lambda x: x.mean(), metric0)
-            metric1 = jax.tree_map(lambda x: x.mean(), metric1)
+            metric0 = jax.tree_map(lambda x: x[-2,:].reshape((config["NUM_ENVS"],1)), metric0)
+            metric1 = jax.tree_map(lambda x: x[-2,:].reshape((config["NUM_ENVS"], env.num_adversaries-1)), metric1)
             metric = {"agent0":{**metric0, **loss_info0,}, "agent1":{**metric1, **loss_info1,}, **r0}
             jax.experimental.io_callback(callback, None, metric)
             runner_state = (train_state0, train_state1, env_state, last_obs, rng)
@@ -452,7 +525,7 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        name="prosocial-no-sharing",
+        name=config["NAME"],
         tags=["IPPO", "FF"],
         config=config,
         mode=config["WANDB_MODE"],
@@ -474,52 +547,78 @@ def main(config):
 
         model_state = out['runner_state'][0]
         params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial0")
+        save_dir = os.path.join(config['SAVE_PATH'], env_name, "br-selfish")
         os.makedirs(save_dir, exist_ok=True)
         save_params(params, f'{save_dir}/{alg_name}.safetensors')
         
-        model_state = out['runner_state'][1]
-        params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
-        save_dir = os.path.join(config['SAVE_PATH'], env_name, "prosocial1")
-        os.makedirs(save_dir, exist_ok=True)
-        save_params(params, f'{save_dir}/{alg_name}.safetensors')
+        # model_state = out['runner_state'][1]
+        # params = jax.tree_map(lambda x: x[0], model_state.params) # save only params of the first run
+        # save_dir = os.path.join(config['SAVE_PATH'], env_name, "adversary1")
+        # os.makedirs(save_dir, exist_ok=True)
+        # save_params(params, f'{save_dir}/{alg_name}.safetensors')
         print(f'Parameters of first batch saved in {save_dir}/{alg_name}.safetensors')
-        
-        # train_state = out['runner_state'][0]
-        # save_args = orbax_utils.save_args_from_target(train_state)
-        # orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
-        # save_loc = 'tmp/orbax/checkpoint_rnn'
-        # orbax_checkpointer.save(save_loc, train_state, save_args=save_args)
 
     # logging
-    updates_x0 = jnp.arange(out["metrics"]["agent0"]["total_loss"][0].shape[0])
-    updates_x1 = jnp.arange(out["metrics"]["agent1"]["total_loss"][0].shape[0])
-    loss_table0 = jnp.stack([updates_x0, out["metrics"]["agent0"]["total_loss"].mean(axis=0), out["metrics"]["agent0"]["actor_loss"].mean(axis=0), out["metrics"]["agent0"]["critic_loss"].mean(axis=0), out["metrics"]["agent0"]["entropy"].mean(axis=0), out["metrics"]["agent0"]["ratio"].mean(axis=0)], axis=1)
-    loss_table1 = jnp.stack([updates_x1, out["metrics"]["agent1"]["total_loss"].mean(axis=0), out["metrics"]["agent1"]["actor_loss"].mean(axis=0), out["metrics"]["agent1"]["critic_loss"].mean(axis=0), out["metrics"]["agent1"]["entropy"].mean(axis=0), out["metrics"]["agent1"]["ratio"].mean(axis=0)], axis=1)        
-    loss_table0 = wandb.Table(data=loss_table0.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
-    loss_table1 = wandb.Table(data=loss_table1.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
-    updates_x0 = jnp.arange(out["metrics"]["agent0"]["returned_episode_returns"][0].shape[0])
-    updates_x1 = jnp.arange(out["metrics"]["agent1"]["returned_episode_returns"][0].shape[0])
-    returns_table0 = jnp.stack([updates_x0, out["metrics"]["agent0"]["returned_episode_returns"].mean(axis=0)], axis=1)
-    returns_table1 = jnp.stack([updates_x1, out["metrics"]["agent1"]["returned_episode_returns"].mean(axis=0)], axis=1)
-    returns_table0 = wandb.Table(data=returns_table0.tolist(), columns=["updates0", "returns0"])
-    returns_table1 = wandb.Table(data=returns_table1.tolist(), columns=["updates1", "returns1"])
+    print(out["metrics"]["agent0"]["episode_returns"].shape)
+    print(out["metrics"]["agent0"]["episode_returns"].mean(axis=0).shape)
+    print(out["metrics"]["agent1"]["episode_returns"].mean(axis=(0,2)))
+    # updates_x0 = jnp.arange(out["metrics"]["agent0"]["total_loss"][0].shape[0])
+    # updates_x1 = jnp.arange(out["metrics"]["agent1"]["total_loss"][0].shape[0])
+    # loss_table0 = jnp.stack([updates_x0, out["metrics"]["agent0"]["total_loss"].mean(axis=0), out["metrics"]["agent0"]["actor_loss"].mean(axis=0), out["metrics"]["agent0"]["critic_loss"].mean(axis=0), out["metrics"]["agent0"]["entropy"].mean(axis=0), out["metrics"]["agent0"]["ratio"].mean(axis=0)], axis=1)
+    # loss_table1 = jnp.stack([updates_x1, out["metrics"]["agent1"]["total_loss"].mean(axis=0), out["metrics"]["agent1"]["actor_loss"].mean(axis=0), out["metrics"]["agent1"]["critic_loss"].mean(axis=0), out["metrics"]["agent1"]["entropy"].mean(axis=0), out["metrics"]["agent1"]["ratio"].mean(axis=0)], axis=1)        
+    # loss_table0 = wandb.Table(data=loss_table0.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
+    # loss_table1 = wandb.Table(data=loss_table1.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])
+    #logging
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    updates_x = jnp.expand_dims(jnp.arange(out["metrics"]["agent0"]["episode_returns"].shape[1]),1)
+    returns_table = jnp.concatenate([updates_x, jnp.expand_dims(out["metrics"]["agent0"]["episode_returns"].mean(axis=(0,2))[:,0], 1)], axis=1)
+    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "BR_returns"])
     wandb.log({
-        "returns_plot0": wandb.plot.line(returns_table0, "updates0", "returns0", title="returns_vs_updates0"),
-        # "returns0": out["metrics"]["returned_episode_returns"][:,-1].mean(),
-        # "total_loss_plot0": wandb.plot.line(loss_table0, "updates", "total_loss", title="total_loss_vs_updates0"),
-        # "actor_loss_plot0": wandb.plot.line(loss_table0, "updates", "actor_loss", title="actor_loss_vs_updates0"),
-        # "critic_loss_plot0": wandb.plot.line(loss_table0, "updates", "critic_loss", title="critic_loss_vs_updates0"),
-        # "entropy_plot0": wandb.plot.line(loss_table0, "updates", "entropy", title="entropy_vs_updates0"),
-        # "ratio_plot0": wandb.plot.line(loss_table0, "updates", "ratio", title="ratio_vs_updates0"),
-        "returns_plot1": wandb.plot.line(returns_table1, "updates1", "returns1", title="returns_vs_updates1"),
-        # "returns1": out["metrics"]["returned_episode_returns"][:,-1].mean(),
-        # "total_loss_plot1": wandb.plot.line(loss_table1, "updates", "total_loss", title="total_loss_vs_updates1"),
-        # "actor_loss_plot1": wandb.plot.line(loss_table1, "updates", "actor_loss", title="actor_loss_vs_updates1"),
-        # "critic_loss_plot1": wandb.plot.line(loss_table1, "updates", "critic_loss", title="critic_loss_vs_updates1"),
-        # "entropy_plot1": wandb.plot.line(loss_table1, "updates", "entropy", title="entropy_vs_updates1"),
-        # "ratio_plot1": wandb.plot.line(loss_table1, "updates", "ratio", title="ratio_vs_updates1"),
-    })
+            # "returns_plot": wandb.plot.line_series(xs=jnp.arange(out["metrics"]["episode_returns"].shape[1]).tolist(), ys=out["metrics"]["episode_returns"].mean(axis=(0,2)).T.tolist(), keys = env.agents[:env.num_adversaries], title="Returns vs Updates", xname="Updates")
+            "BR_returns_plot": wandb.plot.line(returns_table, "updates", "BR_returns", title="BR_returns"),
+            # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+            # "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+            # "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+            # "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+            # "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+        })
+    # returns_table = jnp.concatenate([updates_x, out["metrics"]["episode_returns"].mean(axis=(0,2))], axis=1)
+    # returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates"] + env.agents[:env.num_adversaries])
+    for i in range(1, env.num_adversaries):
+        returns_table = jnp.concatenate([updates_x, jnp.expand_dims(out["metrics"]["agent1"]["episode_returns"].mean(axis=(0,2))[:,i], 1)], axis=1)
+        returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"+str(i)])
+        wandb.log({
+            # "returns_plot": wandb.plot.line_series(xs=jnp.arange(out["metrics"]["episode_returns"].shape[1]).tolist(), ys=out["metrics"]["episode_returns"].mean(axis=(0,2)).T.tolist(), keys = env.agents[:env.num_adversaries], title="Returns vs Updates", xname="Updates")
+            "returns"+str(i)+"_plot": wandb.plot.line(returns_table, "updates", "returns"+str(i), title="returns"+str(i)+"_vs_updates"),
+            # "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
+            # "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
+            # "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
+            # "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
+            # "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
+        })
+    
+    # updates_x0 = jnp.arange(out["metrics"]["agent0"]["episode_returns"][0].shape[0])
+    # updates_x1 = jnp.arange(out["metrics"]["agent1"]["episode_returns"][0].shape[0])
+    # returns_table0 = jnp.stack([updates_x0, out["metrics"]["agent0"]["episode_returns"].mean(axis=(0,2))], axis=1)
+    # returns_table1 = jnp.stack([updates_x1, out["metrics"]["agent1"]["episode_returns"].mean(axis=(0,2))], axis=1)
+    # returns_table0 = wandb.Table(data=returns_table0.tolist(), columns=["updates0", "returns0"])
+    # returns_table1 = wandb.Table(data=returns_table1.tolist(), columns=["updates1", "returns1"])
+    # wandb.log({
+    #     "returns_plot0": wandb.plot.line(returns_table0, "updates0", "returns0", title="returns_vs_updates0"),
+    #     # "returns0": out["metrics"]["episode_returns"][:,-1].mean(),
+    #     # "total_loss_plot0": wandb.plot.line(loss_table0, "updates", "total_loss", title="total_loss_vs_updates0"),
+    #     # "actor_loss_plot0": wandb.plot.line(loss_table0, "updates", "actor_loss", title="actor_loss_vs_updates0"),
+    #     # "critic_loss_plot0": wandb.plot.line(loss_table0, "updates", "critic_loss", title="critic_loss_vs_updates0"),
+    #     # "entropy_plot0": wandb.plot.line(loss_table0, "updates", "entropy", title="entropy_vs_updates0"),
+    #     # "ratio_plot0": wandb.plot.line(loss_table0, "updates", "ratio", title="ratio_vs_updates0"),
+    #     "returns_plot1": wandb.plot.line(returns_table1, "updates1", "returns1", title="returns_vs_updates1"),
+    #     # "returns1": out["metrics"]["episode_returns"][:,-1].mean(),
+    #     # "total_loss_plot1": wandb.plot.line(loss_table1, "updates", "total_loss", title="total_loss_vs_updates1"),
+    #     # "actor_loss_plot1": wandb.plot.line(loss_table1, "updates", "actor_loss", title="actor_loss_vs_updates1"),
+    #     # "critic_loss_plot1": wandb.plot.line(loss_table1, "updates", "critic_loss", title="critic_loss_vs_updates1"),
+    #     # "entropy_plot1": wandb.plot.line(loss_table1, "updates", "entropy", title="entropy_vs_updates1"),
+    #     # "ratio_plot1": wandb.plot.line(loss_table1, "updates", "ratio", title="ratio_vs_updates1"),
+    # })
     
     # import pdb;
 
