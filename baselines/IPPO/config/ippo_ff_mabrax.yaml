@@ -1,7 +1,7 @@
 "LR": 1e-3
 "NUM_ENVS": 64
 "NUM_STEPS": 300
-"TOTAL_TIMESTEPS": 1e7
+"TOTAL_TIMESTEPS": 5e7
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -19,6 +19,6 @@
 "DISABLE_JIT": False
 
 # WandB Params
-"ENTITY": "" 
+"ENTITY": "alex-plus" 
 "PROJECT": "jaxmarl-mabrax"
-"WANDB_MODE": "disabled"
+"WANDB_MODE": "online"

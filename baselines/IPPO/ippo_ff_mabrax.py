@@ -228,14 +228,23 @@ def make_train(config):
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (value_loss, loss_actor, entropy, ratio)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
                         train_state.params, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, total_loss
+                    
+                    loss_info = {
+                        "total_loss": total_loss[0],
+                        "actor_loss": total_loss[1][1],
+                        "critic_loss": total_loss[1][0],
+                        "entropy": total_loss[1][2],
+                        "ratio": total_loss[1][3],
+                    }
+                    
+                    return train_state, loss_info
 
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
@@ -257,11 +266,16 @@ def make_train(config):
                     ),
                     shuffled_batch,
                 )
-                train_state, total_loss = jax.lax.scan(
+                train_state, loss_info = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (train_state, traj_batch, advantages, targets, rng)
-                return update_state, total_loss
+                return update_state, loss_info
+
+            def callback(metric):
+                wandb.log(
+                    metric
+                )
 
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
@@ -270,7 +284,12 @@ def make_train(config):
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
-            
+
+            r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            metric = jax.tree_map(lambda x: x.mean(), metric)
+            metric = {**metric, **loss_info, **r0}
+            jax.experimental.io_callback(callback, None, metric)
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
 
@@ -301,22 +320,13 @@ def main(config):
         train_jit = jax.jit(make_train(config),  device=jax.devices()[config["DEVICE"]])
         out = train_jit(rng)
     
-    '''updates_x = jnp.arange(out["metrics"]["returned_episode_returns"].squeeze().shape[0])
-    print('updates x', updates_x.shape)
-    print('metrics shape', out["metrics"]["returned_episode_returns"].shape)
-    returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(-1).squeeze()], axis=1)
-    returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
-    wandb.log({
-        "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
-        "returns": out["metrics"]["returned_episode_returns"].mean()
-    })'''
     
-    mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
-    x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
-    plt.plot(x, mean_returns)
-    plt.xlabel("Timestep")
-    plt.ylabel("Return")
-    plt.savefig(f'mabrax_ippo_ret.png')
+    # mean_returns = out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1)
+    # x = np.arange(len(mean_returns)) * config["NUM_ACTORS"]
+    # plt.plot(x, mean_returns)
+    # plt.xlabel("Timestep")
+    # plt.ylabel("Return")
+    # plt.savefig(f'mabrax_ippo_ret.png')
     
     # import pdb; pdb.set_trace()
 
