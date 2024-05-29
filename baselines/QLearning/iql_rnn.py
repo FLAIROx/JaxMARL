@@ -152,6 +152,7 @@ def make_train(config, env):
     def train(rng):
 
         # INIT ENV
+        original_seed = rng[0]
         rng, _rng = jax.random.split(rng)
         wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
         test_env = CTRolloutManager(
@@ -451,18 +452,35 @@ def make_train(config, env):
                 "qvals": qvals.mean(),
                 "epsilon": eps_scheduler(train_state.n_updates),
             }
-            metrics.update(
-                jax.tree_map(
-                    lambda x: jnp.nanmean(
-                        jnp.where(
-                            infos["returned_episode"],
-                            x,
-                            jnp.nan,
+            if config.get("LOG_SEPARETELY", True):
+                for i, a in enumerate(env.agents):
+                    m = (
+                        jax.tree_map(
+                            lambda x: jnp.nanmean(
+                                jnp.where(
+                                    infos["returned_episode"][..., i],
+                                    x[..., i],
+                                    jnp.nan,
+                                )
+                            ),
+                            infos,
                         )
-                    ),
-                    infos,
+                    )
+                    m = {k + f"_{a}": v for k, v in m.items()}
+                    metrics.update(m)
+            else:
+                metrics.update(
+                    jax.tree_map(
+                        lambda x: jnp.nanmean(
+                            jnp.where(
+                                infos["returned_episode"],
+                                x,
+                                jnp.nan,
+                            )
+                        ),
+                        infos,
+                    )
                 )
-            )
 
             # update the test metrics
             if config.get("TEST_DURING_TRAINING", True):
@@ -478,10 +496,14 @@ def make_train(config, env):
             # report on wandb if required
             if config.get("WANDB_LOG_DURING_TRAINING"):
 
-                def callback(metrics):
+                def callback(metrics, original_seed):
+                    metrics.update({
+                        f'rng{int(original_seed)}/'+k:v
+                        for k, v in metrics.items() if 'test_returned_episode_returns' in k
+                    })
                     wandb.log(metrics)
 
-                jax.debug.callback(callback, metrics)
+                jax.debug.callback(callback, metrics, original_seed)
 
             runner_state = (train_state, buffer_state, test_state, rng)
 
@@ -503,7 +525,7 @@ def make_train(config, env):
                     _dones,
                 )
                 q_vals = q_vals.squeeze(axis=1)
-                valid_actions = wrapped_env.get_valid_actions(env_state.env_state)
+                valid_actions = test_env.get_valid_actions(env_state.env_state)
                 actions = get_greedy_actions(q_vals, batchify(valid_actions))
                 actions = unbatchify(actions)
                 obs, env_state, rewards, dones, infos = test_env.batch_step(
@@ -533,16 +555,34 @@ def make_train(config, env):
             step_state, (rewards, dones, infos) = jax.lax.scan(
                 _greedy_env_step, step_state, None, config["NUM_TEST_STEPS"]
             )
-            metrics = jax.tree_map(
-                lambda x: jnp.nanmean(
-                    jnp.where(
-                        infos["returned_episode"],
-                        x,
-                        jnp.nan,
+            if config.get("LOG_SEPARETELY", True):
+                metrics = {}
+                for i, a in enumerate(env.agents):
+                    m = (
+                        jax.tree_map(
+                            lambda x: jnp.nanmean(
+                                jnp.where(
+                                    infos["returned_episode"][..., i],
+                                    x[..., i],
+                                    jnp.nan,
+                                )
+                            ),
+                            infos,
+                        )
                     )
-                ),
-                infos,
-            )
+                    m = {k + f"_{a}": v for k, v in m.items()}
+                    metrics.update(m)
+            else:
+                metrics = jax.tree_map(
+                    lambda x: jnp.nanmean(
+                        jnp.where(
+                            infos["returned_episode"],
+                            x,
+                            jnp.nan,
+                        )
+                    ),
+                    infos,
+                )
             return metrics
 
         rng, _rng = jax.random.split(rng)
@@ -566,7 +606,7 @@ def single_run(config):
     print("Config:\n", OmegaConf.to_yaml(config))
 
     env_name = config["env"]["ENV_NAME"]
-    alg_name = config["alg"]["ALG_NAME"]
+    alg_name = 'iql_'+config["alg"]["ALG_NAME"]
 
     # overcooked needs a layout
     # smac init neeeds a scenario

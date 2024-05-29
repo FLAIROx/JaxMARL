@@ -1,14 +1,14 @@
 # experiment params
-"NUM_SEEDS": 1
+"NUM_SEEDS": 10
 "SEED": 0
 
 # perform hyp tune
-"HYP_TUNE": True
+"HYP_TUNE": False
 "EXP_TIME_LIMIT": 50000 # block the experiment after these seconds (include compilation time)
 
 # wandb params
 "ENTITY": "mttga"
-"PROJECT": "pqn_jaxmarl"
+"PROJECT": "jaxmarl-mpe"
 "WANDB_MODE": "online"
 
 # where to save the params (if None, will not save)
