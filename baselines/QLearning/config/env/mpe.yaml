@@ -1,2 +1,2 @@
-"ENV_NAME": "MPE_simple_tag_v3"
-"ENV_KWARGS": {}
+"ENV_NAME": "MPE_simple_v3"
+"ENV_KWARGS": {"action_type": 'Discrete'}

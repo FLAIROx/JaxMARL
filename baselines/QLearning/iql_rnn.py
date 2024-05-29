@@ -369,7 +369,7 @@ def make_train(config, env):
                         q_vals,
                         _actions[..., np.newaxis],
                         axis=-1,
-                    ).squeeze()  # (num_agents, timesteps, batch_size,)
+                    ).squeeze(-1)  # (num_agents, timesteps, batch_size,)
 
                     unavailable_actions = 1 - _avail_actions
                     valid_q_vals = q_vals - (unavailable_actions * 1e10)
@@ -379,7 +379,7 @@ def make_train(config, env):
                         q_next_target,
                         jnp.argmax(valid_q_vals, axis=-1)[..., np.newaxis],
                         axis=-1,
-                    ).squeeze()  # (num_agents, timesteps, batch_size,)
+                    ).squeeze(-1)  # (num_agents, timesteps, batch_size,)
 
                     target = (
                         _rewards[:,:-1]
@@ -452,7 +452,7 @@ def make_train(config, env):
                 "qvals": qvals.mean(),
                 "epsilon": eps_scheduler(train_state.n_updates),
             }
-            if config.get("LOG_SEPARETELY", True):
+            if config.get("LOG_SEPARATELY", False):
                 for i, a in enumerate(env.agents):
                     m = (
                         jax.tree_map(
@@ -555,7 +555,7 @@ def make_train(config, env):
             step_state, (rewards, dones, infos) = jax.lax.scan(
                 _greedy_env_step, step_state, None, config["NUM_TEST_STEPS"]
             )
-            if config.get("LOG_SEPARETELY", True):
+            if config.get("LOG_SEPARATELY", False):
                 metrics = {}
                 for i, a in enumerate(env.agents):
                     m = (

@@ -369,7 +369,7 @@ def make_train(config, env):
                         q_vals,
                         _actions[..., np.newaxis],
                         axis=-1,
-                    ).squeeze()  # (num_agents, timesteps, batch_size,)
+                    ).squeeze(-1)  # (num_agents, timesteps, batch_size,)
 
                     unavailable_actions = 1 - _avail_actions
                     valid_q_vals = q_vals - (unavailable_actions * 1e10)
@@ -379,7 +379,7 @@ def make_train(config, env):
                         q_next_target,
                         jnp.argmax(valid_q_vals, axis=-1)[..., np.newaxis],
                         axis=-1,
-                    ).squeeze()  # (num_agents, timesteps, batch_size,)
+                    ).squeeze(-1)  # (num_agents, timesteps, batch_size,)
 
                     vdn_target = (
                         minibatch.rewards["__all__"][:-1]
