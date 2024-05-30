@@ -21,4 +21,4 @@ parameters:
     values:
       - online
 program: baselines/IPPO/ippo_ff_mabrax.py
-project: jaxmarl-hanabi
+project: jaxmarl-mabrax
