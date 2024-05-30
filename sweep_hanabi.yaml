@@ -20,5 +20,5 @@ parameters:
   WANDB_MODE:
     values:
       - online
-program: baselines/MAPPO/ippo_rnn_hanabi.py
+program: baselines/IPPO/ippo_rnn_hanabi.py
 project: jaxmarl-hanabi
