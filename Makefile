@@ -9,7 +9,7 @@ endif
 
 # Set flag for docker run command
 MYUSER=alexr
-BASE_FLAGS=-it --rm -v ${PWD}:/home/workdir --shm-size 20G
+BASE_FLAGS=-it --rm -v ${PWD}:/home/$(MYUSER) --shm-size 20G
 RUN_FLAGS=$(GPUS) $(BASE_FLAGS)
 
 DOCKER_IMAGE_NAME = jaxmarl
