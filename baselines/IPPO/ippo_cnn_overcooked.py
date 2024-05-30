@@ -128,15 +128,10 @@ def get_rollout(params, config):
             action, env.agents, 1, env.num_agents
         )
 
-        env_act = {k: v.flatten() for k, v in env_act.items()}
-
-        pi_0, _ = network.apply(params, obs["agent_0"])
-        pi_1, _ = network.apply(params, obs["agent_1"])
-
-        actions = {"agent_0": pi_0.sample(seed=key_a0), "agent_1": pi_1.sample(seed=key_a1)}
+        env_act = {k: v.squeeze() for k, v in env_act.items()}
 
         # STEP ENV
-        obs, state, reward, done, info = env.step(key_s, state, actions)
+        obs, state, reward, done, info = env.step(key_s, state, env_act)
         done = done["__all__"]
 
         state_seq.append(state)
@@ -408,7 +403,7 @@ def single_run(config):
         tags=["IPPO", "FF"],
         config=config,
         mode=config["WANDB_MODE"],
-        name=f'ippo_cnn_overcooked_{layout_name}'
+        name=f'ippo_cnn_overcooked_tuned_{layout_name}'
     )
 
     rng = jax.random.PRNGKey(config["SEED"])
