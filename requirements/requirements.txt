@@ -7,7 +7,7 @@ optax==0.1.7
 dotmap==1.3.30
 evosax==0.1.5
 distrax==0.1.5
-brax==0.10.0
+brax==0.10.3
 gymnax==0.0.6
 safetensors==0.4.2
 flashbax==0.1.0
