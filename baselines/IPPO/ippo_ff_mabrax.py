@@ -283,7 +283,8 @@ def make_train(config, rng_init):
 
             def callback(metric):
                 wandb.log(
-                    metric
+                    metric,
+                    step=metric["update_step"],
                 )
 
             update_state = (train_state, traj_batch, advantages, targets, rng)
@@ -298,6 +299,7 @@ def make_train(config, rng_init):
             r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
             metric = jax.tree_map(lambda x: x.mean(), metric)
+            metric["update_step"] = update_count
             metric["env_step"] = update_count * config["NUM_STEPS"] * config["NUM_ENVS"]
             metric = {**metric, **loss_info, **r0}
             jax.experimental.io_callback(callback, None, metric)
