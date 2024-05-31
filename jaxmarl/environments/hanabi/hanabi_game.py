@@ -135,15 +135,6 @@ class HanabiGame(MultiAgentEnv):
     @partial(jax.jit, static_argnums=[0])
     def reset_game(self, key: chex.PRNGKey) -> State:
         """Create a random deck and return the first state of the game"""
-
-        def _gen_cards(aidx, unused):
-            """Generates one-hot card encodings given (color, rank) pairs"""
-            color, rank = shuffled_pairs[aidx]
-            card = jnp.zeros((self.num_colors, self.num_ranks))
-            card = card.at[color, rank].set(1)
-
-            return aidx + 1, card
-
         # get all possible (colour, rank) pairs, including repetitions given num_cards_of_rank
         colors = jnp.arange(self.num_colors)
         ranks = jnp.arange(self.num_ranks)
@@ -153,12 +144,17 @@ class HanabiGame(MultiAgentEnv):
         key, _key = jax.random.split(key)
         shuffled_pairs = jax.random.permutation(_key, color_rank_pairs, axis=0)
         # generate one-hot encoded deck
-        _, deck = lax.scan(_gen_cards, 0, None, self.deck_size)
+        deck = self._one_hot_encode_deck(shuffled_pairs)
 
         return self.get_first_state(key, deck)
 
     @partial(jax.jit, static_argnums=[0])
-    def reset_game_from_deck(self, key: chex.PRNGKey, deck:chex.PRNGKey) -> State:
+    def reset_game_from_deck_of_pairs(self, key: chex.PRNGKey, deck_of_pairs: chex.Array):
+        deck = self._one_hot_encode_deck(deck_of_pairs)
+        return self.get_first_state(key, deck)
+
+    @partial(jax.jit, static_argnums=[0])
+    def reset_game_from_deck(self, key: chex.PRNGKey, deck: chex.Array) -> State:
         return self.get_first_state(key, deck)
 
     @partial(jax.jit, static_argnums=[0])
@@ -337,14 +333,14 @@ class HanabiGame(MultiAgentEnv):
                 negative_rank_hints, self.num_ranks, axis=0
             ).reshape(cur_knowledge.shape)
 
-            color_mask = (color_hint_matches * jnp.ones_like(card_colors)).transpose()
-            rank_mask = (rank_hint_matches * jnp.ones_like(card_ranks)).transpose()
+            color_mask = (color_hint_matches * jnp.ones((self.num_colors, self.hand_size))).transpose()
+            rank_mask = (rank_hint_matches * jnp.ones((self.num_ranks, self.hand_size))).transpose()
 
-            color_hints = color_mask * (1 - hint_color * jnp.ones_like(card_colors))
+            color_hints = color_mask * (1 - hint_color * jnp.ones((self.hand_size, self.num_colors)))
             color_hints = jnp.repeat(color_hints, self.num_colors, axis=1).reshape(
                 cur_knowledge.shape
             )
-            rank_hints = rank_mask * (1 - hint_rank * jnp.ones_like(card_ranks))
+            rank_hints = rank_mask * (1 - hint_rank * jnp.ones((self.hand_size, self.num_ranks)))
             rank_hints = jnp.repeat(rank_hints, self.num_ranks, axis=0).reshape(
                 cur_knowledge.shape
             )
@@ -428,3 +424,17 @@ class HanabiGame(MultiAgentEnv):
             ),
             reward,
         )
+
+    @partial(jax.jit, static_argnums=[0])
+    def _one_hot_encode_deck(self, deck_of_pairs: chex.Array):
+        """Generates one-hot card encodings given (color, rank) pairs"""
+
+        def _gen_cards(aidx, _):
+            color, rank = deck_of_pairs[aidx]
+            card = jnp.zeros((self.num_colors, self.num_ranks))
+            card = card.at[color, rank].set(1)
+
+            return aidx + 1, card
+
+        _, deck = lax.scan(_gen_cards, 0, None, self.deck_size)
+        return deck

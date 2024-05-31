@@ -147,6 +147,13 @@ class HanabiEnv(HanabiGame):
         return obs, state
 
     @partial(jax.jit, static_argnums=[0])
+    def reset_from_deck_of_pairs(self, key: chex.PRNGKey, deck: chex.Array) -> Tuple[Dict, State]:
+        """Inject a deck from (color, rank) pairs."""
+        state = self.reset_game_from_deck_of_pairs(key, deck)
+        obs = self.get_obs(state, state, action=20)
+        return obs, state
+
+    @partial(jax.jit, static_argnums=[0])
     def step_env(
         self,
         key: chex.PRNGKey,
