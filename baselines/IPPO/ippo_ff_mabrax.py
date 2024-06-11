@@ -65,10 +65,6 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
-# def batchify(x: dict, agent_list, num_actors):
-#     x = jnp.stack([x[a] for a in agent_list])
-#     return x.reshape((num_actors, -1))
-
 def batchify(x: dict, agent_list, num_actors):
     max_dim = max([x[a].shape[-1] for a in agent_list])
     print('max_dim', max_dim)
@@ -100,7 +96,6 @@ def make_train(config, rng_init):
 
     # INIT NETWORK
     network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
-    # rng, _rng = jax.random.split(rng_init)
     max_dim = jnp.argmax(jnp.array([env.observation_space(a).shape[-1] for a in env.agents]))
     init_x = jnp.zeros(env.observation_space(env.agents[max_dim]).shape)
     network_params = network.init(rng_init, init_x)
