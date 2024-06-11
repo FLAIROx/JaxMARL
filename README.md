@@ -28,7 +28,7 @@
         <div class="row" align="centre">
             <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/coin_game.png?raw=true" alt="coin_game" width="20%">
             <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true" alt="MPE" width="20%">
-            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/switch_riddle.png?raw=true" alt="switch_riddle" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/454d3ee9737a54e4672e5258f8cc14dd5674fedd/docs/imgs/jaxnav-ma.gif" alt="jaxnav" width="20%">
             <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true" alt="SMAX" width="20%">
         </div>
     </div>
