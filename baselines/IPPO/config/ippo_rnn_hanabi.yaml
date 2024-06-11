@@ -19,6 +19,6 @@
 "SEED": 30
 
 # WandB Params
-"WANDB_MODE": "online"
-"ENTITY": "alex-plus"
-"PROJECT": "jaxmarl-hanabi"
+"WANDB_MODE": "disabled"
+"ENTITY": ""
+"PROJECT": ""

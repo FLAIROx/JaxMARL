@@ -19,6 +19,6 @@
 "DISABLE_JIT": False
 
 # WandB Params
-"ENTITY": "alex-plus" 
-"PROJECT": "jaxmarl-mabrax"
-"WANDB_MODE": "online"
+"ENTITY": "" 
+"PROJECT": ""
+"WANDB_MODE": "disabled"
