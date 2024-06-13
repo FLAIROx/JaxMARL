@@ -20,5 +20,5 @@
 
 # WandB Params
 "ENTITY": "" 
-"PROJECT": "jaxmarl-mabrax"
+"PROJECT": ""
 "WANDB_MODE": "disabled"

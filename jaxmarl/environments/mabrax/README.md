@@ -21,6 +21,12 @@ Each agent's observation vector is composed of the local state of the joints it 
 ## Action Spaces
 Each agent's action space is the input torques to the joints it controls. All environments have continuous actions in the range [-1.0, 1.0], except for `humanoid_9|8` where the range is [-0.4, 0.4].
 
+Note: the two agents in `humanoid_9|8` have different action space sizes. To pad the action spaces to be the same size pass `"homogenisation_method":"max"` to the envrionment. If using our config files, this would done as:
+```yaml
+"ENV_NAME": "humanoid_9|8" 
+"ENV_KWARGS": {"homogenisation_method":"max"}
+```
+
 
 ## Visualisation
 To visualise a trajectory in a Jupyter notebook, given a list of states, you can use the following code snippet:
