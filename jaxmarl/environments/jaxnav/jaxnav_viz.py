@@ -7,7 +7,7 @@ from typing import Optional, List
 from .jaxnav_env import JaxNav
 import jax.numpy as jnp
 
-class Visualizer(object):
+class JaxNavVisualizer(object):
     def __init__(self, 
                  env: JaxNav, 
                  obs_seq: List, 

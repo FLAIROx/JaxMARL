@@ -20,7 +20,7 @@ from jaxmarl.environments.spaces import Box, Discrete
 
 from .maps import make_map, Map
 from .jaxnav_utils import pol2cart, wrap, unitvec, cart2pol
-import jaxnav_graph_utils as _graph_utils
+import jaxmarl.environments.jaxnav.jaxnav_graph_utils as _graph_utils
 
 
 NUM_REWARD_COMPONENTS = 2

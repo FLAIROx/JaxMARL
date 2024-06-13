@@ -600,7 +600,7 @@ class Chicane4(JaxNavSingleton):
                          **env_kwargs)
 
 # REGISTRATION
-def make_singleton(env_id: str, **env_kwargs) -> JaxNavSingleton:  
+def make_jaxnav_singleton(env_id: str, **env_kwargs) -> JaxNavSingleton:  
     if env_id not in registered_singletons:
         raise ValueError(f"Singleton env_id: {env_id} not registered!")
     if env_id == "BlankTest":
@@ -665,12 +665,12 @@ registered_singletons = [
     "NarrowChicane2b",
 ]
 
-def make_singleton_collection(collection_id: str, **env_kwargs) -> Tuple[List[JaxNavSingleton], List[str]]:
+def make_jaxnav_singleton_collection(collection_id: str, **env_kwargs) -> Tuple[List[JaxNavSingleton], List[str]]:
     
     env_ids = registered_singleton_collections[collection_id]
     envs = []
     for env_id in env_ids:
-        envs.append(make_singleton(env_id, **env_kwargs))
+        envs.append(make_jaxnav_singleton(env_id, **env_kwargs))
         
     return envs, env_ids
 
