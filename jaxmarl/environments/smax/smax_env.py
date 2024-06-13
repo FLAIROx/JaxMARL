@@ -262,12 +262,12 @@ class SMAX(MultiAgentEnv):
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Environment-specific reset."""
         key, team_0_key, team_1_key = jax.random.split(key, num=3)
-        team_0_start = jnp.stack([jnp.array([8.0, 16.0])] * self.num_allies)
+        team_0_start = jnp.stack([jnp.array([self.map_width / 4, self.map_height / 2])] * self.num_allies)
         team_0_start_noise = jax.random.uniform(
             team_0_key, shape=(self.num_allies, 2), minval=-2, maxval=2
         )
         team_0_start = team_0_start + team_0_start_noise
-        team_1_start = jnp.stack([jnp.array([24.0, 16.0])] * self.num_enemies)
+        team_1_start = jnp.stack([jnp.array([self.map_width / 4 * 3, self.map_height / 2])] * self.num_enemies)
         team_1_start_noise = jax.random.uniform(
             team_1_key, shape=(self.num_enemies, 2), minval=-2, maxval=2
         )
