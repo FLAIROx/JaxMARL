@@ -23,3 +23,4 @@ matplotlib>=3.8.3
 pillow>=10.2.0
 pettingzoo>=1.24.3
 tqdm>=4.66.0
+scipy<=1.12
