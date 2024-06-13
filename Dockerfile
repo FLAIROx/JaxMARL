@@ -10,13 +10,14 @@ USER ${MYUSER}
 WORKDIR /home/${MYUSER}/
 COPY --chown=${MYUSER} --chmod=765 . .
 
-#jaxmarl from source if needed, all the requirements
 USER root
-RUN pip install -e .
 
 # install tmux
 RUN apt-get update && \
     apt-get install -y tmux
+
+#jaxmarl from source if needed, all the requirements
+RUN pip install -e .
 
 USER ${MYUSER}
 
