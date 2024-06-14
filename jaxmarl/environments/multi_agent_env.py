@@ -85,6 +85,11 @@ class MultiAgentEnv(object):
         """Action space for a given agent."""
         return self.action_spaces[agent]
 
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
+        """Returns the available actions for each agent."""
+        raise NotImplementedError
+
     @property
     def name(self) -> str:
         """Environment name."""
