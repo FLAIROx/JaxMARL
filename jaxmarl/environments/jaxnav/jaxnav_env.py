@@ -194,6 +194,9 @@ class JaxNav(MultiAgentEnv):
         self.info_by_agent = info_by_agent
         self.eval_solved_rate = self.get_eval_solved_rate_fn()
         
+        self.action_spaces = {a: self.agent_action_space() for a in self.agents}
+        self.observation_spaces = {a: self.agent_observation_space() for a in self.agents}
+        
     @property
     def map_obj(self) -> Map:
         """ Return map object """
@@ -649,15 +652,15 @@ class JaxNav(MultiAgentEnv):
             
     
     def agent_observation_space(self):
-        return Box(-jnp.inf, jnp.inf, (self.lidar_num_beams+5,))
+        return Box(-jnp.inf, jnp.inf, (self.lidar_num_beams+5,))  # NOTE hardcoded
     
-    def action_space(self, agent=None):  # NOTE assuming homogenous observation spaces, NOTE I think jnp.empty is fine
-        aa = self.agent_action_space()
-        return jnp.empty((self.num_agents, *aa.shape))
+    # def action_space(self, agent=None):   # NOTE assuming homogenous observation spaces, NOTE I think jnp.empty is fine
+    #     aa = self.agent_action_space()
+    #     return jnp.empty((self.num_agents, *aa.shape))
     
-    def observation_space(self, agent=None):
-        oo = self.agent_observation_space()
-        return jnp.empty((self.num_agents, *oo.shape))
+    # def observation_space(self, agent=None):
+    #     oo = self.agent_observation_space()
+    #     return jnp.empty((self.num_agents, *oo.shape))
     
     @partial(jax.jit, static_argnums=[0])
     def generate_scenario(self, key):
