@@ -5,13 +5,11 @@ TODO: replace this with proper unit tests.
 import jax
 # import pytest 
 
-from jaxmarl.environments.overcooked import Overcooked 
+from jaxmarl.environments.jaxnav import JaxNav 
 
-env = Overcooked()
+env = JaxNav(4)
 
 def test_random_rollout():
-
-    
 
     rng = jax.random.PRNGKey(0)
     rng, rng_reset = jax.random.split(rng)
@@ -24,6 +22,6 @@ def test_random_rollout():
         actions = {a: env.action_space(a).sample(rng_act[i]) for i, a in enumerate(env.agents)}
         _, state, _, _, _ = env.step(rng, state, actions)
         
-
+test_random_rollout()
     
     

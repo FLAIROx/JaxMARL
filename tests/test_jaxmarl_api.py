@@ -8,9 +8,7 @@ from jaxmarl import make
 def test_auto_reset_to_specific_state():
     
     def _test_leaf(x, y, outcome=True):
-        print('x', x, 'y', y)
         x = jnp.array_equal(x, y)
-        print(x)
         assert x==outcome
     
     env = make("MPE_simple_spread_v3")
@@ -20,7 +18,6 @@ def test_auto_reset_to_specific_state():
     
     _, state1 = env.reset(rng_reset1)
     _, state2 = env.reset(rng_reset2)
-    print('state'   , state1)
     # normal step
     rng, rng_act = jax.random.split(rng)
     rng_act = jax.random.split(rng_act, env.num_agents)
@@ -37,10 +34,5 @@ def test_auto_reset_to_specific_state():
     rng_act = jax.random.split(rng_act, env.num_agents)
     actions = {a: env.action_space(a).sample(rng_act[i]) for i, a in enumerate(env.agents)}
     _, next_state, _, dones, _ = env.step(rng, state1, actions, reset_state=state2)
-    print(dones)
     assert dones["__all__"]
     jax.tree_map(_test_leaf, state2, next_state)
-    
-    
-    
-test_auto_reset_to_specific_state()
