@@ -9,9 +9,6 @@ def run_script(script_path, *args):
 def test_script_with_arguments():
     script_path = os.path.join('baselines/MAPPO/mappo_rnn_smax.py')
     result = run_script(script_path, 'TOTAL_TIMESTEPS=1e4', 'WANDB_MODE=disabled')
-    print('result ', result.returncode)
     assert result.returncode == 0
-    # assert "Arguments received: ['arg1', 'arg2', 'arg3']" in result.stdout
-
 
 test_script_with_arguments()
