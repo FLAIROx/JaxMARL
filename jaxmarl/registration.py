@@ -26,6 +26,7 @@ from .environments import (
     Hanabi,
     Overcooked,
     CoinGame,
+    JaxNav,
 )
 
 
@@ -105,6 +106,10 @@ def make(env_id: str, **env_kwargs):
     # 8. Coin Game
     elif env_id == "coin_game":
         env = CoinGame(**env_kwargs)
+        
+    # 9. JaxNav
+    elif env_id == "jaxnav":
+        env = JaxNav(**env_kwargs)
 
     return env
 
@@ -136,4 +141,5 @@ registered_envs = [
     "hanabi",
     "overcooked",
     "coin_game",
+    "jaxnav",
 ]

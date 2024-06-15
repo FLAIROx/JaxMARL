@@ -35,4 +35,5 @@ All contributions will fall under the project's original license.
 ## Roadmap
 
 Some improvements we would like to see implemented:
-- [ ] improved RNN implementations. In the current implementation, the hidden size is dependent on "NUM_STEPS", it should be made independent. Speed could also be improved with an S5 architecture.
+- [x] improved RNN implementations. In the current implementation, the hidden size is dependent on "NUM_STEPS", it should be made independent. 
+- [ ] S5 RNN architecture.
