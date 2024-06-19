@@ -447,6 +447,7 @@ class HanabiGame(MultiAgentEnv):
         _, deck = lax.scan(_gen_cards, 0, None, self.deck_size)
         return deck
 
+    @partial(jax.jit, static_argnums=[0])
     def _get_target_player_and_hint_index(self, aidx: int, action: int):
         """
         Determines the target player and the hint index based on the action of the current agent.
