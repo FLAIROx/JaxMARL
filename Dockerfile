@@ -1,15 +1,25 @@
 FROM nvcr.io/nvidia/jax:23.10-py3
 
-# default workdir
-WORKDIR /home/workdir
-COPY . .
+# Create user
+ARG UID
+ARG MYUSER
+RUN useradd -u $UID --create-home ${MYUSER}
+USER ${MYUSER}
 
-#jaxmarl from source if needed, all the requirements
-RUN pip install -e .
+# default workdir
+WORKDIR /home/${MYUSER}/
+COPY --chown=${MYUSER} --chmod=765 . .
+
+USER root
 
 # install tmux
 RUN apt-get update && \
     apt-get install -y tmux
+
+#jaxmarl from source if needed, all the requirements
+RUN pip install -e .
+
+USER ${MYUSER}
 
 #disabling preallocation
 RUN export XLA_PYTHON_CLIENT_PREALLOCATE=false
@@ -23,4 +33,4 @@ RUN export TF_FORCE_GPU_ALLOW_GROWTH=true
 #for secrets and debug
 ENV WANDB_API_KEY=""
 ENV WANDB_ENTITY=""
-RUN git config --global --add safe.directory /home/workdir
+RUN git config --global --add safe.directory /home/${MYUSER}

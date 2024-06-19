@@ -68,7 +68,7 @@ def get_injected_score(deck, actions):
         )
         return new_env_state, (reward, done)
 
-    obs, env_state = env.reset_from_deck(jax.random.PRNGKey(0), deck)
+    obs, env_state = env.reset_from_deck(deck)
     _, (rewards, dones) = jax.lax.scan(_env_step, env_state, actions)
 
     def first_episode_returns(rewards, dones):

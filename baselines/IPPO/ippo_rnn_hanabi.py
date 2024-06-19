@@ -14,18 +14,14 @@ import optax
 from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
-import orbax.checkpoint
-from flax.training import orbax_utils
 import distrax
 import jaxmarl
 from jaxmarl.wrappers.baselines import LogWrapper
 import wandb
 import functools
-import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
 import os 
-os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -367,7 +363,8 @@ def make_train(config):
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
                         **metric["loss"],
-                    }
+                    },
+                    step=metric["update_steps"],
                 )
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric)

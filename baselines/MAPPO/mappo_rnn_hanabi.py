@@ -11,6 +11,9 @@ import optax
 from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
 import chex
+import os
+from safetensors.flax import save_file
+from flax.traverse_util import flatten_dict
 
 from flax.training.train_state import TrainState
 import distrax
@@ -275,7 +278,10 @@ def make_train(config):
                 env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
 
                 # VALUE
-                world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+                # output of wrapper is (num_envs, num_agents, world_state_size)
+                # swap axes to (num_agents, num_envs, world_state_size) before reshaping to (num_actors, world_state_size)
+                world_state = last_obs["world_state"].swapaxes(0,1)  
+                world_state = world_state.reshape((config["NUM_ACTORS"],-1))
                 cr_in = (
                     world_state[None, :],
                     last_done[np.newaxis, :],
@@ -313,7 +319,8 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_states, env_state, last_obs, last_done, hstates, rng = runner_state
       
-            last_world_state = last_obs["world_state"].reshape((config["NUM_ACTORS"],-1))
+            last_world_state = last_obs["world_state"].swapaxes(0,1)  
+            last_world_state = last_world_state.reshape((config["NUM_ACTORS"],-1))
             cr_in = (
                 last_world_state[None, :],
                 last_done[np.newaxis, :],
@@ -541,7 +548,7 @@ def make_train(config):
 def main(config):
 
     config = OmegaConf.to_container(config)
-    wandb.init(
+    run = wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=["MAPPO", "RNN", config["ENV_NAME"]],
@@ -552,7 +559,24 @@ def main(config):
     with jax.disable_jit(False):
         train_jit = jax.jit(make_train(config)) 
         out = train_jit(rng)
+        
+    # save params
+    if config['SAVE_PATH'] is not None:
 
+        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+            flattened_dict = flatten_dict(params, sep=',')
+            save_file(flattened_dict, filename)
+
+        params = out['runner_state'][0][0][0].params
+        save_dir = os.path.join(config['SAVE_PATH'], run.project, run.name)
+        os.makedirs(save_dir, exist_ok=True)
+        save_params(params, f'{save_dir}/model.safetensors')
+        print(f'Parameters of first batch saved in {save_dir}/model.safetensors')
+
+        # upload this to wandb as an artifact   
+        artifact = wandb.Artifact(f'{run.name}-checkpoint', type='checkpoint')
+        artifact.add_file(f'{save_dir}/model.safetensors')
+        artifact.save()
     
 if __name__=="__main__":
     main()

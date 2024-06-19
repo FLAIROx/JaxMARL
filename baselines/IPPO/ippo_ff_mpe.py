@@ -287,7 +287,7 @@ def make_train(config):
             rng = update_state[-1]
 
             r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
-            jax.debug.print('ratio0 {x}', x=r0["ratio0"])
+            # jax.debug.print('ratio0 {x}', x=r0["ratio0"])
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
             metric = jax.tree_map(lambda x: x.mean(), metric)
             metric = {**metric, **loss_info, **r0}
