@@ -498,6 +498,7 @@ class HanabiGame(MultiAgentEnv):
 
         return target_player, hint_idx
 
+    @partial(jax.jit, static_argnums=[0])
     def _is_discard(self, action: int):
         """
         Determines is the action is the discard action where action is the integer value of the action.
@@ -508,6 +509,7 @@ class HanabiGame(MultiAgentEnv):
             action <= self.discard_action_range[-1],
         )
 
+    @partial(jax.jit, static_argnums=[0])
     def _is_play(self, action: int):
         """
         Determines is the action is the discard action where action is the integer value of the action.
@@ -518,6 +520,7 @@ class HanabiGame(MultiAgentEnv):
             action <= self.play_action_range[-1],
         )
 
+    @partial(jax.jit, static_argnums=[0])
     def _is_hint_color(self, action: int):
         """
         Determines is the action is the play action where action is the integer value of the action.
@@ -528,6 +531,7 @@ class HanabiGame(MultiAgentEnv):
             action <= self.color_action_range[-1],
         )
 
+    @partial(jax.jit, static_argnums=[0])
     def _is_hint_rank(self, action: int):
         """
         Determines is the action is the play action where action is the integer value of the action.
@@ -538,6 +542,7 @@ class HanabiGame(MultiAgentEnv):
             action <= self.rank_action_range[-1],
         )
 
+    @partial(jax.jit, static_argnums=[0])
     def _is_hint(self, action: int):
         """
         Determines is the action is the hint action where action is the integer value of the action.
@@ -547,6 +552,7 @@ class HanabiGame(MultiAgentEnv):
             self._is_hint_rank(action),
         )
 
+    @partial(jax.jit, static_argnums=[0])
     def _is_play_or_discard(self, action: int):
         """
         Determines if the action is either a play or discard action. Action is in the integer representation.
