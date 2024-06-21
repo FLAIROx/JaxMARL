@@ -36,6 +36,7 @@ class CNN(nn.Module):
 
     @nn.compact
     def __call__(self, x, train=False):
+
         activation = nn.relu
 
         if self.norm_type == "layer_norm":
@@ -44,7 +45,7 @@ class CNN(nn.Module):
             normalize = lambda x: nn.BatchNorm(use_running_average=not train)(x)
         else:
             normalize = lambda x: x
-        
+
         x = nn.Conv(
             features=32,
             kernel_size=(5, 5),
@@ -65,13 +66,12 @@ class CNN(nn.Module):
         x = activation(x)
         x = x.reshape((x.shape[0], -1))  # Flatten
 
-        x = nn.Dense(
-            features=64
-        )(x)
+        x = nn.Dense(features=64)(x)
         x = normalize(x)
         x = activation(x)
 
         return x
+
 
 class QNetwork(nn.Module):
     action_dim: int
@@ -93,7 +93,7 @@ class QNetwork(nn.Module):
             x = nn.BatchNorm(use_running_average=not train)(x)
         else:
             x_dummy = nn.BatchNorm(use_running_average=not train)(x)
-        
+
         embedding = CNN(norm_type=self.norm_type)(x, train=train)
         x = nn.Dense(self.hidden_size)(embedding)
         x = normalize(x)
@@ -132,9 +132,7 @@ def make_train(config, env):
     )
 
     rew_shaping_anneal = optax.linear_schedule(
-        init_value=1.0,
-        end_value=0.,
-        transition_steps=config["REW_SHAPING_HORIZON"]
+        init_value=1.0, end_value=0.0, transition_steps=config["REW_SHAPING_HORIZON"]
     )
 
     def get_greedy_actions(q_vals, valid_actions):
@@ -187,12 +185,13 @@ def make_train(config, env):
             env,
             batch_size=config["NUM_TEST_EPISODES"],
             preprocess_obs=config["PREPROCESS_OBS"],
-        )  # batched env for testing (has different batch size)
+        )
 
         # INIT NETWORK AND OPTIMIZER
         network = QNetwork(
             action_dim=wrapped_env.max_action_space,
             hidden_size=config["HIDDEN_SIZE"],
+            norm_type=config["NORM_TYPE"],
             norm_input=config["NORM_INPUT"],
         )
 
@@ -207,16 +206,11 @@ def make_train(config, env):
                 * config["NUM_MINIBATCHES"]
                 * config["NUM_UPDATES"],
             )
-
             lr = lr_scheduler if config.get("LR_LINEAR_DECAY", False) else config["LR"]
-
-            if config.get("MAX_GRAD_NORM", None):
-                tx = optax.chain(
-                    optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
-                    optax.radam(learning_rate=lr),
-                )
-            else:
-                tx = optax.radam(learning_rate=lr)
+            tx = optax.chain(
+                optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
+                optax.radam(learning_rate=lr),
+            )
 
             train_state = CustomTrainState.create(
                 apply_fn=network.apply,
@@ -263,19 +257,28 @@ def make_train(config, env):
 
                 # add shaped reward
                 shaped_reward = info.pop("shaped_reward")
-                shaped_reward['__all__'] = batchify(shaped_reward).sum(axis=0)
-                reward = jax.tree_map(lambda x,y: x+y*rew_shaping_anneal(train_state.timesteps), reward, shaped_reward)
+                shaped_reward["__all__"] = batchify(shaped_reward).sum(axis=0)
+                reward = jax.tree_map(
+                    lambda x, y: x + y * rew_shaping_anneal(train_state.timesteps),
+                    reward,
+                    shaped_reward,
+                )
 
                 # get the next available action
-                next_avail_actions = wrapped_env.get_valid_actions(new_env_state.env_state)
+                next_avail_actions = wrapped_env.get_valid_actions(
+                    new_env_state.env_state
+                )
 
                 transition = Transition(
                     obs=batchify(last_obs),  # (num_agents, num_envs, obs_shape)
                     action=batchify(new_action),  # (num_agents, num_envs,)
-                    reward=reward["__all__"][np.newaxis],  # (num_envs,)
+                    reward=config.get("REW_SCALE", 1)
+                    * reward["__all__"][np.newaxis],  # (num_envs,)
                     done=new_done["__all__"][np.newaxis],  # (num_envs,)
                     next_obs=batchify(new_obs),  # (num_agents, num_envs, obs_shape)
-                    next_avail_actions=batchify(next_avail_actions),  # (num_agents, num_envs, num_actions)
+                    next_avail_actions=batchify(
+                        next_avail_actions
+                    ),  # (num_agents, num_envs, num_actions)
                     q_vals=q_vals,  # (num_agents, num_envs, num_actions)
                 )
                 return (new_obs, new_env_state, rng), (transition, info)
@@ -298,21 +301,23 @@ def make_train(config, env):
 
             def _compute_targets(q_vals, reward, done):
                 def _get_target(lambda_returns_and_next_q, rew_q_done):
-                    reward, q, done  = rew_q_done
+                    reward, q, done = rew_q_done
                     lambda_returns, next_q = lambda_returns_and_next_q
-                    target_bootstrap = reward + config["GAMMA"]*(1-done)*next_q
+                    target_bootstrap = reward + config["GAMMA"] * (1 - done) * next_q
                     delta = lambda_returns - next_q
-                    lambda_returns = target_bootstrap + config["GAMMA"]*config["LAMBDA"]*delta
-                    lambda_returns = (1-done)*lambda_returns + done*reward
+                    lambda_returns = (
+                        target_bootstrap + config["GAMMA"] * config["LAMBDA"] * delta
+                    )
+                    lambda_returns = (1 - done) * lambda_returns + done * reward
                     next_q = next_q = jnp.max(q, axis=-1)
                     return (lambda_returns, next_q), lambda_returns
 
-                last_q = jnp.max(q_vals[-1], axis=-1) * (1-done[-1])
-                lambda_returns = reward[-1] + config["GAMMA"]*last_q
+                last_q = jnp.max(q_vals[-1], axis=-1) * (1 - done[-1])
+                lambda_returns = reward[-1] + config["GAMMA"] * last_q
                 _, targets = jax.lax.scan(
                     _get_target,
                     (lambda_returns, last_q),
-                    jax.tree_map(lambda x:x[:-1], (reward, q_vals, done)),
+                    jax.tree_map(lambda x: x[:-1], (reward, q_vals, done)),
                     reverse=True,
                 )
                 return targets
@@ -321,15 +326,17 @@ def make_train(config, env):
             # get a final transition
             _, (last_transitions, last_infos) = _step_env((*expl_state, _rng), None)
             target_transitions = jax.tree_map(
-                lambda x, y: jnp.concatenate((x, y[np.newaxis, :]), axis=0), 
+                lambda x, y: jnp.concatenate((x, y[np.newaxis, :]), axis=0),
                 transitions,
-                last_transitions
+                last_transitions,
             )
             lambda_targets = _compute_targets(
-                target_transitions.q_vals.sum(axis=1), # vdn sum
-                target_transitions.reward[:, 0], # _all_
-                target_transitions.done[:, 0], # _all_
-            ).reshape(-1) # (num_steps*num_envs)
+                target_transitions.q_vals.sum(axis=1),  # vdn sum
+                target_transitions.reward[:, 0],  # _all_
+                target_transitions.done[:, 0],  # _all_
+            ).reshape(
+                -1
+            )  # (num_steps*num_envs)
 
             # NETWORKS UPDATE
             def _learn_epoch(carry, _):
@@ -345,14 +352,18 @@ def make_train(config, env):
                     minibatch, target = minibatch_and_target
 
                     def _loss_fn(params):
-                        agent_in = minibatch.obs.reshape(-1, *minibatch.obs.shape[2:]) # (num_agents*batch_size, obs_shape)
+                        agent_in = minibatch.obs.reshape(
+                            -1, *minibatch.obs.shape[2:]
+                        )  # (num_agents*batch_size, obs_shape)
                         q_vals, updates = network.apply(
                             {"params": params, "batch_stats": train_state.batch_stats},
                             agent_in,
                             train=True,
-                            mutable=["batch_stats"]
+                            mutable=["batch_stats"],
                         )  # (num_agents*batch_size, num_actions)
-                        q_vals = q_vals.reshape(env.num_agents, -1, wrapped_env.max_action_space)  # (num_agents, batch_size, num_actions)
+                        q_vals = q_vals.reshape(
+                            env.num_agents, -1, wrapped_env.max_action_space
+                        )  # (num_agents, batch_size, num_actions)
 
                         chosen_action_qvals = jnp.take_along_axis(
                             q_vals,
@@ -361,29 +372,14 @@ def make_train(config, env):
                         ).squeeze(
                             axis=-1
                         )  # (num_agents, batch_size,)
-                        vdn_chosen_action_qvals = jnp.sum(chosen_action_qvals, axis=0) # (batch_size)
+                        vdn_chosen_action_qvals = jnp.sum(
+                            chosen_action_qvals, axis=0
+                        )  # (batch_size)
 
-                        if config.get("CLIP_EPS", None):
-                            q_vals_clipped = minibatch.q_vals + (
-                                q_vals - jax.lax.stop_gradient(q_vals)
-                            ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
-                            chosen_action_qvals_clipped = jnp.take_along_axis(
-                                q_vals_clipped,
-                                jnp.expand_dims(minibatch.action, axis=-1),
-                                axis=-1,
-                            ).squeeze(
-                                axis=-1
-                            )  # (num_agents, batch_size,)
-                            vdn_chosen_action_qvals_clipped = jnp.sum(chosen_action_qvals_clipped, axis=0) # (batch_size)
-
-                            td_loss = jnp.square(vdn_chosen_action_qvals - target)
-                            td_loss_clipped = jnp.square(vdn_chosen_action_qvals_clipped - target)
-                            loss = 0.5 * jnp.maximum(td_loss, td_loss_clipped).mean()
-
-                        else:
-                            loss = jnp.mean(
-                                (vdn_chosen_action_qvals - jax.lax.stop_gradient(target)) ** 2
-                            )
+                        loss = jnp.mean(
+                            (vdn_chosen_action_qvals - jax.lax.stop_gradient(target))
+                            ** 2
+                        )
 
                         return loss, (updates, chosen_action_qvals)
 
@@ -401,11 +397,15 @@ def make_train(config, env):
                     # x: (num_steps, num_agents, num_envs, ...)
                     x = jnp.swapaxes(x, 1, 2)  # num_steps, num_envs, num_agents...
                     x = x.reshape(-1, *x.shape[2:])  # num_steps*num_envs, num_agents
-                    x = jax.random.permutation(rng, x, axis=0)  # shuffle the transitions
+                    x = jax.random.permutation(
+                        rng, x, axis=0
+                    )  # shuffle the transitions
                     x = x.reshape(
                         config["NUM_MINIBATCHES"], -1, *x.shape[1:]
                     )  # num_minibatches, num_envs/num_minbatches, num_agents, ...
-                    x = jnp.swapaxes(x, 1, 2)  # num_minibatches, num_agents, num_envs/num_minbatches, ...
+                    x = jnp.swapaxes(
+                        x, 1, 2
+                    )  # num_minibatches, num_agents, num_envs/num_minbatches, ...
                     return x
 
                 rng, _rng = jax.random.split(rng)
@@ -430,13 +430,7 @@ def make_train(config, env):
 
             train_state = train_state.replace(n_updates=train_state.n_updates + 1)
             metrics = {
-                "returned_episode_returns": jnp.nanmean(
-                    jnp.where(
-                        infos["returned_episode"],
-                        infos["returned_episode_returns"],
-                        jnp.nan,
-                    )
-                ),
+                "returned_episode_returns": infos["returned_episode_returns"].mean(),
                 "env_step": train_state.timesteps,
                 "update_steps": train_state.n_updates,
                 "grad_steps": train_state.grad_steps,
@@ -465,7 +459,7 @@ def make_train(config, env):
 
             runner_state = (train_state, tuple(expl_state), test_state, rng)
 
-            return runner_state, None
+            return runner_state, metrics
 
         def get_greedy_metrics(rng, train_state):
             if not config.get("TEST_DURING_TRAINING", True):
@@ -571,7 +565,6 @@ def single_run(config):
         outs = jax.jit(make_train(config["alg"], env))(rng)
 
 
-
 def tune(default_config):
     """Hyperparameter sweep with wandb."""
     import copy
@@ -582,10 +575,14 @@ def tune(default_config):
         default_config["env"]["ENV_KWARGS"]["layout"] = overcooked_layouts[
             default_config["env"]["ENV_KWARGS"]["layout"]
         ]
-        env = make(default_config["env"]["ENV_NAME"], **default_config["env"]["ENV_KWARGS"])
+        env = make(
+            default_config["env"]["ENV_NAME"], **default_config["env"]["ENV_KWARGS"]
+        )
         env = LogWrapper(env)
     else:
-        env = make(default_config["env"]["ENV_NAME"], **default_config["env"]["ENV_KWARGS"])
+        env = make(
+            default_config["env"]["ENV_NAME"], **default_config["env"]["ENV_KWARGS"]
+        )
         env = LogWrapper(env)
 
     def wrapped_make_train():
@@ -617,25 +614,21 @@ def tune(default_config):
         "parameters": {
             "LR": {
                 "values": [
-                    0.001,
-                    0.0005,
+                    0.00025,
                     0.0001,
+                    0.000075,
                     0.00005,
+                    0.000025,
                     0.00001,
+                    0.0000075,
                 ]
             },
-            "NUM_ENVS": {"values": [32, 64, 128, 256]},
-            "NUM_STEPS": {"values": [1, 8, 16, 32, 64, 128, 256]},
-            "NUM_MINIBATCHES": {"values": [1, 2, 4, 8, 16]},
-            "NUM_EPOCHS": {"values": [1, 2, 3, 4]},
-            "LR_DECAY": {"values": [True, False]},
-            "NORM_INPUT": {"values": [True, False]},
-            #"NORM_TYPE": {"values": ["none", "batch_norm", "layer_norm"]},
-            "LAMBDA": {"values": [0.3, 0.5, 0.7, 0.9]},
-            "EPS_FINISH": {"values": [0.1, 0.01, 0.001]},
-            "EPS_DECAY": {"values": [0.2, 0.1, 0.01]},
-            #"HIDDEN_SIZE": {"values": [512, 1024]},
-            #"N_LAYERS": {"values": [3, 4, 5, 6]},
+            "NUM_ENVS": {"values": [32, 64]},
+            "NUM_STEPS": {"values": [16, 32, 64, 128]},
+            "NUM_MINIBATCHES": {"values": [1, 2, 4, 8, 16, 32]},
+            "NUM_EPOCHS": {"values": [1, 2, 3, 4, 5]},
+            "HIDDEN_SIZE": {"values": [64, 128, 256]},
+            "LAMBDA": {"values": [0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]},
         },
     }
 
@@ -643,7 +636,7 @@ def tune(default_config):
     sweep_id = wandb.sweep(
         sweep_config, entity=default_config["ENTITY"], project=default_config["PROJECT"]
     )
-    wandb.agent("kg7kd4az", wrapped_make_train, count=1000)
+    wandb.agent("uj00phr7", wrapped_make_train, count=1000)
 
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
