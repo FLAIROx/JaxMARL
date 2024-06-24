@@ -20,7 +20,7 @@ class HanabiEnv(HanabiGame):
         num_agents=2,
         num_colors=5,
         num_ranks=5,
-        hand_size=5,
+        hand_size=None,
         max_info_tokens=8,
         max_life_tokens=3,
         num_cards_of_rank=np.array([3, 2, 2, 2, 1]),
@@ -29,6 +29,10 @@ class HanabiEnv(HanabiGame):
         observation_spaces=None,
         num_moves=None,
     ):
+        # default hand size is 5 for 2-3 players and 4 for 4-5 players
+        if hand_size is None:
+            hand_size = 5 if num_agents < 4 else 4
+
         super().__init__(
             num_agents=num_agents,
             num_colors=num_colors,

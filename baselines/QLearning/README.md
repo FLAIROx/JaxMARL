@@ -8,16 +8,22 @@ Pure JAX implementations of:
 * TransfQMix (Transformers for Leveraging the Graph Structure of MARL Problems)
 * SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)
 
-The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning)
+The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning). PQN follows[purejaxql](https://github.com/mttga/purejaxql). 
 
 
 ```
-❗The implementations were tested in the following environments:
+❗
+Standard algorithms (iql, vdn, qmix) support:
 - MPE
 - SMAX
-```
+- Overcooked
 
-WIP for Hanabi and Overcooked.
+PQN supports:
+- MPE
+- SMAX
+- Hanabi
+- Overcooked
+```
 
 ## ⚙️ Implementation Details
 
@@ -47,25 +53,32 @@ Please modify this wrapper for your needs.
 If you have cloned JaxMARL and you are in the repository root, you can run the algorithms as scripts. You will need to specify which parameter configurations will be loaded by Hydra by choosing them (or adding yours) in the config folder. Below are some examples:
 
 ```bash
-# IQL with MPE speaker-listener
-python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_speaker_listener
-# VDN with MPE spread
-python baselines/QLearning/vdn.py +alg=vdn_mpe +env=mpe_spread
+# vdn rnn in in mpe spread
+python baselines/QLearning/vdn_rnn.py +alg=ql_rnn_mpe
+# independent IQLs rnn in competetive simple_tag (predator-prey)
+python baselines/QLearning/iql_rnn.py +alg=ql_rnn_mpe alg.ENV_NAME=MPE_simple_tag_v3
 # QMix with SMAX
 python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
-# VDN with hanabi
-python baselines/QLearning/vdn.py +alg=qlearn_hanabi +env=hanabi
-# QMix against pretrained agents
-python baselines/QLearning/qmix_pretrained.py +alg=qmix_mpe +env=mpe_tag_pretrained
+# VDN overcooked with a different layout
+python baselines/QLearning/vdn_cnn_overcooked.py +alg=ql_cnn_overcooked alg.ENV_KWARGS.LAYOUT=counter_circuit
 # TransfQMix
 python baselines/QLearning/transf_qmix.py +alg=transf_qmix_smax +env=smax
+
+# pqn feed-forward with mpe
+python baselines/QLearning/pqn_vdn_ff.py +alg=pqn_vdn_ff_mpe
+# pqn feed-forward with hanabi
+python baselines/QLearning/pqn_vdn_ff.py +alg=pqn_vdn_ff_hanabi
+# pqn CNN with overcooked
+python baselines/QLearning/pqn_vdn_cnn_overcooked.py +alg=pqn_vdn_cnn_overcooked
+# pqn rnn with mpe
+python baselines/QLearning/pqn_vdn_rnn.py +alg=pqn_vdn_cnn_overcooked
 ```
 
 Notice that with Hydra, you can modify parameters on the go in this way:
 
 ```bash
 # Run IQL without parameter sharing from the command line
-python baselines/QLearning/iql.py +alg=iql_mpe +env=mpe_spread alg.PARAMETERS_SHARING=False
+python baselines/QLearning/iql_rnn.py +alg=ql_rnn_mpe alg.LR=0.001
 ```
 
 **❗Note on Transformers**: TransfQMix currently supports only MPE_Spread and SMAX. You will need to wrap the observation vectors into matrices to use transformers in other environments. See: ```jaxmarl.wrappers.transformers```

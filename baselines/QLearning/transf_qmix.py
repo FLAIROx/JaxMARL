@@ -934,25 +934,25 @@ def single_run(config):
 
     print('Config:\n', OmegaConf.to_yaml(config))
 
-    env_name = config["env"]["ENV_NAME"]
+    env_name = config["ENV_NAME"]
     alg_name = f'transf_qmix'
     
     # smax init neeeds a scenario
     if 'smax' in env_name.lower():
-        config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
-        env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
-        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        config['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['MAP_NAME'])
+        env_name = f"{config['ENV_NAME']}_{config['MAP_NAME']}"
+        env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
         env = SMAXLogWrapper(env)
     # overcooked needs a layout 
     elif 'overcooked' in env_name.lower():
-        config['env']["ENV_KWARGS"]["layout"] = overcooked_layouts[config['env']["ENV_KWARGS"]["layout"]]
-        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
+        env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
         env = LogWrapper(env)
     else:
-        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
         env = LogWrapper(env)
 
-    #config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
+    #config["NUM_STEPS"] = config.get("NUM_STEPS", env.max_steps) # default steps defined by the env
     
     wandb.init(
         entity=config["ENTITY"],
@@ -969,7 +969,7 @@ def single_run(config):
     
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
+    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
     outs = jax.block_until_ready(train_vjit(rngs))
     
     # save params
@@ -1001,29 +1001,29 @@ def tune(default_config):
         # update the default params
         config = copy.deepcopy(default_config)
         for k, v in dict(wandb.config).items():
-            config['alg'][k] = v
+            config[k] = v
             
         print('running experiment with params:', config)
         
-        env_name = config["env"]["ENV_NAME"]
+        env_name = config["ENV_NAME"]
         # smac init neeeds a scenario
         if 'smax' in env_name.lower():
-            config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
-            env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
-            env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+            config['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['MAP_NAME'])
+            env_name = f"{config['ENV_NAME']}_{config['MAP_NAME']}"
+            env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
             env = SMAXLogWrapper(env)
         # overcooked needs a layout 
         elif 'overcooked' in env_name.lower():
-            config['env']["ENV_KWARGS"]["layout"] = overcooked_layouts[config['env']["ENV_KWARGS"]["layout"]]
-            env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+            config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
+            env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
             env = LogWrapper(env)
         else:
-            env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+            env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
             env = LogWrapper(env)
 
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, config["NUM_SEEDS"])
-        train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
+        train_vjit = jax.jit(jax.vmap(make_train(config, env)))
         outs = jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {

@@ -1,17 +1,16 @@
 import os
+import copy
 import jax
 import jax.numpy as jnp
 import numpy as np
 from functools import partial
-from typing import NamedTuple, Dict, Union, Any
+from typing import Any
 
-import flax
 import chex
 import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
-from gymnax.wrappers.purerl import FlattenObservationWrapper, LogWrapper
 import hydra
 from omegaconf import OmegaConf
 import gymnax
@@ -20,8 +19,13 @@ import wandb
 
 from jaxmarl import make
 from jaxmarl.environments.smax import map_name_to_scenario
-from jaxmarl.wrappers.baselines import SMAXLogWrapper, LogWrapper, CTRolloutManager
 from jaxmarl.environments.overcooked import overcooked_layouts
+from jaxmarl.wrappers.baselines import (
+    SMAXLogWrapper,
+    MPELogWrapper,
+    LogWrapper,
+    CTRolloutManager,
+)
 
 
 class ScannedRNN(nn.Module):
@@ -156,7 +160,7 @@ def make_train(config, env):
         rng, _rng = jax.random.split(rng)
         wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
         test_env = CTRolloutManager(
-            env, batch_size=config["TEST_ENVS"]
+            env, batch_size=config["TEST_NUM_ENVS"]
         )  # batched env for testing (has different batch size)
 
         # INIT NETWORK AND OPTIMIZER
@@ -180,7 +184,7 @@ def make_train(config, env):
             lr_scheduler = optax.linear_schedule(
                 init_value=config["LR"],
                 end_value=1e-10,
-                transition_steps=(config["NUM_MINI_EPOCHS"]) * config["NUM_UPDATES"],
+                transition_steps=(config["NUM_EPOCHS"]) * config["NUM_UPDATES"],
             )
 
             lr = lr_scheduler if config.get("LR_LINEAR_DECAY", False) else config["LR"]
@@ -284,7 +288,7 @@ def make_train(config, env):
                 timestep = Timestep(
                     obs=last_obs,
                     actions=actions,
-                    rewards=rewards,
+                    rewards=jax.tree_map(lambda x:config.get("REW_SCALE", 1)*x, rewards),
                     dones=dones,
                     avail_actions=avail_actions,
                 )
@@ -369,7 +373,9 @@ def make_train(config, env):
                         q_vals,
                         _actions[..., np.newaxis],
                         axis=-1,
-                    ).squeeze(-1)  # (num_agents, timesteps, batch_size,)
+                    ).squeeze(
+                        -1
+                    )  # (num_agents, timesteps, batch_size,)
 
                     unavailable_actions = 1 - _avail_actions
                     valid_q_vals = q_vals - (unavailable_actions * 1e10)
@@ -379,18 +385,16 @@ def make_train(config, env):
                         q_next_target,
                         jnp.argmax(valid_q_vals, axis=-1)[..., np.newaxis],
                         axis=-1,
-                    ).squeeze(-1)  # (num_agents, timesteps, batch_size,)
+                    ).squeeze(
+                        -1
+                    )  # (num_agents, timesteps, batch_size,)
 
                     target = (
-                        _rewards[:,:-1]
-                        + (
-                            1 - _dones[:,:-1]
-                        )  # use next done because last done was saved for rnn re-init
-                        * config["GAMMA"]
-                        * q_next[:,1:] 
+                        _rewards[:, :-1]
+                        + (1 - _dones[:, :-1]) * config["GAMMA"] * q_next[:, 1:]
                     )
 
-                    chosen_action_q_vals = chosen_action_q_vals[:,:-1]
+                    chosen_action_q_vals = chosen_action_q_vals[:, :-1]
                     loss = jnp.mean(
                         (chosen_action_q_vals - jax.lax.stop_gradient(target)) ** 2
                     )
@@ -415,13 +419,13 @@ def make_train(config, env):
             (train_state, rng), (loss, qvals) = jax.lax.cond(
                 is_learn_time,
                 lambda train_state, rng: jax.lax.scan(
-                    _learn_phase, (train_state, rng), None, config["NUM_MINI_EPOCHS"]
+                    _learn_phase, (train_state, rng), None, config["NUM_EPOCHS"]
                 ),
                 lambda train_state, rng: (
                     (train_state, rng),
                     (
-                        jnp.zeros(config["NUM_MINI_EPOCHS"]),
-                        jnp.zeros(config["NUM_MINI_EPOCHS"]),
+                        jnp.zeros(config["NUM_EPOCHS"]),
+                        jnp.zeros(config["NUM_EPOCHS"]),
                     ),
                 ),  # do nothing
                 train_state,
@@ -450,57 +454,38 @@ def make_train(config, env):
                 "grad_steps": train_state.grad_steps,
                 "loss": loss.mean(),
                 "qvals": qvals.mean(),
-                "epsilon": eps_scheduler(train_state.n_updates),
             }
-            if config.get("LOG_SEPARATELY", False):
+            metrics.update(jax.tree_map(lambda x: x.mean(), infos))
+            if config.get("LOG_AGENTS_SEPARATELY", False):
                 for i, a in enumerate(env.agents):
-                    m = (
-                        jax.tree_map(
-                            lambda x: jnp.nanmean(
-                                jnp.where(
-                                    infos["returned_episode"][..., i],
-                                    x[..., i],
-                                    jnp.nan,
-                                )
-                            ),
-                            infos,
-                        )
+                    m = jax.tree_map(
+                        lambda x: x[..., i].mean(),
+                        infos,
                     )
                     m = {k + f"_{a}": v for k, v in m.items()}
                     metrics.update(m)
-            else:
-                metrics.update(
-                    jax.tree_map(
-                        lambda x: jnp.nanmean(
-                            jnp.where(
-                                infos["returned_episode"],
-                                x,
-                                jnp.nan,
-                            )
-                        ),
-                        infos,
-                    )
-                )
 
             # update the test metrics
             if config.get("TEST_DURING_TRAINING", True):
                 rng, _rng = jax.random.split(rng)
                 test_state = jax.lax.cond(
-                    train_state.n_updates % config["TEST_INTERVAL"] == 0,
-                    lambda _: get_greedy_metrics(_rng, train_state.params),
+                    train_state.n_updates
+                    % int(config["NUM_UPDATES"] * config["TEST_INTERVAL"])
+                    == 0,
+                    lambda _: get_greedy_metrics(_rng, train_state),
                     lambda _: test_state,
                     operand=None,
                 )
-                metrics.update({'test_'+k: v for k, v in test_state.items()})
+                metrics.update({"test_" + k: v for k, v in test_state.items()})
 
             # report on wandb if required
-            if config.get("WANDB_LOG_DURING_TRAINING"):
+            if config["WANDB_MODE"] != "disabled":
 
                 def callback(metrics, original_seed):
-                    metrics.update({
-                        f'rng{int(original_seed)}/'+k:v
-                        for k, v in metrics.items() if 'test_returned_episode_returns' in k
-                    })
+                    if config.get('WANDB_LOG_ALL_SEEDS', False):
+                        metrics.update(
+                            {f"rng{int(original_seed)}/{k}": v for k, v in metrics.items()}
+                        )
                     wandb.log(metrics)
 
                 jax.debug.callback(callback, metrics, original_seed)
@@ -509,10 +494,11 @@ def make_train(config, env):
 
             return runner_state, None
 
-        def get_greedy_metrics(rng, params):
+        def get_greedy_metrics(rng, train_state):
+            """Help function to test greedy policy during training"""
             if not config.get("TEST_DURING_TRAINING", True):
                 return None
-            """Help function to test greedy policy during training"""
+            params = train_state.params
             def _greedy_env_step(step_state, unused):
                 params, env_state, last_obs, last_dones, hstate, rng = step_state
                 rng, key_s = jax.random.split(rng)
@@ -537,12 +523,12 @@ def make_train(config, env):
             rng, _rng = jax.random.split(rng)
             init_obs, env_state = test_env.batch_reset(_rng)
             init_dones = {
-                agent: jnp.zeros((config["TEST_ENVS"]), dtype=bool)
+                agent: jnp.zeros((config["TEST_NUM_ENVS"]), dtype=bool)
                 for agent in env.agents + ["__all__"]
             }
             rng, _rng = jax.random.split(rng)
             hstate = ScannedRNN.initialize_carry(
-                config["HIDDEN_SIZE"], len(env.agents), config["TEST_ENVS"]
+                config["HIDDEN_SIZE"], len(env.agents), config["TEST_NUM_ENVS"]
             )  # (n_agents*n_envs, hs_size)
             step_state = (
                 params,
@@ -553,22 +539,20 @@ def make_train(config, env):
                 _rng,
             )
             step_state, (rewards, dones, infos) = jax.lax.scan(
-                _greedy_env_step, step_state, None, config["NUM_TEST_STEPS"]
+                _greedy_env_step, step_state, None, config["TEST_NUM_STEPS"]
             )
-            if config.get("LOG_SEPARATELY", False):
+            if config.get("LOG_AGENTS_SEPARATELY", False):
                 metrics = {}
                 for i, a in enumerate(env.agents):
-                    m = (
-                        jax.tree_map(
-                            lambda x: jnp.nanmean(
-                                jnp.where(
-                                    infos["returned_episode"][..., i],
-                                    x[..., i],
-                                    jnp.nan,
-                                )
-                            ),
-                            infos,
-                        )
+                    m = jax.tree_map(
+                        lambda x: jnp.nanmean(
+                            jnp.where(
+                                infos["returned_episode"][..., i],
+                                x[..., i],
+                                jnp.nan,
+                            )
+                        ),
+                        infos,
                     )
                     m = {k + f"_{a}": v for k, v in m.items()}
                     metrics.update(m)
@@ -586,7 +570,7 @@ def make_train(config, env):
             return metrics
 
         rng, _rng = jax.random.split(rng)
-        test_state = get_greedy_metrics(_rng, train_state.params)
+        test_state = get_greedy_metrics(_rng, train_state)
 
         # train
         rng, _rng = jax.random.split(rng)
@@ -601,32 +585,38 @@ def make_train(config, env):
     return train
 
 
-def single_run(config):
-
-    print("Config:\n", OmegaConf.to_yaml(config))
-
-    env_name = config["env"]["ENV_NAME"]
-    alg_name = 'iql_'+config["alg"]["ALG_NAME"]
-
-    # overcooked needs a layout
-    # smac init neeeds a scenario
+def env_from_config(config):
+    env_name = config["ENV_NAME"]
+    # smax init neeeds a scenario
     if "smax" in env_name.lower():
-        config["env"]["ENV_KWARGS"]["scenario"] = map_name_to_scenario(
-            config["env"]["MAP_NAME"]
-        )
-        env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
-        env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
+        config["ENV_KWARGS"]["scenario"] = map_name_to_scenario(config["MAP_NAME"])
+        env_name = f"{config['ENV_NAME']}_{config['MAP_NAME']}"
+        env = make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = SMAXLogWrapper(env)
     # overcooked needs a layout
     elif "overcooked" in env_name.lower():
-        config["env"]["ENV_KWARGS"]["layout"] = overcooked_layouts[
-            config["env"]["ENV_KWARGS"]["layout"]
+        env_name = f"{config['ENV_NAME']}_{config['ENV_KWARGS']['layout']}"
+        config["ENV_KWARGS"]["layout"] = overcooked_layouts[
+            config["ENV_KWARGS"]["layout"]
         ]
-        env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
+        env = make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LogWrapper(env)
+    elif "mpe" in env_name.lower():
+        env = make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = MPELogWrapper(env)
     else:
-        env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
+        env = make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LogWrapper(env)
+    return env, env_name
+
+
+def single_run(config):
+
+    config = {**config, **config["alg"]}  # merge the alg config with the main config
+    print("Config:\n", OmegaConf.to_yaml(config))
+
+    alg_name = config.get("ALG_NAME", "iql_rnn")
+    env, env_name= env_from_config(copy.deepcopy(config))
 
     wandb.init(
         entity=config["ENTITY"],
@@ -643,18 +633,40 @@ def single_run(config):
 
     rng = jax.random.PRNGKey(config["SEED"])
 
-    if config["NUM_SEEDS"] > 1:
-        rngs = jax.random.split(rng, config["NUM_SEEDS"])
-        train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
-        outs = jax.block_until_ready(train_vjit(rngs))
-    else:
-        outs = jax.jit(make_train(config["alg"], env))(rng)
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])
+    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
+    outs = jax.block_until_ready(train_vjit(rngs))
+
+    # save params
+    if config.get("SAVE_PATH", None) is not None:
+        from jaxmarl.wrappers.baselines import save_params
+
+        model_state = outs["runner_state"][0]
+        save_dir = os.path.join(config["SAVE_PATH"], env_name)
+        os.makedirs(save_dir, exist_ok=True)
+        OmegaConf.save(
+            config,
+            os.path.join(
+                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+            ),
+        )
+
+        for i, rng in enumerate(rngs):
+            params = jax.tree_map(lambda x: x[i], model_state.params)
+            save_path = os.path.join(
+                save_dir,
+                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+            )
+            save_params(params, save_path)
 
 
 def tune(default_config):
     """Hyperparameter sweep with wandb."""
-    import copy
-    from multiprocessing import Process
+
+    default_config = {**default_config, **default_config["alg"]}  # merge the alg config with the main config
+    env_name = default_config["ENV_NAME"]
+    alg_name = default_config.get("ALG_NAME", "iql_rnn") 
+    env, env_name = env_from_config(default_config)
 
     def wrapped_make_train():
         wandb.init(project=default_config["PROJECT"])
@@ -662,38 +674,17 @@ def tune(default_config):
         # update the default params
         config = copy.deepcopy(default_config)
         for k, v in dict(wandb.config).items():
-            config["alg"][k] = v
+            config[k] = v
 
-        print("running experiment with params:", config["alg"])
+        print("running experiment with params:", config)
 
         rng = jax.random.PRNGKey(config["SEED"])
-        if "smax" in default_config["env"]["ENV_NAME"].lower():
-            config["env"]["ENV_KWARGS"]["scenario"] = map_name_to_scenario(
-                config["env"]["MAP_NAME"]
-            )
-            env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
-            env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
-            env = SMAXLogWrapper(env)
-        # overcooked needs a layout
-        elif "overcooked" in default_config["env"]["ENV_NAME"].lower():
-            config["env"]["ENV_KWARGS"]["layout"] = overcooked_layouts[
-                config["env"]["ENV_KWARGS"]["layout"]
-            ]
-            env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
-            env = LogWrapper(env)
-        else:
-            env = make(config["env"]["ENV_NAME"], **config["env"]["ENV_KWARGS"])
-            env = LogWrapper(env)
-
-        if config["NUM_SEEDS"] > 1:
-            rngs = jax.random.split(rng, config["NUM_SEEDS"])
-            train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
-            outs = jax.block_until_ready(train_vjit(rngs))
-        else:
-            outs = jax.jit(make_train(config["alg"]))(rng)
+        rngs = jax.random.split(rng, config["NUM_SEEDS"])
+        train_vjit = jax.jit(jax.vmap(make_train(config, env)))
+        outs = jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {
-        "name": "vdn_3s_vs_5z_1e7",
+        "name": f"{alg_name}_{env_name}",
         "method": "bayes",
         "metric": {
             "name": "test_returned_episode_returns",
@@ -709,13 +700,7 @@ def tune(default_config):
                     0.00005,
                 ]
             },
-            "LR_LINEAR_DECAY": {"values": [True, False]},
-            #"NUM_ENVS": {"values": [8, 32, 64]},
-            #"NUM_STEPS": {"values": [4, 8, 16, 32]},
-            "HIDDEN_SIZE": {"values": [128, 256, 512]},
-            "TARGET_UPDATE_INTERVAL": {"values": [10, 100, 200, 500]},
-            "NUM_MINI_EPOCHS": {"values": [1, 2, 4, 6, 8]},
-            "BUFFER_BATCH_SIZE": {"values": [32, 64]},
+            "NUM_ENVS": {"values": [8, 32, 64, 128]},
         },
     }
 

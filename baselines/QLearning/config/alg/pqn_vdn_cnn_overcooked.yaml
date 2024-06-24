@@ -1,6 +1,6 @@
+"TOTAL_TIMESTEPS": 5e6
 "NUM_ENVS": 64
 "NUM_STEPS": 16
-"TOTAL_TIMESTEPS": 5e6
 "HIDDEN_SIZE": 256
 "NORM_TYPE": "layer_norm"
 "NORM_INPUT": False
@@ -15,15 +15,15 @@
 "LAMBDA": 0.3
 "GAMMA": 0.99
 
+# env
+"ENV_NAME": "overcooked"
+"ENV_KWARGS": 
+  "layout" : "counter_circuit"
 "REW_SHAPING_HORIZON": 2.5e6
-"REW_SCALE": 1.
 
-"WANDB_LOG_DURING_TRAINING": True
-"PREPROCESS_OBS": False
-"TEST_INTERVAL": 10
-"NUM_TEST_STEPS": 400
-"NUM_TEST_EPISODES": 512
-"ALG_NAME": "pqn_machecazz"
-
-"SAVE_DIR": "/gpfs/scratch/bsc28/bsc028921/jax_23.10-py3/home/JaxMARL/saved_metrics_oc/rew_0.5"
+# evaluate
+"TEST_DURING_TRAINING": True
+"TEST_INTERVAL": 0.05 # as a fraction of updates, i.e. log every 5% of training process
+"TEST_NUM_STEPS": 400
+"TEST_NUM_ENVS": 512 # number of episodes to average over, can affect performance
 
