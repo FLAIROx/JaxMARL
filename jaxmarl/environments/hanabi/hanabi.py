@@ -62,25 +62,25 @@ class HanabiEnv(HanabiGame):
             ).squeeze()
 
         self.action_set = jnp.arange(self.num_moves)
-        self.action_encodings = []
-        for p in range(self.num_agents):
-            action_encoding = {}
-            for i, a in enumerate(self.action_set):
-                if self._is_discard(a):
-                    move_type = f'D{i % hand_size}'
-                elif self._is_play(a):
-                    move_type = f'P{i % hand_size}'
-                elif self._is_hint_color(a):
-                    target_player, hint_idx = self._get_target_player_and_hint_index(p, a)
-                    color = self.color_map[hint_idx]
-                    move_type = f'H{color} to P{target_player}'
-                elif self._is_hint_rank(a):
-                    target_player, hint_idx = self._get_target_player_and_hint_index(p, a)
-                    move_type = f'H{hint_idx + 1} to P{target_player}'
-                else:
-                    move_type = 'N'
-                action_encoding[i] = move_type
-            self.action_encodings.append(action_encoding)
+        self.action_encoding = {}
+        for i, a in enumerate(self.action_set):
+            if self._is_discard(a):
+                move_type = f'D{i % hand_size}'
+            elif self._is_play(a):
+                move_type = f'P{i % hand_size}'
+            elif self._is_hint_color(a):
+                action_idx = i - 2 * self.hand_size
+                hint_idx = action_idx % self.num_colors
+                target_player = action_idx // self.num_colors
+                move_type = f'H{self.color_map[hint_idx]} to P{target_player + 1} relative'
+            elif self._is_hint_rank(a):
+                action_idx = i - 2 * self.hand_size - (self.num_agents - 1) * self.num_colors
+                hint_idx = action_idx % self.num_ranks
+                target_player = action_idx // self.num_ranks
+                move_type = f'H{hint_idx + 1} to P{target_player + 1} relative'
+            else:
+                move_type = 'N'
+            self.action_encoding[i] = move_type
 
         # number of features
         self.hands_n_feats = (
