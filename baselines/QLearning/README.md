@@ -2,6 +2,7 @@
 
 
 Pure JAX implementations of:
+* PQN-VDN (Prallelised Q-Network)
 * IQL (Independent Q-Learners)
 * VDN (Value Decomposition Network)
 * QMIX
@@ -11,34 +12,23 @@ Pure JAX implementations of:
 The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning). PQN follows[purejaxql](https://github.com/mttga/purejaxql). 
 
 
-```
-❗
 Standard algorithms (iql, vdn, qmix) support:
 - MPE
 - SMAX
-- Overcooked
+- Overcooked (qmix not supported)
 
-PQN supports:
+PQN-VDN supports:
 - MPE
 - SMAX
 - Hanabi
 - Overcooked
-```
+
+At the moment, **PQN-VDN** should be the best baseline for Q-Learning in terms of performances and training speed.
+
+❗ TransfQMix and Shaq still use an old implementation of the scripts and need refactoring to match the new qlearning scripts. 
+
 
 ## ⚙️ Implementation Details
-
-General features:
-
-- Agents are controlled by a single RNN architecture.
-- You can choose whether to share parameters between agents or not (not available on TransfQMix).
-- Works also with non-homogeneous agents (different observation/action spaces).
-- Experience replay is a simple buffer with uniform sampling.
-- Uses Double Q-Learning with a target agent network (hard-updated).
-- You can select between TD Loss (pymarl2) or DDQN loss (pymarl).
-- Adam optimizer is used instead of RMSPROP.
-- The environment is reset at the end of each episode.
-- Trained with a team reward (reward['__all__']).
-- At the moment, last_actions are not included in the agents' observations.
 
 All the algorithms take advantage of the `CTRolloutManager` environment wrapper (found in `jaxmarl.wrappers.baselines`), which is used to:
 
@@ -55,34 +45,40 @@ If you have cloned JaxMARL and you are in the repository root, you can run the a
 ```bash
 # vdn rnn in in mpe spread
 python baselines/QLearning/vdn_rnn.py +alg=ql_rnn_mpe
-# independent IQLs rnn in competetive simple_tag (predator-prey)
+# independent IQL rnn in competetive simple_tag (predator-prey)
 python baselines/QLearning/iql_rnn.py +alg=ql_rnn_mpe alg.ENV_NAME=MPE_simple_tag_v3
 # QMix with SMAX
-python baselines/QLearning/qmix.py +alg=qmix_smax +env=smax
-# VDN overcooked with a different layout
+python baselines/QLearning/qmix_rnn.py +alg=ql_rnn_smax
+# VDN overcooked
 python baselines/QLearning/vdn_cnn_overcooked.py +alg=ql_cnn_overcooked alg.ENV_KWARGS.LAYOUT=counter_circuit
 # TransfQMix
-python baselines/QLearning/transf_qmix.py +alg=transf_qmix_smax +env=smax
+python baselines/QLearning/transf_qmix.py +alg=transf_qmix_smax
 
-# pqn feed-forward with mpe
+# pqn feed-forward in MPE
 python baselines/QLearning/pqn_vdn_ff.py +alg=pqn_vdn_ff_mpe
-# pqn feed-forward with hanabi
+# pqn feed-forward in hanabi
 python baselines/QLearning/pqn_vdn_ff.py +alg=pqn_vdn_ff_hanabi
-# pqn CNN with overcooked
+# pqn CNN in overcooked
 python baselines/QLearning/pqn_vdn_cnn_overcooked.py +alg=pqn_vdn_cnn_overcooked
-# pqn rnn with mpe
-python baselines/QLearning/pqn_vdn_rnn.py +alg=pqn_vdn_cnn_overcooked
+# pqn with RNN in SMAX
+python baselines/QLearning/pqn_vdn_rnn.py +alg=pqn_vdn_rnn_smax
 ```
 
 Notice that with Hydra, you can modify parameters on the go in this way:
 
 ```bash
-# Run IQL without parameter sharing from the command line
+# change learning rate
 python baselines/QLearning/iql_rnn.py +alg=ql_rnn_mpe alg.LR=0.001
+# change overcooked layout
+python baselines/QLearning/pqn_vdn_cnn_overcooked.py +alg=pqn_vdn_cnn_overcooked alg.ENV_KWARGS.LAYOUT=counter_circuit
+# change smax map
+python baselines/QLearning/pqn_vdn_rnn.py +alg=pqn_vdn_rnn_smax alg.MAP_NAME=5m_vs_6m
 ```
+
+Take a look at [`config.yaml`](./config/config.yaml) for the default configuration when running these scripts. There you can choose how many seeds to vmap and you can setup WANDB. 
 
 **❗Note on Transformers**: TransfQMix currently supports only MPE_Spread and SMAX. You will need to wrap the observation vectors into matrices to use transformers in other environments. See: ```jaxmarl.wrappers.transformers```
 
 ## 🎯 Hyperparameter tuning
 
-Please refer to the ```tune``` function in the [transf_qmix.py](transf_qmix.py) script for an example of hyperparameter tuning using WANDB. 
+All the scripts include a tune function to perform hyperparameter tuning. To use it, set `"HYP_TUNE": True` in the `config.yaml` and set the hyperparameters spaces in the tune function. For more information, check [wandb documentation](https://docs.wandb.ai/guides/sweeps).

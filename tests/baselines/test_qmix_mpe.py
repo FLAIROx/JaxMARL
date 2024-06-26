@@ -8,7 +8,7 @@ def run_script(script_path, *args):
 
 def test_script_with_arguments():
     script_path = os.path.join('baselines/QLearning/qmix_rnn.py')
-    result = run_script(script_path, '+alg=qmix_mpe', 'alg.TOTAL_TIMESTEPS=1e4', 'WANDB_MODE=disabled')
+    result = run_script(script_path, '+alg=ql_rnn_mpe', 'alg.TOTAL_TIMESTEPS=1e4', 'WANDB_MODE=disabled')
     assert result.returncode == 0
 
 
