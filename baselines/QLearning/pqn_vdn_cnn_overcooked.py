@@ -63,16 +63,13 @@ class CNN(nn.Module):
         x = activation(x)
         x = x.reshape((x.shape[0], -1))  # Flatten
 
-        x = nn.Dense(features=64)(x)
-        x = normalize(x)
-        x = activation(x)
-
         return x
 
 
 class QNetwork(nn.Module):
     action_dim: int
     hidden_size: int = 64
+    num_layers: int = 2
     norm_input: bool = False
     norm_type: str = "layer_norm"
 
@@ -91,11 +88,15 @@ class QNetwork(nn.Module):
         else:
             x_dummy = nn.BatchNorm(use_running_average=not train)(x)
 
-        embedding = CNN(norm_type=self.norm_type)(x, train=train)
-        x = nn.Dense(self.hidden_size)(embedding)
-        x = normalize(x)
-        x = nn.Dense(self.action_dim)(x)
-        return x
+        x = CNN(norm_type=self.norm_type)(x, train=train)
+        for l in range(self.num_layers):
+            x = nn.Dense(self.hidden_size)(x)
+            x = normalize(x)
+            x = nn.relu(x)
+
+        q_vals = nn.Dense(self.action_dim)(x)
+        
+        return q_vals
 
 
 @chex.dataclass(frozen=True)
@@ -192,6 +193,7 @@ def make_train(config, env):
         network = QNetwork(
             action_dim=wrapped_env.max_action_space,
             hidden_size=config["HIDDEN_SIZE"],
+            num_layers=config["NUM_LAYERS"],
             norm_type=config["NORM_TYPE"],
             norm_input=config["NORM_INPUT"],
         )
@@ -585,7 +587,7 @@ def single_run(config):
     config = {**config, **config["alg"]}  # merge the alg config with the main config
     print("Config:\n", OmegaConf.to_yaml(config))
 
-    alg_name = config.get('ALG_NAME', "pqn_vdn_cnn_corrected")
+    alg_name = config.get('ALG_NAME', "pqn_vdn_cnn")
     env, env_name = env_from_config(copy.deepcopy(config))
 
     wandb.init(
@@ -640,7 +642,6 @@ def tune(default_config):
     env_name = default_config["ENV_NAME"]
     alg_name = "pqn_vdn_cnn"
     env, env_name = env_from_config(default_config)
-    default_config["NUM_SEEDS"] = 8
 
     def wrapped_make_train():
         wandb.init(project=default_config["PROJECT"])

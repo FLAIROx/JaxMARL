@@ -1,13 +1,13 @@
 # experiment params
-"NUM_SEEDS": 1
+"NUM_SEEDS": 1 # number of vmapped seeds
 "SEED": 0
 
 "HYP_TUNE": False # perform hyp tune
 
 # wandb params
-"ENTITY": "mttga"
-"PROJECT": "jaxmarl-qlupdate"
-"WANDB_MODE": "online"
+"ENTITY": ""
+"PROJECT": ""
+"WANDB_MODE": "disabled"
 "WANDB_LOG_ALL_SEEDS": False # will log separately the vmapped seeds
 
 # where to save the params (if None, will not save)

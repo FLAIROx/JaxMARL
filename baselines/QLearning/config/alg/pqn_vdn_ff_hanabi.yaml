@@ -27,3 +27,5 @@
 "TEST_INTERVAL": 0.005 # as a fraction of updates, i.e. log every 1% of training process
 "TEST_NUM_STEPS": 100
 "TEST_NUM_ENVS": 10000 # number of episodes to average over, can affect performance
+
+#"ALG_NAME": "pqn_vdn_ff" # if you want to change the name of the algo in the metrics
