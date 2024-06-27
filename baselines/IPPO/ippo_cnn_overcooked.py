@@ -418,27 +418,6 @@ def single_run(config):
     viz = OvercookedVisualizer()
     # agent_view_size is hardcoded as it determines the padding around the layout.
     viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
-    
-    """
-    filename = f'{config["ENV_NAME"]}_cramped_room_new'
-    rewards = out["metrics"]["returned_episode_returns"].mean(-1).reshape((num_seeds, -1))
-    reward_mean = rewards.mean(0)  # mean 
-    reward_std = rewards.std(0) / np.sqrt(num_seeds)  # standard error
-    
-    plt.plot(reward_mean)
-    plt.fill_between(range(len(reward_mean)), reward_mean - reward_std, reward_mean + reward_std, alpha=0.2)
-    # compute standard error
-    plt.xlabel("Update Step")
-    plt.ylabel("Return")
-    plt.savefig(f'{filename}.png')
-
-    # animate first seed
-    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
-    state_seq = get_rollout(train_state, config)
-    viz = OvercookedVisualizer()
-    # agent_view_size is hardcoded as it determines the padding around the layout.
-    viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
-    """
 
 
 def tune(default_config):
