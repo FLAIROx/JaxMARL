@@ -1,6 +1,5 @@
 # QLearning Baselines
 
-
 Pure JAX implementations of:
 * PQN-VDN (Prallelised Q-Network)
 * IQL (Independent Q-Learners)
@@ -9,7 +8,7 @@ Pure JAX implementations of:
 * TransfQMix (Transformers for Leveraging the Graph Structure of MARL Problems)
 * SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)
 
-The first three are follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning). PQN follows[purejaxql](https://github.com/mttga/purejaxql). 
+PQN implementation follows [purejaxql](https://github.com/mttga/purejaxql). IQL, VDN and QMix follow the original [Pymarl](https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py) codebase while SHAQ follows the [paper code](https://github.com/hsvgbkhgbv/shapley-q-learning). 
 
 
 Standard algorithms (iql, vdn, qmix) support:
@@ -23,9 +22,9 @@ PQN-VDN supports:
 - Hanabi
 - Overcooked
 
-At the moment, **PQN-VDN** should be the best baseline for Q-Learning in terms of performances and training speed.
+**At the moment, PQN-VDN should be the best baseline for Q-Learning in terms of performances and training speed.**
 
-❗ TransfQMix and Shaq still use an old implementation of the scripts and need refactoring to match the new qlearning scripts. 
+❗ TransfQMix and Shaq still use an old implementation of the scripts and need refactoring to match the new format. 
 
 
 ## ⚙️ Implementation Details
@@ -36,7 +35,7 @@ All the algorithms take advantage of the `CTRolloutManager` environment wrapper 
 - Add a global observation (`obs["__all__"]`) and a global reward (`rewards["__all__"]`) to the returns of `env.step` for centralized training.
 - Preprocess and uniform the observation vectors (flatten, pad, add additional features like id one-hot encoding, etc.).
 
-Please modify this wrapper for your needs.
+You might want to modify this wrapper for your needs.
 
 ## 🚀 Usage
 
