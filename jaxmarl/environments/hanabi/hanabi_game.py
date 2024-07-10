@@ -206,8 +206,12 @@ class HanabiGame(MultiAgentEnv):
             # gain an info token for discarding if discard action
             infos_remaining = jnp.sum(state.info_tokens)
             infos_depleted = infos_remaining < self.max_info_tokens
-            new_infos = (infos_remaining + (is_discard * infos_depleted)).astype(int)
-            info_tokens = state.info_tokens.at[new_infos - 1].set(1)
+            new_infos = infos_remaining + (is_discard * infos_depleted)
+            info_tokens = jnp.where(
+                new_infos > 0,
+                state.info_tokens.at[new_infos - 1].set(1),
+                state.info_tokens
+            )
 
             # play selected card if play action
             color, rank = jnp.nonzero(card, size=1)
@@ -219,12 +223,16 @@ class HanabiGame(MultiAgentEnv):
 
             # gain another info token if completed a color
             is_final_card = jnp.logical_and(
-                is_valid_play, rank == self.num_ranks - 1
+                make_play, rank == self.num_ranks - 1
             ).squeeze(0)
             infos_remaining = jnp.sum(info_tokens)
             infos_depleted = infos_remaining < self.max_info_tokens
-            new_infos = (infos_remaining + (is_final_card * infos_depleted)).astype(int)
-            info_tokens = info_tokens.at[new_infos - 1].set(1)
+            new_infos = infos_remaining + (is_final_card * infos_depleted)
+            info_tokens = jnp.where(
+                new_infos > 0,
+                info_tokens.at[new_infos - 1].set(1),
+                info_tokens
+            )
 
             # increment fireworks if valid play action
             color_fireworks = color_fireworks.at[
@@ -241,25 +249,16 @@ class HanabiGame(MultiAgentEnv):
             num_cards_discarded = state.num_cards_discarded + discard_card
 
             # remove life token if invalid play
-            life_lost = jnp.logical_and(
-                jnp.logical_not(is_valid_play), jnp.logical_not(is_discard)
+            life_lost = jnp.logical_not(
+                jnp.logical_or(is_valid_play, is_discard)
             ).squeeze(0)
             num_life_tokens = jnp.sum(state.life_tokens).astype(int)
-            life_tokens = state.life_tokens.at[num_life_tokens - 1].set(
-                jnp.logical_not(life_lost)
+            life_tokens = jnp.where(
+                life_lost,
+                state.life_tokens.at[num_life_tokens - 1].set(0),
+                state.life_tokens
             )
 
-            # remove knowledge of selected card
-            player_knowledge = state.card_knowledge.at[aidx].get()
-            player_knowledge = jnp.delete(
-                player_knowledge, card_idx, axis=0, assume_unique_indices=True
-            )
-            player_knowledge = jnp.append(
-                player_knowledge,
-                jnp.ones((1, self.num_colors * self.num_ranks)),
-                axis=0,
-            )
-            card_knowledge = state.card_knowledge.at[aidx].set(player_knowledge)
             # color hint knowledge removal
             player_colors_revealed = state.colors_revealed.at[aidx].get()
             player_colors_revealed = jnp.delete(
@@ -295,6 +294,23 @@ class HanabiGame(MultiAgentEnv):
                 in_last_round, state.num_cards_dealt, state.num_cards_dealt + 1
             )
             remaining_deck_size = state.remaining_deck_size.at[-num_cards_dealt].set(0)
+
+            # remove knowledge of selected card
+            player_knowledge = state.card_knowledge.at[aidx].get()
+            player_knowledge = jnp.delete(
+                player_knowledge, card_idx, axis=0, assume_unique_indices=True
+            )
+            new_card_knowledge = jnp.where(
+                new_card.any(),
+                jnp.ones((1, self.num_colors * self.num_ranks)),
+                jnp.zeros((1, self.num_colors * self.num_ranks)),
+            )
+            player_knowledge = jnp.append(
+                player_knowledge,
+                new_card_knowledge,
+                axis=0,
+            )
+            card_knowledge = state.card_knowledge.at[aidx].set(player_knowledge)
 
             return state.replace(
                 deck=deck,
