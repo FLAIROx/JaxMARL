@@ -22,7 +22,7 @@ PQN-VDN supports:
 - Hanabi
 - Overcooked
 
-**At the moment, PQN-VDN should be the best baseline for Q-Learning in terms of performances and training speed.**
+**At the moment, PQN-VDN should be the most performant baseline for Q-Learning in terms of returns and training speed.**
 
 ❗ TransfQMix and Shaq still use an old implementation of the scripts and need refactoring to match the new format. 
 

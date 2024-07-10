@@ -43,6 +43,10 @@ class HanabiEnv(HanabiGame):
             num_cards_of_rank=num_cards_of_rank,
         )
 
+        assert num_agents > 1 and num_agents <= 5, "Number of agents must be between 2 and 5"
+        if hand_size is None:
+            hand_size = 5 if num_agents < 4 else 4
+
         if agents is None:
             self.agents = [f"agent_{i}" for i in range(num_agents)]
         else:
