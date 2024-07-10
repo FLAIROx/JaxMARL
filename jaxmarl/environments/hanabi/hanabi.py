@@ -133,7 +133,7 @@ class HanabiEnv(HanabiGame):
         state = self.reset_game(key)
         obs = self.get_obs(state, state, action=self.num_moves - 1)
         return obs, state
-    
+
     @partial(jax.jit, static_argnums=[0])
     def reset_from_deck(self, deck: chex.Array) -> Tuple[Dict, State]:
         """Inject a deck in the game. Useful for testing."""
@@ -181,7 +181,7 @@ class HanabiEnv(HanabiGame):
 
     @partial(jax.jit, static_argnums=[0])
     def get_obs(
-        self, new_state: State, old_state: State, action: chex.Array = 20
+        self, new_state: State, old_state: State, action: chex.Array
     ) -> Dict:
         """Get all agents' observations."""
 
@@ -198,8 +198,8 @@ class HanabiEnv(HanabiGame):
             other_hands = jnp.delete(
                 hands_from_self, 0, axis=0, assume_unique_indices=True
             ).ravel()
-            missing_cards = ~hands_from_self.any(
-                axis=(1, 2, 3)
+            missing_cards = ~jnp.all(
+                jnp.any(hands_from_self, axis=(-2, -1)), axis=1
             )  # check if some player is missing a card
             hands_feats = jnp.concatenate((other_hands, missing_cards))
 
@@ -312,7 +312,8 @@ class HanabiEnv(HanabiGame):
             acting_player_index, -aidx
         )  # relative OH index
 
-        target_player, hint_idx = self._get_target_player_and_hint_index(aidx, action)
+        acting_player_absolute_idx = jnp.nonzero(acting_player_index, size=1)[0][0]
+        target_player, hint_idx = self._get_target_player_and_hint_index(acting_player_absolute_idx, action)
         target_player_relative_index = jnp.roll(
             jax.nn.one_hot(target_player, num_classes=self.num_agents), -aidx
         )  # relative OH index
@@ -358,18 +359,24 @@ class HanabiEnv(HanabiGame):
 
         # cards that have the color that was revealed
         color_revealed_cards = jnp.where(
-            (target_hand.sum(axis=2) == color_revealed).all(
-                axis=1
-            ),  # color of the card==color reveled
+            jnp.logical_and(
+                self._is_hint_color(action),
+                (target_hand.sum(axis=2) == color_revealed).all(
+                    axis=1
+                ),  # color of the card==color reveled
+            ),
             1,
             0,
         )
 
         # cards that have the color that was revealed
         rank_revealed_cards = jnp.where(
-            (target_hand.sum(axis=1) == rank_revealed).all(
-                axis=1
-            ),  # color of the card==color reveled
+            jnp.logical_and(
+                self._is_hint_rank(action),
+                (target_hand.sum(axis=1) == rank_revealed).all(
+                    axis=1
+                )  # color of the card==color reveled
+            ),
             1,
             0,
         )
@@ -421,7 +428,7 @@ class HanabiEnv(HanabiGame):
         }
 
         return feats
-    
+
     @partial(jax.jit, static_argnums=[0])
     def get_last_action_feats(
         self, aidx: int, old_state: State, new_state: State, action: chex.Array
@@ -498,6 +505,12 @@ class HanabiEnv(HanabiGame):
             )  # count of the remaining cards
             normalized_knowledge = knowledge * count
             normalized_knowledge /= normalized_knowledge.sum(axis=1)[:, np.newaxis]
+            # knowledge is zero when we are missing a card in hand
+            normalized_knowledge = jnp.where(
+                knowledge.any(axis=1, keepdims=True),
+                normalized_knowledge,
+                0
+            )
             return jnp.concatenate(
                 (normalized_knowledge, color_hint, rank_hint), axis=-1
             ).ravel()
@@ -578,7 +591,7 @@ class HanabiEnv(HanabiGame):
                     f"agent {i} representation of the belief of its {z}th-relative agent:",
                     b,
                 )
-    
+
     def card_to_string(self, card: chex.Array) -> str:
         # transforms a card matrix to string
         if ~card.any():  # empyt card
@@ -669,7 +682,7 @@ class HanabiEnv(HanabiGame):
 
     def get_obs_str(self, new_state, old_state=None, action=20, include_belief=False, best_belief=5):
         """Get the observation as a string."""
-        
+
         output = ""
 
         def get_actor_hand_str(aidx: int, belief: chex.Array=None, mask_hand=False) -> str:
