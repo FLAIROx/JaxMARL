@@ -22,9 +22,9 @@ from jaxmarl.environments.overcooked.layouts import overcooked_layouts as layout
 
 
 BASE_REW_SHAPING_PARAMS = {
-    "PLACEMENT_IN_POT_REW": 3,
-    "PLATE_PICKUP_REWARD": 3,
-    "SOUP_PICKUP_REWARD": 5,
+    "PLACEMENT_IN_POT_REW": 3, # reward for putting ingredients 
+    "PLATE_PICKUP_REWARD": 3, # reward for picking up a plate
+    "SOUP_PICKUP_REWARD": 5, # reward for picking up a ready soup
     "DISH_DISP_DISTANCE_REW": 0,
     "POT_DISTANCE_REW": 0,
     "SOUP_DISTANCE_REW": 0,
