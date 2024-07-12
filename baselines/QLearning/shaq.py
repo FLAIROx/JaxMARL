@@ -767,21 +767,21 @@ def main(config):
 
     print('Config:\n', OmegaConf.to_yaml(config))
 
-    env_name = config["env"]["ENV_NAME"]
-    alg_name = f'shaq_{"ps" if config["alg"].get("PARAMETERS_SHARING", True) else "ns"}'
+    env_name = config["ENV_NAME"]
+    alg_name = f'shaq_{"ps" if config.get("PARAMETERS_SHARING", True) else "ns"}'
     
     # smac init neeeds a scenario
     if 'smax' in env_name.lower():
-        config['env']['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['env']['MAP_NAME'])
-        env_name = f"{config['env']['ENV_NAME']}_{config['env']['MAP_NAME']}"
-        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        config['ENV_KWARGS']['scenario'] = map_name_to_scenario(config['MAP_NAME'])
+        env_name = f"{config['ENV_NAME']}_{config['MAP_NAME']}"
+        env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
         env = SMAXLogWrapper(env)
     else:
-        env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
+        env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
         env = LogWrapper(env)
 
-    env = make(config["env"]["ENV_NAME"], **config['env']['ENV_KWARGS'])
-    config["alg"]["NUM_STEPS"] = config["alg"].get("NUM_STEPS", env.max_steps) # default steps defined by the env
+    env = make(config["ENV_NAME"], **config['ENV_KWARGS'])
+    config["NUM_STEPS"] = config.get("NUM_STEPS", env.max_steps) # default steps defined by the env
     
     wandb.init(
         entity=config["ENTITY"],
@@ -790,7 +790,7 @@ def main(config):
             alg_name.upper(),
             env_name.upper(),
             "RNN",
-            "TD_LOSS" if config["alg"].get("TD_LAMBDA_LOSS", True) else "DQN_LOSS",
+            "TD_LOSS" if config.get("TD_LAMBDA_LOSS", True) else "DQN_LOSS",
             f"jax_{jax.__version__}",
         ],
         name=f'{alg_name}_{env_name}',
@@ -800,7 +800,7 @@ def main(config):
     
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_vjit = jax.jit(jax.vmap(make_train(config["alg"], env)))
+    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
     outs = jax.block_until_ready(train_vjit(rngs))
     
     # save params

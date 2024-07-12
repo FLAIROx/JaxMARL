@@ -21,6 +21,15 @@ from jaxmarl.environments.overcooked.common import (
 from jaxmarl.environments.overcooked.layouts import overcooked_layouts as layouts
 
 
+BASE_REW_SHAPING_PARAMS = {
+    "PLACEMENT_IN_POT_REW": 3, # reward for putting ingredients 
+    "PLATE_PICKUP_REWARD": 3, # reward for picking up a plate
+    "SOUP_PICKUP_REWARD": 5, # reward for picking up a ready soup
+    "DISH_DISP_DISTANCE_REW": 0,
+    "POT_DISTANCE_REW": 0,
+    "SOUP_DISTANCE_REW": 0,
+}
+
 class Actions(IntEnum):
     # Turn left, turn right, move forward
     up = 0
@@ -99,7 +108,7 @@ class Overcooked(MultiAgentEnv):
 
         acts = self.action_set.take(indices=jnp.array([actions["agent_0"], actions["agent_1"]]))
 
-        state, reward = self.step_agents(key, state, acts)
+        state, reward, shaped_rewards = self.step_agents(key, state, acts)
 
         state = state.replace(time=state.time + 1)
 
@@ -108,6 +117,7 @@ class Overcooked(MultiAgentEnv):
 
         obs = self.get_obs(state)
         rewards = {"agent_0": reward, "agent_1": reward}
+        shaped_rewards = {"agent_0": shaped_rewards[0], "agent_1": shaped_rewards[1]}
         dones = {"agent_0": done, "agent_1": done, "__all__": done}
 
         return (
@@ -115,7 +125,7 @@ class Overcooked(MultiAgentEnv):
             lax.stop_gradient(state),
             rewards,
             dones,
-            {},
+            {'shaped_reward': shaped_rewards},
         )
 
     def reset(
@@ -425,7 +435,7 @@ class Overcooked(MultiAgentEnv):
         is_interact_action = (action == Actions.interact)
 
         # Compute the effect of interact first, then apply it if needed
-        candidate_maze_map, alice_inv, alice_reward = self.process_interact(maze_map, state.wall_map, fwd_pos[0], state.agent_inv[0])
+        candidate_maze_map, alice_inv, alice_reward, alice_shaped_reward = self.process_interact(maze_map, state.wall_map, fwd_pos, state.agent_inv, 0)
         alice_interact = is_interact_action[0]
         bob_interact = is_interact_action[1]
 
@@ -436,8 +446,9 @@ class Overcooked(MultiAgentEnv):
                               alice_inv,
                               state.agent_inv[0])
         alice_reward = jax.lax.select(alice_interact, alice_reward, 0.)
+        alice_shaped_reward = jax.lax.select(alice_interact, alice_shaped_reward, 0.)
 
-        candidate_maze_map, bob_inv, bob_reward = self.process_interact(maze_map, state.wall_map, fwd_pos[1], state.agent_inv[1])
+        candidate_maze_map, bob_inv, bob_reward, bob_shaped_reward = self.process_interact(maze_map, state.wall_map, fwd_pos, state.agent_inv, 1)
         maze_map = jax.lax.select(bob_interact,
                               candidate_maze_map,
                               maze_map)
@@ -445,6 +456,7 @@ class Overcooked(MultiAgentEnv):
                               bob_inv,
                               state.agent_inv[1])
         bob_reward = jax.lax.select(bob_interact, bob_reward, 0.)
+        bob_shaped_reward = jax.lax.select(bob_interact, bob_shaped_reward, 0.)
 
         agent_inv = jnp.array([alice_inv, bob_inv])
 
@@ -490,16 +502,23 @@ class Overcooked(MultiAgentEnv):
                 agent_inv=agent_inv,
                 maze_map=maze_map,
                 terminal=False),
-            reward
+            reward,
+            (alice_shaped_reward, bob_shaped_reward)
         )
 
     def process_interact(
             self,
             maze_map: chex.Array,
             wall_map: chex.Array,
-            fwd_pos: chex.Array,
-            inventory: chex.Array):
+            fwd_pos_all: chex.Array,
+            inventory_all: chex.Array,
+            player_idx: int):
         """Assume agent took interact actions. Result depends on what agent is facing and what it is holding."""
+        
+        fwd_pos = fwd_pos_all[player_idx]
+        inventory = inventory_all[player_idx]
+
+        shaped_reward = 0.
 
         height = self.obs_shape[1]
         padding = (maze_map.shape[0] - height) // 2
@@ -538,6 +557,10 @@ class Overcooked(MultiAgentEnv):
         case_3 = (pot_status > POT_READY_STATUS) * (pot_status <= POT_FULL_STATUS) * object_is_pot
         else_case = ~case_1 * ~case_2 * ~case_3
 
+        # give reward for placing onion in pot, and for picking up soup
+        shaped_reward += case_1 * BASE_REW_SHAPING_PARAMS["PLACEMENT_IN_POT_REW"]
+        shaped_reward += case_2 * BASE_REW_SHAPING_PARAMS["SOUP_PICKUP_REWARD"]
+
         # Update pot status and object in inventory
         new_pot_status = \
             case_1 * (pot_status - 1) \
@@ -575,8 +598,22 @@ class Overcooked(MultiAgentEnv):
             + successful_drop * OBJECT_TO_INDEX["empty"]
 
         # Apply inventory update
-        inventory = new_object_in_inv
+        has_picked_up_plate = successful_pickup*(new_object_in_inv == OBJECT_TO_INDEX["plate"])
+        
+        # number of plates in player hands < number ready/cooking/partially full pot
+        num_plates_in_inv = jnp.sum(inventory == OBJECT_TO_INDEX["plate"])
+        pot_loc_layer = jnp.array(maze_map[padding:-padding, padding:-padding, 0] == OBJECT_TO_INDEX["pot"], dtype=jnp.uint8)
+        padded_map = maze_map[padding:-padding, padding:-padding, 2] 
+        num_notempty_pots = jnp.sum((padded_map!=POT_EMPTY_STATUS)* pot_loc_layer)
+        is_dish_picku_useful = num_plates_in_inv < num_notempty_pots
 
+        plate_loc_layer = jnp.array(maze_map == OBJECT_TO_INDEX["plate"], dtype=jnp.uint8)
+        no_plates_on_counters = jnp.sum(plate_loc_layer) == 0
+        
+        shaped_reward += no_plates_on_counters*has_picked_up_plate*is_dish_picku_useful*BASE_REW_SHAPING_PARAMS["PLATE_PICKUP_REWARD"]
+
+        inventory = new_object_in_inv
+        
         # Apply changes to maze
         new_maze_object_on_table = \
             object_is_pot * OBJECT_INDEX_TO_VEC[new_object_on_table].at[-1].set(new_pot_status) \
@@ -587,7 +624,7 @@ class Overcooked(MultiAgentEnv):
 
         # Reward of 20 for a soup delivery
         reward = jnp.array(successful_delivery, dtype=float)*DELIVERY_REWARD
-        return maze_map, inventory, reward
+        return maze_map, inventory, reward, shaped_reward
 
     def is_terminal(self, state: State) -> bool:
         """Check whether state is terminal."""

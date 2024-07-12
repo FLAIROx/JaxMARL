@@ -1,7 +1,3 @@
-# Since it's more expensive to step a transformer than a rnn in an env, 
-# more parallel environments, together with more network updates per episode to balance
-# the training. The total number of timesteps is decreased so that the total number of network updates
-# is the same of qmix.
 "NUM_ENVS": 16
 "N_MINI_UPDATES": 4
 "NUM_STEPS": 128
@@ -37,3 +33,12 @@
 "WANDB_ONLINE_REPORT": True
 "NUM_TEST_EPISODES": 32
 "TEST_INTERVAL": 100000
+"REW_SCALE": 10.
+
+# ENV
+"ENV_NAME": "HeuristicEnemySMAX"
+"MAP_NAME": "5m_vs_6m"
+"ENV_KWARGS":
+  "see_enemy_actions": True
+  "walls_cause_death": True
+  "attack_mode": "closest"

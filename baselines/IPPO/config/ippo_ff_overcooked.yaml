@@ -10,8 +10,16 @@
 "ENT_COEF": 0.01
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
+"REW_SHAPING_HORIZON": 2.5e6
 "ACTIVATION": "tanh"
 "ENV_NAME": "overcooked"
 "ENV_KWARGS": 
-  "layout" : "cramped_room"
+  "layout" : "coord_ring"
 "ANNEAL_LR": True
+"SEED": 30
+"NUM_SEEDS": 1
+
+# WandB Params
+"ENTITY": "mttga"
+"PROJECT": "jaxmarl-overcooked"
+"WANDB_MODE" : "online"

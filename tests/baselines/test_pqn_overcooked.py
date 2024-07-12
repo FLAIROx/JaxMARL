@@ -7,8 +7,8 @@ def run_script(script_path, *args):
     return result
 
 def test_script_with_arguments():
-    script_path = os.path.join('baselines/QLearning/qmix_rnn.py')
-    result = run_script(script_path, '+alg=ql_rnn_mpe', 'alg.TOTAL_TIMESTEPS=1e4', 'WANDB_MODE=disabled')
+    script_path = os.path.join('baselines/QLearning/pqn_vdn_cnn_overcooked.py')
+    result = run_script(script_path, '+alg=pqn_vdn_cnn_overcooked', 'alg.TOTAL_TIMESTEPS=1e4', 'WANDB_MODE=disabled')
     assert result.returncode == 0
 
 

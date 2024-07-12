@@ -1,6 +1,0 @@
-"ENV_NAME": "HeuristicEnemySMAX"
-"MAP_NAME": "2s3z"
-"ENV_KWARGS":
-  "see_enemy_actions": True
-  "walls_cause_death": True
-  "attack_mode": "closest"

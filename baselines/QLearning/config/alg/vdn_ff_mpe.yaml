@@ -1,0 +1,30 @@
+"TOTAL_TIMESTEPS": 2e6
+"NUM_ENVS": 32
+"NUM_STEPS": 16
+"BUFFER_SIZE": 1e5
+"BUFFER_BATCH_SIZE": 32
+"HIDDEN_SIZE": 64
+"NUM_LAYERS": 2
+"EPS_START": 1.0
+"EPS_FINISH": 0.05
+"EPS_DECAY": 0.1 # percentage of updates
+"MAX_GRAD_NORM": 25
+"TARGET_UPDATE_INTERVAL": 200
+"TAU": 1.
+"NUM_EPOCHS": 1
+"LR": 0.005
+"LEARNING_STARTS": 10000 # timesteps
+"LR_LINEAR_DECAY": True
+"GAMMA": 0.9
+
+# ENV
+"ENV_NAME": "MPE_simple_spread_v3"
+"ENV_KWARGS": {}
+
+# evaluate
+"TEST_DURING_TRAINING": True
+"TEST_INTERVAL": 0.05 # as a fraction of updates
+"TEST_NUM_STEPS": 30
+"TEST_NUM_ENVS": 512
+
+"ALG_NAME": "vdn_ff"
