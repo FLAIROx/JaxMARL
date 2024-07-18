@@ -237,7 +237,7 @@ class HanabiEnv(HanabiGame):
         return {a: obs[i] for i, a in enumerate(self.agents)}
 
     def get_legal_moves(self, state: State) -> chex.Array:
-        # Play is legal when card is in hand.
+        """Get all agents' legal moves"""
 
         @partial(jax.vmap, in_axes=[0, None])
         def _legal_moves(aidx: int, state: State) -> chex.Array:
