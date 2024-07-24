@@ -80,8 +80,10 @@ class LogWrapper(JaxMARLWrapper):
         action: Union[int, float],
         reset_state: Optional[LogEnvState] = None,
     ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
+        if reset_state is not None:
+            reset_state = reset_state.env_state
         obs, env_state, reward, done, info = self._env.step(
-            key, state.env_state, action, reset_state.env_state
+            key, state.env_state, action, reset_state
         )
         ep_done = done["__all__"]
         new_episode_return = state.episode_returns + self._batchify_floats(reward)
