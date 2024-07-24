@@ -12,8 +12,10 @@ import flax.linen as nn
 import numpy as np
 import optax
 from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any, Dict
+from typing import Sequence, NamedTuple, Any, Dict, Union
+from safetensors.flax import save_file
 from flax.training.train_state import TrainState
+from flax.traverse_util import flatten_dict
 import distrax
 import jaxmarl
 from jaxmarl.wrappers.baselines import LogWrapper
@@ -386,7 +388,7 @@ def make_train(config):
 def main(config):
     config = OmegaConf.to_container(config) 
 
-    wandb.init(
+    run = wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=["IPPO", "RNN", config["ENV_NAME"]],
@@ -398,12 +400,23 @@ def main(config):
     train_jit = jax.jit(make_train(config))
     out = train_jit(rng)
 
-    # checkpoint model for greedy eval
-    '''train_state = out['runner_state'][0]
-    save_args = orbax_utils.save_args_from_target(train_state)
-    orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
-    save_loc = 'tmp/orbax/checkpoint_rnn'
-    orbax_checkpointer.save(save_loc, train_state, save_args=save_args)'''
+    # save params
+    if config['SAVE_PATH'] is not None:
+
+        def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+            flattened_dict = flatten_dict(params, sep=',')
+            save_file(flattened_dict, filename)
+
+        params = out['runner_state'][0][0][0].params
+        save_dir = os.path.join(config['SAVE_PATH'], run.project, run.name)
+        os.makedirs(save_dir, exist_ok=True)
+        save_params(params, f'{save_dir}/model.safetensors')
+        print(f'Parameters of first batch saved in {save_dir}/model.safetensors')
+
+        # upload this to wandb as an artifact   
+        artifact = wandb.Artifact(f'{run.name}-checkpoint', type='checkpoint')
+        artifact.add_file(f'{save_dir}/model.safetensors')
+        artifact.save()
 
 if __name__ == "__main__":
     main()

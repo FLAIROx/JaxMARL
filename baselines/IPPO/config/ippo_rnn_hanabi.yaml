@@ -19,6 +19,8 @@
 "SEED": 30
 
 # WandB Params
-"WANDB_MODE": "disabled"
-"ENTITY": ""
-"PROJECT": ""
+"WANDB_MODE": "online"
+"ENTITY": "alex-plus"
+"PROJECT": "jaxmarl-hanabi"
+
+"SAVE_PATH": "baselines/IPPO/checkpoints"
