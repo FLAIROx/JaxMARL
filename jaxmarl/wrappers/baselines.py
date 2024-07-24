@@ -78,9 +78,10 @@ class LogWrapper(JaxMARLWrapper):
         key: chex.PRNGKey,
         state: LogEnvState,
         action: Union[int, float],
+        reset_state: Optional[LogEnvState] = None,
     ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(
-            key, state.env_state, action
+            key, state.env_state, action, reset_state.env_state
         )
         ep_done = done["__all__"]
         new_episode_return = state.episode_returns + self._batchify_floats(reward)
@@ -99,7 +100,16 @@ class LogWrapper(JaxMARLWrapper):
         info["returned_episode_returns"] = state.returned_episode_returns
         info["returned_episode_lengths"] = state.returned_episode_lengths
         info["returned_episode"] = jnp.full((self._env.num_agents,), ep_done)
-        return obs, state, reward, done, info
+        return obs, state, reward, done, info        
+    
+    def env_state_to_log_state(self, env_state: State):
+        return LogEnvState(
+            env_state,
+            jnp.zeros((self._env.num_agents,)),
+            jnp.zeros((self._env.num_agents,)),
+            jnp.zeros((self._env.num_agents,)),
+            jnp.zeros((self._env.num_agents,)),
+        )
 
 class MPELogWrapper(LogWrapper):
     """ Times reward signal by number of agents within the environment,

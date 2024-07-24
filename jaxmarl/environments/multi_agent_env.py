@@ -56,7 +56,10 @@ class MultiAgentEnv(object):
             obs_re, states_re = self.reset(key_reset)
         else:
             states_re = reset_state
-            obs_re = self.get_obs(states_re)
+            if self.name == "Hanabi":
+                obs_re = self.get_obs(states_re, states_re, self.num_moves - 1)
+            else:
+                obs_re = self.get_obs(states_re)
 
         # Auto-reset environment based on termination
         states = jax.tree_map(
