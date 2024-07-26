@@ -149,6 +149,18 @@ class HanabiGame(MultiAgentEnv):
         )
 
         return state
+    
+    @partial(jax.jit, static_argnums=[0])
+    def generate_initial_deck(self, key: chex.PRNGKey) -> chex.Array:
+        # get all possible (colour, rank) pairs, including repetitions given num_cards_of_rank
+        colors = jnp.arange(self.num_colors)
+        ranks = jnp.arange(self.num_ranks)
+        ranks = jnp.repeat(ranks, self.num_cards_of_rank)
+        color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
+        # randomly shuffle (colour, rank) pairs
+        key, _key = jax.random.split(key)
+        shuffled_pairs = jax.random.permutation(_key, color_rank_pairs, axis=0)
+        return self._one_hot_encode_deck(shuffled_pairs)
 
     @partial(jax.jit, static_argnums=[0])
     def reset_game(self, key: chex.PRNGKey) -> State:
