@@ -241,63 +241,57 @@ class HanabiEnv(HanabiGame):
 
         @partial(jax.vmap, in_axes=[0, None])
         def _legal_moves(aidx: int, state: State) -> chex.Array:
-            """
-            Legal moves encoding in order:
-            - discard for all cards in hand
-            - play for all cards in hand
-            - hint for all colors and ranks for all other players
-            """
-            move_idx = 0
+            # all moves are illegal in the beginning
             legal_moves = jnp.zeros(self.num_moves)
-            hands = state.player_hands
-            info_tokens = state.info_tokens
-            # discard legal when discard tokens are not full
-            is_not_max_info_tokens = jnp.sum(state.info_tokens) < self.max_info_tokens
-            legal_moves = legal_moves.at[move_idx : move_idx + self.hand_size].set(
-                is_not_max_info_tokens
+            all_player_hands = state.player_hands  # (num_players, hand_size, num_colors, num_ranks)
+
+            # first get all cards one is holding since only these are legally playable
+            my_hand = all_player_hands.at[aidx].get()  # (hand_size, num_colors, num_ranks)
+            holding_cards_idx = jax.vmap(lambda c: jnp.any(c))(my_hand)
+
+            # discard is legal when tokens are not full and when card is in hand
+            can_get_token = jnp.sum(state.info_tokens) < self.max_info_tokens
+            legal_discard_idx = holding_cards_idx * can_get_token
+            legal_moves = legal_moves.at[self.discard_action_range].set(legal_discard_idx)
+
+            # play is legal for cards in hand - if empty card, not legal.
+            legal_moves = legal_moves.at[self.play_action_range].set(holding_cards_idx)
+
+            # hints depend on cards held by other players and not our own
+            other_players_hands = jnp.delete(
+                all_player_hands, aidx, axis=0, assume_unique_indices=True
             )
-            move_idx += self.hand_size
-            # play moves always legal
-            legal_moves = legal_moves.at[move_idx : move_idx + self.hand_size].set(1)
-            move_idx += self.hand_size
-            # hints depend on other player cards
-            other_hands = jnp.delete(hands, aidx, axis=0, assume_unique_indices=True)
-
-            def _get_hints_for_hand(carry, unused):
-                """Generates valid hints given hand"""
-                aidx, other_hands = carry
-                hand = other_hands[aidx]
-
-                # get occurrences of each card
-                card_counts = jnp.sum(hand, axis=0)
-                # get occurrences of each color
-                color_counts = jnp.sum(card_counts, axis=1)
-                # get occurrences of each rank
-                rank_counts = jnp.sum(card_counts, axis=0)
-                # check which colors/ranks in hand
-                colors_present = jnp.where(color_counts > 0, 1, 0)
-                ranks_present = jnp.where(rank_counts > 0, 1, 0)
-
-                valid_hints = jnp.concatenate([colors_present, ranks_present])
-                carry = (aidx + 1, other_hands)
-
-                return carry, valid_hints
-
-            _, valid_hints = lax.scan(
-                _get_hints_for_hand, (0, other_hands), None, self.num_agents - 1
-            )
-            # make other player positions relative to current player
-            valid_hints = jnp.roll(valid_hints, -aidx, axis=0)
-            # include valid hints in legal moves
-            num_hints = (self.num_agents - 1) * (self.num_colors + self.num_ranks)
-            valid_hints = jnp.concatenate(valid_hints, axis=0)
-            info_tokens_available = jnp.sum(info_tokens) != 0
-            valid_hints *= info_tokens_available
-            legal_moves = legal_moves.at[move_idx : move_idx + num_hints].set(
-                valid_hints
+            # adjust to have relative positions
+            other_players_hands = jnp.roll(
+                other_players_hands, -aidx, axis=0
             )
 
-            # only enable noop if not current player
+            # cards can be hinted only if info tokens are available
+            info_tokens_available = jnp.sum(state.info_tokens) > 0
+
+            # get all the colors that can be hinted
+            def _hintable_colors(hand):
+                # Hand: (num_cards, num_colors, num_ranks)
+                card_colors = jnp.sum(hand, axis=2)
+                hintable_colors = card_colors.any(axis=0)
+                return hintable_colors
+
+            legal_color_hints = jax.vmap(_hintable_colors)(other_players_hands).ravel()
+            legal_color_hints = legal_color_hints * info_tokens_available
+            legal_moves = legal_moves.at[self.color_action_range].set(legal_color_hints)
+
+            # get all the ranks that can be hinted.
+            def _hintable_ranks(hand):
+                # Hand: (num_cards, num_colors, num_ranks)
+                card_ranks = jnp.sum(hand, axis=1)
+                hintable_ranks = card_ranks.any(axis=0)
+                return hintable_ranks
+
+            legal_rank_hints = jax.vmap(_hintable_ranks)(other_players_hands).ravel()
+            legal_rank_hints = legal_rank_hints * info_tokens_available
+            legal_moves = legal_moves.at[self.rank_action_range].set(legal_rank_hints)
+
+            # Only legalize noop if not current player.
             cur_player = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
             not_cur_player = aidx != cur_player
             legal_moves -= legal_moves * not_cur_player

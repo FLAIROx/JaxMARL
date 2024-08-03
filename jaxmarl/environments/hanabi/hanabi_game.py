@@ -59,7 +59,7 @@ class HanabiGame(MultiAgentEnv):
         self.max_info_tokens = max_info_tokens
         self.max_life_tokens = max_life_tokens
         self.num_cards_of_rank = num_cards_of_rank
-        self.deck_size = jnp.sum(num_cards_of_rank) * num_colors
+        self.deck_size = np.sum(num_cards_of_rank) * num_colors
         self.color_map = color_map
 
         # action ranges - useful to know
