@@ -330,6 +330,74 @@ class GridMapCircleAgents(Map):
         
     def scale_coords(self, x):
         return x / self.cell_size
+    
+    def dikstra_path(self, map_data, pos1, pos2):
+        """ Computes shorted path (if possible) between `pos1` and `pos2` on the grid specified by `map_data`.
+        
+        Output:
+        - `valid` (bool): True if a path exists
+        - `d` (float): distance of shortest path, INF if no path exists
+        """
+        
+        h, w = map_data.shape
+        NEIGHBOURS = jnp.array([[-1, 0], [1, 0], [0, -1], [0, 1]])  # left, right, up, down
+        INF = 1e8  # large number to represent infinity (jnp.inf produced unwanted nan's)
+        
+        def _flatten_idx(i, j):
+            return i * w + j
+        
+        def _unflatten_idx(idx):
+            return jnp.array([idx // w, idx % w])
+        
+        start = jnp.floor(pos1).astype(jnp.int32)
+        end = jnp.floor(pos2).astype(jnp.int32)
+        
+        h, w = map_data.shape
+        start_flat_idx = start[0] * w + start[1]
+        set_distances_to_go = jnp.ones((h*w,)) * INF
+        
+        set_distances_to_go = set_distances_to_go.at[start_flat_idx].set(0)
+        set_visited = jnp.zeros((h*w,)) 
+        flat_node_idx = jnp.argmin(set_distances_to_go + INF * set_visited)
+        
+        carry = (
+            flat_node_idx,
+            set_distances_to_go,
+            set_visited
+        )
+        
+        def _cond(carry):
+            return carry[1][carry[0]] < INF 
+        
+        def _body(carry):
+            flat_node_idx, set_distances_to_go, set_visited = carry
+            unflat_node_idx = _unflatten_idx(flat_node_idx)
+            n_idx = unflat_node_idx + NEIGHBOURS
+            flat_n_idx = jax.vmap(_flatten_idx)(n_idx[:, 0], n_idx[:, 1])
+            
+            n_visited = set_visited.at[flat_n_idx].get()
+            n_distances_to_go = set_distances_to_go.at[flat_n_idx].get()
+            new_distance = set_distances_to_go[flat_node_idx] + 1
+            n_valid_node = map_data[n_idx[:, 1], n_idx[:, 0]] == 0
+            updated_neighbour_distances = jnp.where(
+                (n_distances_to_go > new_distance) &
+                (n_visited == 0) & 
+                (n_valid_node), 
+                new_distance, 
+                n_distances_to_go)
+            
+            set_distances_to_go = set_distances_to_go.at[flat_n_idx].set(updated_neighbour_distances)
+            set_visited = set_visited.at[flat_node_idx].set(1)
+            flat_node_idx = jnp.argmin(set_distances_to_go + INF * set_visited)
+            return (flat_node_idx, set_distances_to_go, set_visited)
+            
+        _, set_distances_to_go, _ = jax.lax.while_loop(
+            _cond,
+            _body,
+            carry
+        )
+        d = set_distances_to_go[_flatten_idx(end[0], end[1])]
+        return d < INF, d
         
     ### === VISUALIZATION === ###
     def plot_map(self, ax: axes.Axes, map_grid: jnp.ndarray):
