@@ -672,29 +672,26 @@ class JaxNav(MultiAgentEnv):
         # n_walls = state.map_data.sum() - state.map_data.shape[0]*2 - state.map_data.shape[1]*2 + 4
         inside = state.map_data.astype(jnp.bool_)[1:-1, 1:-1]
         n_walls = jnp.sum(inside)
-        passability = jax.vmap(
-            self.map_obj.passable_check,
-            in_axes=(0, 0, None)
+
+        passable, path_len = jax.vmap(
+            self.map_obj.dikstra_path,
+            in_axes=(None, 0, 0)
         )(
+            state.map_data,
             state.pos,
             state.goal,
-            state.map_data,
         )
-        
-        # shortest_path_lengths = jax.vmap(  # BUG in the minimax code somewhere
-        #     _graph_util.shortest_path_len,
-        #     in_axes=(None, 0, 0),
-        # )(
-        #     inside.astype(jnp.bool_),
-        #     jnp.floor(state.pos-1).astype(jnp.int32),
-        #     jnp.floor(state.goal-1).astype(jnp.int32),
-        # )
-        
+                
+        shortest_path_lengths_stderr = jax.lax.select(
+            jnp.sum(passable) > 0,
+            jnp.std(path_len, where=passable)/jnp.sqrt(jnp.sum(passable)),
+            0.0
+        )
         return dict(
             n_walls=n_walls,
-            # shortest_path_length_mean=jnp.mean(shortest_path_lengths),
-            # shortest_path_lengths_stderr=jnp.std(shortest_path_lengths)/jnp.sqrt(self.num_agents),
-            passable=jnp.mean(passability),
+            shortest_path_length_mean=jnp.mean(path_len, where=passable),
+            shortest_path_lengths_stderr=shortest_path_lengths_stderr,
+            passable=jnp.mean(passable),
         )
         
     ### === VISULISATION === ###

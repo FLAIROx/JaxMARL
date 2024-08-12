@@ -397,7 +397,8 @@ class GridMapCircleAgents(Map):
             carry
         )
         d = set_distances_to_go[_flatten_idx(end[0], end[1])]
-        return d < INF, d
+        valid = d < INF
+        return valid, jax.lax.select(valid, d, 0.0)
         
     ### === VISUALIZATION === ###
     def plot_map(self, ax: axes.Axes, map_grid: jnp.ndarray):
