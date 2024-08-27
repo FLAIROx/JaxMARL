@@ -219,54 +219,85 @@ def test_square_agent_grid_map_occupancy_mask(
         )
         assert jnp.all(c == outcome)
 
-if __name__=="__main__":
-    
-    rng = jax.random.PRNGKey(0)
-    
-    num_agents = 1
-    rad = 0.3
-    map_params = {
-        "map_size": (10, 10),
-        "fill": 0.4
-    }
-    pos = jnp.array([[1.5, 3.1]])
-    theta = jnp.array([-jnp.pi/4]) 
-    goal = jnp.array([[9.5, 9.5]])
-    done = jnp.array([False])
-    
-    map_obj = GridMapPolygonAgents(
-        num_agents=num_agents,
-        rad=rad,
-        grid_size=1.0,
-        **map_params
-    )
-    
-    map_data = map_obj.sample_map(rng)
-    print('map_data: ', map_data)
-    
-    c = map_obj.check_agent_map_collision(
-        pos,
-        theta,
-        map_data, 
-    )
-    print('c', c)
-    
-    with jax.disable_jit(False):
-        c = map_obj.get_agent_map_occupancy_mask(
-            pos, 
-            theta,
-            map_data
+@pytest.mark.parametrize(
+    ("num_agents", "pos", "theta", "map_size", "disable_jit", "outcome"),
+    [
+        (
+            2, 
+            jnp.array([[3.5, 3.1],
+                       [1.5, 3.1]]),
+            jnp.array([jnp.pi/4, 0.0]),
+            (5, 5),
+            False,
+            jnp.array([False, False]),
+        ),
+        (
+            2, 
+            jnp.array([[3.5, 3.0],
+                       [3.5, 3.2]]),
+            jnp.array([0.0, 0.0]),
+            (5, 5),
+            False,
+            jnp.array([True, True]),
+        ),
+        (
+            3, 
+            jnp.array([[3.5, 3.0],
+                       [3.5, 3.2],
+                       [4.5, 3.2]]),
+            jnp.array([0.0, 0.0, 0.0]),
+            (5, 5),
+            False,
+            jnp.array([True, True, False]),
+        ),
+        (
+            3, 
+            jnp.array([[3.5, 3.1],
+                       [4.12, 3.1],
+                       [0., 0.25]]),
+            jnp.array([jnp.pi/4, 0.0, 0.0]),
+            (5, 5),
+            False,
+            jnp.array([False, False, False]),
+        ),
+        (
+            3, 
+            jnp.array([[3.5, 3.1],
+                       [4.1, 3.1],
+                       [0., 0.25]]),
+            jnp.array([jnp.pi/4, 0.0, 0.0]),
+            (5, 5),
+            False,
+            jnp.array([True, True, False]),
+        ),
+        (
+            6, 
+            jnp.array([[3.5, 3.1],
+                       [4.1, 3.1],
+                       [2, 0.25],
+                       [6.5, 3.1],
+                       [6.1, 3.1],
+                       [1.0, 6.0]]),
+            jnp.array([jnp.pi/4, 0.0, 0.0, 0.0, -jnp.pi/4, 0.0]),
+            (10, 10),
+            False,
+            jnp.array([True, True, False, True, True, False]),
+        ),
+    ],
+)
+def test_square_agent_agent_collisions(
+    num_agents,
+    pos, 
+    theta,
+    map_size,
+    disable_jit: bool,
+    outcome: bool,
+):
+    with jax.disable_jit(disable_jit):
+        map_obj = GridMapPolygonAgents(
+            num_agents=num_agents,
+            rad=0.3,
+            map_size=map_size,
         )
-        print('c', c)
-    
-    plt, ax = plt.subplots()
-    
-    map_obj.plot_map(ax, map_data)
-    map_obj.plot_agents(ax,
-                        pos, 
-                        theta,
-                        goal,
-                        done=done,
-                        plot_line_to_goal=False)
-    
-    plt.savefig('test_map.png')
+        c = map_obj.check_all_agent_agent_collisions(pos, theta)
+        assert jnp.all(c == outcome)

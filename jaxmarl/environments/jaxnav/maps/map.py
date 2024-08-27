@@ -169,6 +169,10 @@ class Map(object):
         # NOTE should we switch these functions to use pose, i.e. [pos_x, pos_y, theta]?
         raise NotImplementedError
     
+    def check_all_agent_agent_collisions(self, pos, theta):
+        """ Check collision between all agents """
+        raise NotImplementedError
+        
     def check_agent_beam_intersect(self, beam, pos, theta, range_resolution, **agent_kwargs):
         """ Check for intersection between a lidar beam and an agent. """
         raise NotImplementedError

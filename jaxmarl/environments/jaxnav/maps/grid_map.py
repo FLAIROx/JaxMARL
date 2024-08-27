@@ -272,6 +272,18 @@ class GridMapCircleAgents(Map):
         pos = jnp.floor(self.scale_coords(pos)).astype(int)
         return map_grid.at[pos[1], pos[0]].get() == 1
     
+    def check_all_agent_agent_collisions(self, agent_positions: chex.Array, agent_theta: chex.Array) -> chex.Array:
+        
+        @partial(jax.vmap, in_axes=(0, None))
+        def _check_agent_collisions(agent_idx: int, agent_positions: chex.Array) -> bool:
+            # TODO this function is a little clunky FIX 
+            z = jnp.zeros(agent_positions.shape)
+            z = z.at[agent_idx,:].set(jnp.ones(2)*self.rad*2.1)  
+            x = agent_positions + z
+            return jnp.any(jnp.sqrt(jnp.sum((x - agent_positions[agent_idx,:])**2, axis=1)) <= self.rad*2) 
+        
+        return _check_agent_collisions(jnp.arange(agent_positions.shape[0]), agent_positions)
+    
     @partial(jax.jit, static_argnums=[0])
     def _gen_base_grid(self):
         """ Generate base grid map with walls around border """
@@ -622,6 +634,7 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         return jnp.any(_checkSide(x1y1, x2y2, grid_idx)) & valid_idx
     
     def _checkInsideGrid(self, sides, grid_idx, map_grid):
+        """ Check if polygon is inside grid cell, NOTE assumes grid cell is of size 1x1 """
         
         def _checkPolyWithinRect(sides, rx, ry):
             """ Check if polygon is within rectangle with bottom left corner at (rx, ry) and width and height of 1."""
@@ -638,6 +651,44 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         inside = _checkPolyWithinRect(sides, grid_idx[1], grid_idx[0])
         return inside & map_grid[grid_idx[0], grid_idx[1]] & valid_idx
     
+    @partial(jax.jit, static_argnums=[0])
+    def check_all_agent_agent_collisions(self, agent_positions: chex.Array, agent_theta: chex.Array, agent_coords=None) -> chex.Array:
+        """ Using Separating Axis Theorem (SAT) to check for collisions between convex polygon agents. """    
+        
+        def _orthogonal(v):
+            return jnp.array([v[1], -v[0]])
+        
+        if agent_coords is None: agent_coords = self.agent_coords
+        
+        transformed_coords = jax.vmap(self.transform_coords, in_axes=(0, 0, None))(agent_positions, agent_theta.squeeze(), agent_coords)
+        all_coords = transformed_coords.reshape((-1, 2))  # [num_agents*4, 2]
+        trans_rolled = jnp.roll(transformed_coords, 1, axis=1)
+        
+        edges = transformed_coords - trans_rolled  # [num_agents, 4, 2]
+        orthog_edges = jax.vmap(_orthogonal, in_axes=(0))(edges.reshape((-1, 2))).reshape((-1, 4, 2))  # NOTE assuming 4 sides
+
+        all_axis = orthog_edges / jnp.linalg.norm(orthog_edges, axis=2)[:,:,None]  # [num_agents, 4, 2]
+            
+        def _project_axis(axis):
+            return jax.vmap(jnp.dot, in_axes=(None, 0))(axis, all_coords)
+            
+        axis_projections = jax.vmap(_project_axis)(all_axis.reshape((-1, 2)))
+        axis_projections_by_agent = axis_projections.reshape((-1, self.num_agents, 4)) 
+        axis_ranges_by_agent = jnp.stack([jnp.min(axis_projections_by_agent, axis=2), jnp.max(axis_projections_by_agent, axis=2)], axis=-1)
+        axis_by_agent_range_by_agent = axis_ranges_by_agent.reshape((self.num_agents, -1) + axis_ranges_by_agent.shape[1:])
+        def _calc_overlaps(agent_idx, agent_axis_ranges):
+            overlaps = (agent_axis_ranges[:, agent_idx, 0][:, None] <= agent_axis_ranges[:, :, 1]) & (agent_axis_ranges[:, :, 0] <= agent_axis_ranges[:, agent_idx, 1][:, None])            
+            overlaps = overlaps.at[:, agent_idx].set(False)
+            return jnp.all(overlaps, axis=0)
+        
+        overlaps_matrix = jax.vmap(_calc_overlaps)(jnp.arange(self.num_agents), axis_by_agent_range_by_agent) # all overlaps for all vertex is a collision
+        # need to match matrix triangles
+        def _join_matrix(rows, cols):
+            return jnp.any(jnp.bitwise_and(rows, cols))
+            
+        c_free = jax.vmap(_join_matrix)(overlaps_matrix, overlaps_matrix.T)
+        return c_free
+                
     def check_agent_beam_intersect(self, beam, pos, theta, range_resolution, agent_coords=None):
         """ Check for intersection between a lidar beam and an agent. """
         if agent_coords is None: agent_coords = self.agent_coords
