@@ -426,15 +426,7 @@ class JaxNav(MultiAgentEnv):
     @partial(vmap, in_axes=(None, 0, 0))
     def _check_goal_reached(self, pos: chex.Array, goal_pos: chex.Array) -> bool:
         return jnp.sqrt(jnp.sum((pos - goal_pos)**2)) <= self.goal_radius 
-        
-    @partial(vmap, in_axes=(None, 0, None, None))
-    def _check_agent_collisions(self, agent_idx: int, agent_positions: chex.Array, dones: chex.Array) -> bool:
-        # TODO this function is a little clunky FIX 
-        z = jnp.zeros(agent_positions.shape)
-        z = z.at[agent_idx,:].set(jnp.ones(2)*self.rad*2.1)  
-        x = agent_positions + z
-        return jnp.any(jnp.sqrt(jnp.sum((x - agent_positions[agent_idx,:])**2, axis=1)) <= self.rad*2) 
-    
+            
     @partial(jax.jit, static_argnums=[0])
     def get_obs(self, state: State) -> chex.Array:
         obs_batch = self._get_obs(state)

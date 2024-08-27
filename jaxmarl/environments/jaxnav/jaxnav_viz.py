@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from typing import Optional, List
 
-from .jaxnav_env import JaxNav
+from .jaxnav_env import JaxNav, State
 import jax.numpy as jnp
 
 class JaxNavVisualizer(object):
     def __init__(self, 
                  env: JaxNav, 
                  obs_seq: List, 
-                 state_seq: List,
+                 state_seq: List[State],
                  reward_seq: List=None,
                  done_frames=None,
                  title_text: str=None,
@@ -77,8 +77,9 @@ class JaxNavVisualizer(object):
         if self.plot_path:
             for a in range(self.env.num_agents):
                 plot_frame = frame
-                if self.done_frames[a] < frame:
-                    plot_frame = self.done_frames[a]
+                if self.done_frames is not None:
+                    if (self.done_frames[a] < frame):
+                        plot_frame = self.done_frames[a]
                 self.env.map_obj.plot_agent_path(self.ax, self.path_seq[:plot_frame, a, 0], self.path_seq[:plot_frame, a, 1])
             # self.ax.plot(self.path_seq[:frame, 0], self.path_seq[:frame, 1], color='b', linewidth=2.0, zorder=1)
         self.env.init_render(self.ax, self.state_seq[frame], self.obs_seq[frame], lidar=self.plot_lidar, agent=self.plot_agent)
