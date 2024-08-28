@@ -4,7 +4,7 @@
 
 ## Environment Details
 
-JaxNav was first introduced in "No Regrets: Investigating and Improving Regret Approximations for Curriculum Discovery" with an in-detail specification given in the Appendix.
+JaxNav was first introduced in ["No Regrets: Investigating and Improving Regret Approximations for Curriculum Discovery"](https://www.arxiv.org/abs/2408.15099) with an in-detail specification given in the Appendix.
 
 ### Map Types
 The default map is square robots of width 0.5m moving within a world with grid based obstacled, with cells of size 1m x 1m. Map cell size can be varied to produce obstacles of higher fidelty or robot strucutre can be changed into any polygon or a circle.
