@@ -1,4 +1,4 @@
-import jax 
+""" Hand crafted test cases for JaxNav """
 import jax.numpy as jnp
 import chex
 from typing import NamedTuple, List, Tuple
@@ -708,11 +708,6 @@ registered_singleton_collections = {
         "NarrowChicane2b",
         "Chicane4",
     ],
-    "new": [
-        "NarrowChicane2a",
-        "NarrowChicane2b",
-        "Chicane4",
-    ],
     "corridor": [
         "BlankCross4",
         "LongCorridor2",
@@ -721,9 +716,6 @@ registered_singleton_collections = {
     ],
     "just-long-corridor": [
         "LongCorridor2",
-    ],
-    "just-single2": [
-        "SingleNav2",
     ],
 }
     
