@@ -346,6 +346,11 @@ class GridMapCircleAgents(Map):
     def dikstra_path(self, map_data, pos1, pos2):
         """ Computes shorted path (if possible) between `pos1` and `pos2` on the grid specified by `map_data`.
         
+        Method TL;DR: Dijkstra's algorithm. JIT'd while loop through the open set of nodes, updating the distance
+                      to go for each neighbour in `_body`. Terminates when the open set is empty.
+        
+        TODO: also terminate if the goal is reached. Add unit tests.
+        
         Output:
         - `valid` (bool): True if a path exists
         - `d` (float): distance of shortest path, INF if no path exists
@@ -492,6 +497,8 @@ middle_line = jnp.array([
 ])
 
 class GridMapPolygonAgents(GridMapCircleAgents):
+    """ Map for homogenous, convex polygon agents. 
+    """
     
     def __init__(self,
                  num_agents: int,
@@ -513,14 +520,9 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         side_length = jnp.maximum(max_x - min_x, max_y - min_y)
                 
         cell_ratio = side_length / self.cell_size
-        # print('cell ratio', cell_ratio)
         
         self.agent_window = jnp.ceil(cell_ratio*2).astype(int)  # NOTE times 2 should be enough
-        self.idx_offsets = jnp.arange(-self.agent_window, self.agent_window+1)
-        # print('side length', side_length)
-        # print('agent window', self.agent_window)
-        # print('idx offsets', self.idx_offsets)
-        
+        self.idx_offsets = jnp.arange(-self.agent_window, self.agent_window+1)        
         
         #  2D with one set of coords for all agents 
         assert (len(self.agent_coords.shape) == 2)
@@ -604,7 +606,6 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         
         def _checkLineLine(x1, y1, x2, y2, x3, y3, x4, y4):
             """ Check collision between line (x1, y1) -- (x2, y2) and line (x3, y3) -- (x4, y4) """
-            # TODO understand this
             uA = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / ((y4-y3)*(x2-x1) - (x4-x3)*(y2-y1))
             uB = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / ((y4-y3)*(x2-x1) - (x4-x3)*(y2-y1))
             c = (uA >= 0) & (uA <= 1) & (uB >= 0) & (uB <= 1)
@@ -653,7 +654,13 @@ class GridMapPolygonAgents(GridMapCircleAgents):
     
     @partial(jax.jit, static_argnums=[0])
     def check_all_agent_agent_collisions(self, agent_positions: chex.Array, agent_theta: chex.Array, agent_coords=None) -> chex.Array:
-        """ Using Separating Axis Theorem (SAT) to check for collisions between convex polygon agents. """    
+        """ Use Separating Axis Theorem (SAT) to check for collisions between convex polygon agents. 
+        
+        Separating Axis Theorem TL;DR: Searches for a line that separates two convex polygons. If no line is found, the polygons are colliding.
+                                       To search for a separating line, we look at the normals of the edges of the polygons and project the vertices
+                                       of all polygons onto these normals. If the projections of the vertices of one polygon do not overlap with the
+                                       projections of the vertices of the other polygon, then the polygons are not colliding.
+        """    
         
         def _orthogonal(v):
             return jnp.array([v[1], -v[0]])
@@ -696,7 +703,6 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         @partial(jax.vmap, in_axes=(None, None, 0, 0))
         def _checkSide(beam_start, beam_end, side_start, side_end):
             """ Check collision between line (x1, y1) -- (x2, y2) and line (x3, y3) -- (x4, y4) """
-            # TODO understand this
             x1, y1 = beam_start
             x2, y2 = beam_end
             x3, y3 = side_start
