@@ -1,27 +1,20 @@
 """
-Rob sim that follows the JaxMARL interface 
+2D robot navigation simulator that follows the JaxMARL interface 
 """
 
 import jax
 import jax.numpy as jnp
-from jax import random, jit, vmap
-import numpy as np
 from functools import partial
 import chex 
 from flax import struct
 from typing import Tuple, Dict
-#from gymnax.environments import spaces
-import os, pathlib
-import matplotlib.pyplot as plt
 import matplotlib.axes._axes as axes
 
 from jaxmarl.environments import MultiAgentEnv
 from jaxmarl.environments.spaces import Box, Discrete
 
 from .maps import make_map, Map
-from .jaxnav_utils import pol2cart, wrap, unitvec, cart2pol
-import jaxmarl.environments.jaxnav.jaxnav_graph_utils as _graph_utils
-
+from .jaxnav_utils import wrap, cart2pol
 
 NUM_REWARD_COMPONENTS = 2
 REWARD_COMPONENT_SPARSE = 0
@@ -98,15 +91,19 @@ MAP_PARAMS = {
 
 ## ---- Environment ----
 class JaxNav(MultiAgentEnv):
+    """ 
+    Current assumptions:
+     - homogenous agents
+    """
         
     def __init__(self,
                  num_agents: int, # Number of agents
                  act_type="Continuous", # Action type, either Continuous or Discrete
                  normalise_obs=True,
-                 rad=0.3, # Agent radius
-                 evaporating=False, # Whether agents evaporate (dissapeare) when they reach the goal
-                 map_id="Grid-Rand-Poly", # Map type
-                 map_params=MAP_PARAMS, # Map parameters
+                 rad=0.3,  # Agent radius, TODO remove dependency on this
+                 evaporating=False,  # Whether agents evaporate (dissapeare) when they reach the goal
+                 map_id="Grid-Rand-Poly",  # Map type
+                 map_params=MAP_PARAMS,  # Map parameters
                  lidar_num_beams=200,
                  lidar_range_resolution=0.05,
                  lidar_max_range=6.0,
@@ -153,12 +150,11 @@ class JaxNav(MultiAgentEnv):
         self.lidar_num_beams = lidar_num_beams
         self.lidar_max_range = lidar_max_range
         self.lidar_min_range = lidar_min_range
-        assert self.lidar_min_range == 0.0, "lidar_min_range must be 0.0 FOR NOW"
+        assert self.lidar_min_range == 0.0, "lidar_min_range must be 0.0" # TODO for now
         self.lidar_range_resolution = lidar_range_resolution
         self.lidar_angle_factor = lidar_angle_factor
         self.lidar_max_angle = jnp.pi * self.lidar_angle_factor
         self.lidar_angles = jnp.linspace(-jnp.pi * self.lidar_angle_factor, jnp.pi * self.lidar_angle_factor, self.lidar_num_beams) 
-        #self.lidar_ranges = jnp.arange(self.lidar_min_range, self.lidar_max_range, self.lidar_range_resolution)
         num_lidar_samples = int((self.lidar_max_range - self.lidar_min_range) / self.lidar_range_resolution)
         self.lidar_ranges = jnp.linspace(self.lidar_min_range, self.lidar_max_range, num_lidar_samples)
         
@@ -232,8 +228,8 @@ class JaxNav(MultiAgentEnv):
         # 2) Check collisions, goal and time
         old_goal_reached = agent_states.goal_reached
         old_move_term = agent_states.move_term
-        map_collisions = self._check_map_collisions(new_pos, new_theta, agent_states.map_data)*(1-agent_states.done).astype(bool)
-        agent_collisions = self._check_agent_collisions(jnp.arange(agent_states.pos.shape[0]), new_pos, agent_states.done)*(1- agent_states.done).astype(bool)
+        map_collisions = jax.vmap(self._map_obj.check_agent_map_collision, in_axes=(0, 0, None))(new_pos, new_theta, agent_states.map_data)*(1-agent_states.done).astype(bool)
+        agent_collisions = self.map_obj.check_all_agent_agent_collisions(new_pos, new_theta)*(1- agent_states.done).astype(bool)
         collisions = map_collisions | agent_collisions
         goal_reached = (self._check_goal_reached(new_pos, agent_states.goal)*(1-agent_states.done)).astype(bool)
         time_up = jnp.full((self.num_agents,), (step >= self.max_steps))
@@ -293,7 +289,6 @@ class JaxNav(MultiAgentEnv):
             rew_batch = self.rew_lambda * rew_individual + (1 - self.rew_lambda) * shared_rew
 
         rew = {a: rew_batch[i] for i, a in enumerate(self.agents)}
-        
         obs = {a: obs_batch[i] for i, a in enumerate(self.agents)}
         
         if self.evaporating:
@@ -325,10 +320,8 @@ class JaxNav(MultiAgentEnv):
             "AgentC": agent_c,
             "MapC": map_c,
             "TimeO": time_o,
-            # reward
-            "Return": rew_info,
-            # whether action was valid
-            "terminated": term,
+            "Return": rew_info,  # reward
+            "terminated": term,  # whether action was valid
         }
         if self.do_sep_reward:
             raise NotImplementedError("Separate reward not implemented")
@@ -419,22 +412,14 @@ class JaxNav(MultiAgentEnv):
             rew_lambda = jax.random.uniform(key, (1,), minval=self.lambda_range[0], maxval=self.lambda_range[1])
         return rew_lambda
     
-    @partial(vmap, in_axes=(None, 0, 0, None))
+    @partial(jax.vmap, in_axes=(None, 0, 0, None))
     def _check_map_collisions(self, pos: chex.Array, theta: chex.Array, map_data: chex.Array) -> bool:
         return self._map_obj.check_agent_map_collision(pos, theta, map_data)
        
-    @partial(vmap, in_axes=(None, 0, 0))
+    @partial(jax.vmap, in_axes=(None, 0, 0))
     def _check_goal_reached(self, pos: chex.Array, goal_pos: chex.Array) -> bool:
         return jnp.sqrt(jnp.sum((pos - goal_pos)**2)) <= self.goal_radius 
-        
-    @partial(vmap, in_axes=(None, 0, None, None))
-    def _check_agent_collisions(self, agent_idx: int, agent_positions: chex.Array, dones: chex.Array) -> bool:
-        # TODO this function is a little clunky FIX 
-        z = jnp.zeros(agent_positions.shape)
-        z = z.at[agent_idx,:].set(jnp.ones(2)*self.rad*2.1)  
-        x = agent_positions + z
-        return jnp.any(jnp.sqrt(jnp.sum((x - agent_positions[agent_idx,:])**2, axis=1)) <= self.rad*2) 
-    
+            
     @partial(jax.jit, static_argnums=[0])
     def get_obs(self, state: State) -> chex.Array:
         obs_batch = self._get_obs(state)
@@ -485,7 +470,7 @@ class JaxNav(MultiAgentEnv):
         
         return jnp.concatenate([agent_idx, concat, obs], axis=1)
     
-    @partial(vmap, in_axes=(None, 0, 0, 0, 0, 0))
+    @partial(jax.vmap, in_axes=(None, 0, 0, 0, 0, 0))
     def update_state(self, pos: chex.Array, theta: float, speed: chex.Array, action: chex.Array, done: chex.Array) -> chex.Array:
         """ Update agent's state, if `done` the current position and velocity are returned"""
         if self.evaporating:
@@ -672,29 +657,26 @@ class JaxNav(MultiAgentEnv):
         # n_walls = state.map_data.sum() - state.map_data.shape[0]*2 - state.map_data.shape[1]*2 + 4
         inside = state.map_data.astype(jnp.bool_)[1:-1, 1:-1]
         n_walls = jnp.sum(inside)
-        passability = jax.vmap(
-            self.map_obj.passable_check,
-            in_axes=(0, 0, None)
+
+        passable, path_len = jax.vmap(
+            self.map_obj.dikstra_path,
+            in_axes=(None, 0, 0)
         )(
+            state.map_data,
             state.pos,
             state.goal,
-            state.map_data,
         )
-        
-        # shortest_path_lengths = jax.vmap(  # BUG in the minimax code somewhere
-        #     _graph_util.shortest_path_len,
-        #     in_axes=(None, 0, 0),
-        # )(
-        #     inside.astype(jnp.bool_),
-        #     jnp.floor(state.pos-1).astype(jnp.int32),
-        #     jnp.floor(state.goal-1).astype(jnp.int32),
-        # )
-        
+                
+        shortest_path_lengths_stderr = jax.lax.select(
+            jnp.sum(passable) > 0,
+            jnp.std(path_len, where=passable)/jnp.sqrt(jnp.sum(passable)),
+            0.0
+        )
         return dict(
             n_walls=n_walls,
-            # shortest_path_length_mean=jnp.mean(shortest_path_lengths),
-            # shortest_path_lengths_stderr=jnp.std(shortest_path_lengths)/jnp.sqrt(self.num_agents),
-            passable=jnp.mean(passability),
+            shortest_path_length_mean=jnp.mean(path_len, where=passable),
+            shortest_path_lengths_stderr=shortest_path_lengths_stderr,
+            passable=jnp.mean(passable),
         )
         
     ### === VISULISATION === ###

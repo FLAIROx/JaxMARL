@@ -272,6 +272,18 @@ class GridMapCircleAgents(Map):
         pos = jnp.floor(self.scale_coords(pos)).astype(int)
         return map_grid.at[pos[1], pos[0]].get() == 1
     
+    def check_all_agent_agent_collisions(self, agent_positions: chex.Array, agent_theta: chex.Array) -> chex.Array:
+        
+        @partial(jax.vmap, in_axes=(0, None))
+        def _check_agent_collisions(agent_idx: int, agent_positions: chex.Array) -> bool:
+            # TODO this function is a little clunky FIX 
+            z = jnp.zeros(agent_positions.shape)
+            z = z.at[agent_idx,:].set(jnp.ones(2)*self.rad*2.1)  
+            x = agent_positions + z
+            return jnp.any(jnp.sqrt(jnp.sum((x - agent_positions[agent_idx,:])**2, axis=1)) <= self.rad*2) 
+        
+        return _check_agent_collisions(jnp.arange(agent_positions.shape[0]), agent_positions)
+    
     @partial(jax.jit, static_argnums=[0])
     def _gen_base_grid(self):
         """ Generate base grid map with walls around border """
@@ -330,6 +342,80 @@ class GridMapCircleAgents(Map):
         
     def scale_coords(self, x):
         return x / self.cell_size
+    
+    def dikstra_path(self, map_data, pos1, pos2):
+        """ Computes shorted path (if possible) between `pos1` and `pos2` on the grid specified by `map_data`.
+        
+        Method TL;DR: Dijkstra's algorithm. JIT'd while loop through the open set of nodes, updating the distance
+                      to go for each neighbour in `_body`. Terminates when the open set is empty.
+        
+        TODO: also terminate if the goal is reached. Add unit tests.
+        
+        Output:
+        - `valid` (bool): True if a path exists
+        - `d` (float): distance of shortest path, INF if no path exists
+        """
+        
+        h, w = map_data.shape
+        NEIGHBOURS = jnp.array([[-1, 0], [1, 0], [0, -1], [0, 1]])  # left, right, up, down
+        INF = 1e8  # large number to represent infinity (jnp.inf produced unwanted nan's)
+        
+        def _flatten_idx(i, j):
+            return i * w + j
+        
+        def _unflatten_idx(idx):
+            return jnp.array([idx // w, idx % w])
+        
+        start = jnp.floor(pos1).astype(jnp.int32)
+        end = jnp.floor(pos2).astype(jnp.int32)
+        
+        h, w = map_data.shape
+        start_flat_idx = start[0] * w + start[1]
+        set_distances_to_go = jnp.ones((h*w,)) * INF
+        
+        set_distances_to_go = set_distances_to_go.at[start_flat_idx].set(0)
+        set_visited = jnp.zeros((h*w,)) 
+        flat_node_idx = jnp.argmin(set_distances_to_go + INF * set_visited)
+        
+        carry = (
+            flat_node_idx,
+            set_distances_to_go,
+            set_visited
+        )
+        
+        def _cond(carry):
+            return carry[1][carry[0]] < INF 
+        
+        def _body(carry):
+            flat_node_idx, set_distances_to_go, set_visited = carry
+            unflat_node_idx = _unflatten_idx(flat_node_idx)
+            n_idx = unflat_node_idx + NEIGHBOURS
+            flat_n_idx = jax.vmap(_flatten_idx)(n_idx[:, 0], n_idx[:, 1])
+            
+            n_visited = set_visited.at[flat_n_idx].get()
+            n_distances_to_go = set_distances_to_go.at[flat_n_idx].get()
+            new_distance = set_distances_to_go[flat_node_idx] + 1
+            n_valid_node = map_data[n_idx[:, 1], n_idx[:, 0]] == 0
+            updated_neighbour_distances = jnp.where(
+                (n_distances_to_go > new_distance) &
+                (n_visited == 0) & 
+                (n_valid_node), 
+                new_distance, 
+                n_distances_to_go)
+            
+            set_distances_to_go = set_distances_to_go.at[flat_n_idx].set(updated_neighbour_distances)
+            set_visited = set_visited.at[flat_node_idx].set(1)
+            flat_node_idx = jnp.argmin(set_distances_to_go + INF * set_visited)
+            return (flat_node_idx, set_distances_to_go, set_visited)
+            
+        _, set_distances_to_go, _ = jax.lax.while_loop(
+            _cond,
+            _body,
+            carry
+        )
+        d = set_distances_to_go[_flatten_idx(end[0], end[1])]
+        valid = d < INF
+        return valid, jax.lax.select(valid, d, 0.0)
         
     ### === VISUALIZATION === ###
     def plot_map(self, ax: axes.Axes, map_grid: jnp.ndarray):
@@ -411,6 +497,8 @@ middle_line = jnp.array([
 ])
 
 class GridMapPolygonAgents(GridMapCircleAgents):
+    """ Map for homogenous, convex polygon agents. 
+    """
     
     def __init__(self,
                  num_agents: int,
@@ -432,14 +520,9 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         side_length = jnp.maximum(max_x - min_x, max_y - min_y)
                 
         cell_ratio = side_length / self.cell_size
-        # print('cell ratio', cell_ratio)
         
         self.agent_window = jnp.ceil(cell_ratio*2).astype(int)  # NOTE times 2 should be enough
-        self.idx_offsets = jnp.arange(-self.agent_window, self.agent_window+1)
-        # print('side length', side_length)
-        # print('agent window', self.agent_window)
-        # print('idx offsets', self.idx_offsets)
-        
+        self.idx_offsets = jnp.arange(-self.agent_window, self.agent_window+1)        
         
         #  2D with one set of coords for all agents 
         assert (len(self.agent_coords.shape) == 2)
@@ -523,7 +606,6 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         
         def _checkLineLine(x1, y1, x2, y2, x3, y3, x4, y4):
             """ Check collision between line (x1, y1) -- (x2, y2) and line (x3, y3) -- (x4, y4) """
-            # TODO understand this
             uA = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / ((y4-y3)*(x2-x1) - (x4-x3)*(y2-y1))
             uB = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / ((y4-y3)*(x2-x1) - (x4-x3)*(y2-y1))
             c = (uA >= 0) & (uA <= 1) & (uB >= 0) & (uB <= 1)
@@ -553,6 +635,7 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         return jnp.any(_checkSide(x1y1, x2y2, grid_idx)) & valid_idx
     
     def _checkInsideGrid(self, sides, grid_idx, map_grid):
+        """ Check if polygon is inside grid cell, NOTE assumes grid cell is of size 1x1 """
         
         def _checkPolyWithinRect(sides, rx, ry):
             """ Check if polygon is within rectangle with bottom left corner at (rx, ry) and width and height of 1."""
@@ -569,6 +652,50 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         inside = _checkPolyWithinRect(sides, grid_idx[1], grid_idx[0])
         return inside & map_grid[grid_idx[0], grid_idx[1]] & valid_idx
     
+    @partial(jax.jit, static_argnums=[0])
+    def check_all_agent_agent_collisions(self, agent_positions: chex.Array, agent_theta: chex.Array, agent_coords=None) -> chex.Array:
+        """ Use Separating Axis Theorem (SAT) to check for collisions between convex polygon agents. 
+        
+        Separating Axis Theorem TL;DR: Searches for a line that separates two convex polygons. If no line is found, the polygons are colliding.
+                                       To search for a separating line, we look at the normals of the edges of the polygons and project the vertices
+                                       of all polygons onto these normals. If the projections of the vertices of one polygon do not overlap with the
+                                       projections of the vertices of the other polygon, then the polygons are not colliding.
+        """    
+        
+        def _orthogonal(v):
+            return jnp.array([v[1], -v[0]])
+        
+        if agent_coords is None: agent_coords = self.agent_coords
+        
+        transformed_coords = jax.vmap(self.transform_coords, in_axes=(0, 0, None))(agent_positions, agent_theta.squeeze(), agent_coords)
+        all_coords = transformed_coords.reshape((-1, 2))  # [num_agents*4, 2]
+        trans_rolled = jnp.roll(transformed_coords, 1, axis=1)
+        
+        edges = transformed_coords - trans_rolled  # [num_agents, 4, 2]
+        orthog_edges = jax.vmap(_orthogonal, in_axes=(0))(edges.reshape((-1, 2))).reshape((-1, 4, 2))  # NOTE assuming 4 sides
+
+        all_axis = orthog_edges / jnp.linalg.norm(orthog_edges, axis=2)[:,:,None]  # [num_agents, 4, 2]
+            
+        def _project_axis(axis):
+            return jax.vmap(jnp.dot, in_axes=(None, 0))(axis, all_coords)
+            
+        axis_projections = jax.vmap(_project_axis)(all_axis.reshape((-1, 2)))
+        axis_projections_by_agent = axis_projections.reshape((-1, self.num_agents, 4)) 
+        axis_ranges_by_agent = jnp.stack([jnp.min(axis_projections_by_agent, axis=2), jnp.max(axis_projections_by_agent, axis=2)], axis=-1)
+        axis_by_agent_range_by_agent = axis_ranges_by_agent.reshape((self.num_agents, -1) + axis_ranges_by_agent.shape[1:])
+        def _calc_overlaps(agent_idx, agent_axis_ranges):
+            overlaps = (agent_axis_ranges[:, agent_idx, 0][:, None] <= agent_axis_ranges[:, :, 1]) & (agent_axis_ranges[:, :, 0] <= agent_axis_ranges[:, agent_idx, 1][:, None])            
+            overlaps = overlaps.at[:, agent_idx].set(False)
+            return jnp.all(overlaps, axis=0)
+        
+        overlaps_matrix = jax.vmap(_calc_overlaps)(jnp.arange(self.num_agents), axis_by_agent_range_by_agent) # all overlaps for all vertex is a collision
+        # need to match matrix triangles
+        def _join_matrix(rows, cols):
+            return jnp.any(jnp.bitwise_and(rows, cols))
+            
+        c_free = jax.vmap(_join_matrix)(overlaps_matrix, overlaps_matrix.T)
+        return c_free
+                
     def check_agent_beam_intersect(self, beam, pos, theta, range_resolution, agent_coords=None):
         """ Check for intersection between a lidar beam and an agent. """
         if agent_coords is None: agent_coords = self.agent_coords
@@ -576,7 +703,6 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         @partial(jax.vmap, in_axes=(None, None, 0, 0))
         def _checkSide(beam_start, beam_end, side_start, side_end):
             """ Check collision between line (x1, y1) -- (x2, y2) and line (x3, y3) -- (x4, y4) """
-            # TODO understand this
             x1, y1 = beam_start
             x2, y2 = beam_end
             x3, y3 = side_start
