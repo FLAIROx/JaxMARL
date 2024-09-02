@@ -3,14 +3,21 @@ Check that the environment can be reset and stepped with random actions.
 TODO: replace this with proper unit tests.
 """
 import jax
-# import pytest 
+import pytest 
 
 from jaxmarl.environments.jaxnav import JaxNav 
 
-env = JaxNav(4)
 
-def test_random_rollout():
-
+@pytest.mark.parametrize(
+    ("num_agents",),
+    [
+        (1,),
+        (4,),
+        (9,),
+    ],
+)
+def test_random_rollout(num_agents: int):
+    env = JaxNav(num_agents=num_agents)
     rng = jax.random.PRNGKey(0)
     rng, rng_reset = jax.random.split(rng)
 
@@ -22,6 +29,7 @@ def test_random_rollout():
         actions = {a: env.action_space(a).sample(rng_act[i]) for i, a in enumerate(env.agents)}
         _, state, _, _, _ = env.step(rng, state, actions)
         
-test_random_rollout()
+test_random_rollout(1)
+test_random_rollout(4)
     
     
