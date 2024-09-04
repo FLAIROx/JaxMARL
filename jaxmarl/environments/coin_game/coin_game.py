@@ -61,6 +61,7 @@ class CoinGame(MultiAgentEnv):
         num_outer_steps: int = 10,
         cnn: bool = False,
         egocentric: bool = False,
+        shared_rewards: bool = False,
         payoff_matrix=[[1, 1, -2], [1, 1, -2]],
     ):
 
@@ -348,11 +349,12 @@ class CoinGame(MultiAgentEnv):
             blue_reward = jnp.where(reset_inner, 0.0, blue_reward)
             red_reward = jnp.where(reset_inner, 0.0, red_reward)
 
-            # shared reward (social welfare/sum of agents individual rewards)
-            #rewards = {agent: reward for agent, reward in zip(self.agents, (sum((red_reward, blue_reward)),  sum((red_reward, blue_reward))))}
-            
-            # individual reward
-            rewards = {agent: reward for agent, reward in zip(self.agents, (red_reward, blue_reward))}
+            if shared_rewards:
+                # shared reward (social welfare\sum of agents individual rewards)
+                rewards = {agent: reward for agent, reward in zip(self.agents, (sum((red_reward, blue_reward)),  sum((red_reward, blue_reward))))}
+            else:
+                # individual reward
+                rewards = {agent: reward for agent, reward in zip(self.agents, (red_reward, blue_reward))}
 
             dones = {agent: reset_inner for agent in self.agents}
             dones['__all__'] = reset_inner
