@@ -141,6 +141,7 @@ registered_envs = [
     "walker2d_2x3",
     "storm",
     "storm_2p",
+    "storm_np",
     "hanabi",
     "overcooked",
     "coin_game",

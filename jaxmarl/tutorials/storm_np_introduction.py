@@ -3,10 +3,8 @@ import jax.numpy as jnp
 from PIL import Image
 from jaxmarl import make
 from pathlib import Path
-import time
 import math
 
-times = dict()
 agent_pop_sizes = [10]
 for n_a in agent_pop_sizes:
     # load environment
@@ -14,7 +12,7 @@ for n_a in agent_pop_sizes:
     grid_size=math.ceil(math.log(num_agents+2, 2)**2)
     num_coins=2*num_agents
     num_inner_steps=128
-    num_outer_steps=5
+    num_outer_steps=1
     rng = jax.random.PRNGKey(123)
     env = make('storm_np',
             num_inner_steps=num_inner_steps,
@@ -28,10 +26,8 @@ for n_a in agent_pop_sizes:
         )
     rng, _rng = jax.random.split(rng)
 
-    root_dir = f"tests/\
-        a{num_agents}_g{grid_size}_c{num_coins}_\
-        i{num_inner_steps}_o{num_outer_steps}"
-    path = Path(root_dir)
+    root_dir = f"tests/a{num_agents}_g{grid_size}_c{num_coins}_i{num_inner_steps}_o{num_outer_steps}"
+    path = Path(root_dir + "/state_pics")
     path.mkdir(parents=True, exist_ok=True)
 
     for o_t in range(num_outer_steps):
@@ -72,15 +68,16 @@ for n_a in agent_pop_sizes:
             pics.append(img)
 
             old_state = state
-    # create and save gif
-    print("Saving GIF")
-    pics = [Image.fromarray(img) for img in pics]
-    pics[0].save(
-    f"tests/{root_dir}/state_outer_step_{o_t+1}.gif",
-    format="GIF",
-    save_all=True,
-    optimize=False,
-    append_images=pics[1:],
-    duration=200,
-    loop=0,
-    )
+
+        # create and save gif
+        print("Saving GIF")
+        pics = [Image.fromarray(img) for img in pics]
+        pics[0].save(
+        f"{root_dir}/state_outer_step_{o_t+1}.gif",
+        format="GIF",
+        save_all=True,
+        optimize=False,
+        append_images=pics[1:],
+        duration=200,
+        loop=0,
+        )
