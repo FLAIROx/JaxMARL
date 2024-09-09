@@ -1,0 +1,35 @@
+"TOTAL_TIMESTEPS": 1e7
+"NUM_ENVS": 128
+"MEMORY_WINDOW": 4
+"NUM_STEPS": 128
+"HIDDEN_SIZE": 512
+"NUM_LAYERS": 2
+"NORM_INPUT": True
+"NORM_TYPE": "batch_norm"
+"EPS_START": 1.0
+"EPS_FINISH": 0.01
+"EPS_DECAY": 0.1
+"MAX_GRAD_NORM": 1
+"NUM_MINIBATCHES": 16
+"NUM_EPOCHS": 4
+"LR": 0.00025
+"LR_LINEAR_DECAY": True
+"GAMMA": 0.99
+"LAMBDA": 0.85
+"REW_SCALE": 10. # scale the reward to the original scale of SMAC
+
+# ENV
+"ENV_NAME": "HeuristicEnemySMAX"
+"MAP_NAME": "2s3z"
+"ENV_KWARGS":
+  "see_enemy_actions": True
+  "walls_cause_death": True
+  "attack_mode": "closest"
+
+# evaluate
+"TEST_DURING_TRAINING": True
+"TEST_INTERVAL": 0.05 # as a fraction of updates, i.e. log every 5% of training process
+"TEST_NUM_STEPS": 128
+"TEST_NUM_ENVS": 128 # number of episodes to average over, can affect performance
+
+#"ALG_NAME": "pqn_vdn_rnn" # if you want to change the name of the algo in the metrics

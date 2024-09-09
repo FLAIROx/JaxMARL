@@ -5,7 +5,7 @@ from jaxmarl.environments.smax.smax_env import State
 import pytest
 
 
-def create_env(key):
+def create_env(key, continuous_action=False, conic_observation=False):
     env = make(
         "SMAX",
         num_allies=5,
@@ -22,6 +22,8 @@ def create_env(key):
         unit_type_attack_ranges=jnp.array([3.0]),
         unit_type_sight_ranges=jnp.array([4.0]),
         max_steps=100,
+        action_type="discrete" if not continuous_action else "continuous",
+        observation_type="unit_list" if not conic_observation else "conic",
     )
     obs, state = env.reset(key)
     return env, obs, state
@@ -63,6 +65,235 @@ def test_move_actions(action, vec_diff, do_jit):
         key, key_step = jax.random.split(key)
         _, state, _, _, _ = env.step(key_step, state, actions)
         assert jnp.allclose(state.unit_positions[0], init_pos + vec_diff)
+
+
+@pytest.mark.parametrize(
+    ("action", "vec_diff", "do_jit"),
+    [
+        (jnp.array([0.0, 1.0, 0.5, 0.0]), jnp.array([0.5, 0.0]), True),
+        (jnp.array([0.0, 1.0, 0.5, 0.0]), jnp.array([0.5, 0.0]), False),
+        (
+            jnp.array([0.0, 1.0, 1.0, 0.125]),
+            jnp.array([1.0 / jnp.sqrt(2), 1.0 / jnp.sqrt(2)]),
+            True,
+        ),
+        (
+            jnp.array([0.0, 1.0, 1.0, 0.125]),
+            jnp.array([1.0 / jnp.sqrt(2), 1.0 / jnp.sqrt(2)]),
+            False,
+        ),
+        (jnp.array([0.0, 0.0, 1.0, 0.125]), jnp.array([0.0, 0.0]), True),
+        (jnp.array([0.0, 0.0, 1.0, 0.125]), jnp.array([0.0, 0.0]), False),
+    ],
+)
+def test_continuous_move_action_decoding(action, vec_diff, do_jit):
+    with jax.disable_jit(do_jit):
+        key = jax.random.PRNGKey(0)
+        key, key_reset = jax.random.split(key)
+        env, _, state = create_env(key_reset, continuous_action=True)
+        init_pos = jnp.array([16, 16])
+        unit_positions = state.unit_positions.at[0].set(init_pos)
+        state = state.replace(unit_positions=unit_positions)
+        key, key_action = jax.random.split(key)
+        actions = get_random_actions(key_action, env)
+        actions["ally_0"] = action
+        actions = jnp.array([actions[i] for i in env.agents])
+        movement_actions, _ = env._decode_actions(key, state, actions)
+        assert jnp.allclose(movement_actions[0], vec_diff)
+
+
+@pytest.mark.parametrize(
+    (
+        "unit_1_idx",
+        "unit_2_idx",
+        "unit_1_pos",
+        "unit_2_pos",
+        "unit_1_action",
+        "unit_2_action",
+        "unit_1_expected_action",
+        "unit_2_expected_action",
+        "do_jit",
+    ),
+    [
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 2.0]),
+            jnp.array([1.0, 0.0, 0.5, 0.25]),
+            jnp.array([1.0, 0.0, 0.5, 0.75]),
+            5,
+            9,
+            False,
+        ),
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 2.0]),
+            jnp.array([1.0, 0.0, 0.5, 0.25]),
+            jnp.array([1.0, 0.0, 0.5, 0.75]),
+            5,
+            9,
+            True,
+        ),
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 8.0]),
+            jnp.array([1.0, 0.0, 0.5, 0.25]),
+            jnp.array([1.0, 0.0, 1.0, 0.75]),
+            5,  # still want to decode to an attack action even when
+            9,  # because the world_step function should handle this case
+            False,
+        ),
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 8.0]),
+            jnp.array([1.0, 0.0, 0.5, 0.25]),
+            jnp.array([1.0, 0.0, 1.0, 0.75]),
+            5,  # still want to decode to an attack action even when
+            9,  # because the world_step function should handle this case
+            True,
+        ),
+    ],
+)
+def test_continuous_attack_action_decoding(
+    unit_1_idx,
+    unit_2_idx,
+    unit_1_pos,
+    unit_2_pos,
+    unit_1_action,
+    unit_2_action,
+    unit_1_expected_action,
+    unit_2_expected_action,
+    do_jit,
+):
+    with jax.disable_jit(do_jit):
+        key = jax.random.PRNGKey(0)
+        key, key_reset = jax.random.split(key)
+        env, _, state = create_env(key_reset, continuous_action=True)
+
+        unit_positions = state.unit_positions.at[unit_1_idx].set(unit_1_pos)
+        unit_positions = unit_positions.at[unit_2_idx].set(unit_2_pos)
+        state = state.replace(unit_positions=unit_positions)
+
+        key, key_actions = jax.random.split(key)
+        actions = get_random_actions(key_actions, env)
+        actions[f"ally_{unit_1_idx}"] = unit_1_action
+        actions[f"enemy_{unit_2_idx - env.num_allies}"] = unit_2_action
+        actions = jnp.array([actions[i] for i in env.agents])
+        _, attack_actions = env._decode_actions(key, state, actions)
+        assert attack_actions[unit_1_idx] == unit_1_expected_action
+        assert attack_actions[unit_2_idx] == unit_2_expected_action
+
+
+@pytest.mark.parametrize(
+    (
+        "unit_1_idx",
+        "unit_2_idx",
+        "unit_1_pos",
+        "unit_2_pos",
+        "unit_1_action",
+        "unit_1_prev_action",
+        "unit_2_action",
+        "unit_2_prev_action",
+        "unit_1_expected_action",
+        "unit_2_expected_action",
+        "do_jit",
+    ),
+    [
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 2.0]),
+            jnp.array([1.0, 0.0, 0.5, 0.25]),
+            6,
+            jnp.array([1.0, 0.0, 0.5, 0.75]),
+            6,
+            5,
+            9,
+            False,
+        ),
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 2.0]),
+            jnp.array([1.0, 0.0, 0.5, 0.25]),
+            6,
+            jnp.array([1.0, 0.0, 0.5, 0.75]),
+            6,
+            5,
+            9,
+            True,
+        ),
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 2.0]),
+            jnp.array([0.0, 0.0, 0.5, 0.25]),
+            6,
+            jnp.array([0.0, 0.0, 0.5, 0.75]),
+            6,
+            6,
+            6,
+            False,
+        ),
+        (
+            0,
+            5,
+            jnp.array([1.0, 1.0]),
+            jnp.array([1.0, 2.0]),
+            jnp.array([0.0, 0.0, 0.5, 0.25]),
+            6,
+            jnp.array([0.0, 0.0, 0.5, 0.75]),
+            6,
+            6,
+            6,
+            False,
+        ),
+    ],
+)
+def test_attack_same_unit(
+    unit_1_idx,
+    unit_2_idx,
+    unit_1_pos,
+    unit_2_pos,
+    unit_1_action,
+    unit_1_prev_action,
+    unit_2_action,
+    unit_2_prev_action,
+    unit_1_expected_action,
+    unit_2_expected_action,
+    do_jit,
+):
+    with jax.disable_jit(do_jit):
+        key = jax.random.PRNGKey(0)
+        key, key_reset = jax.random.split(key)
+        env, _, state = create_env(key_reset, continuous_action=True)
+
+        unit_positions = state.unit_positions.at[unit_1_idx].set(unit_1_pos)
+        unit_positions = unit_positions.at[unit_2_idx].set(unit_2_pos)
+        state = state.replace(unit_positions=unit_positions)
+
+        prev_actions = state.prev_attack_actions.at[unit_1_idx].set(unit_1_prev_action)
+        prev_actions = prev_actions.at[unit_2_idx].set(unit_2_prev_action)
+        state = state.replace(prev_attack_actions=prev_actions)
+
+        key, key_actions = jax.random.split(key)
+        actions = get_random_actions(key_actions, env)
+        actions[f"ally_{unit_1_idx}"] = unit_1_action
+        actions[f"enemy_{unit_2_idx - env.num_allies}"] = unit_2_action
+        actions = jnp.array([actions[i] for i in env.agents])
+        _, attack_actions = env._decode_actions(key, state, actions)
+        assert attack_actions[unit_1_idx] == unit_1_expected_action
+        assert attack_actions[unit_2_idx] == unit_2_expected_action
 
 
 @pytest.mark.parametrize(
@@ -239,6 +470,66 @@ def test_episode_time_limit(do_jit):
 
 
 @pytest.mark.parametrize(("do_jit"), [False, True])
+def test_continuous_obs_function(do_jit):
+    with jax.disable_jit(do_jit):
+        key = jax.random.PRNGKey(0)
+        key, key_reset = jax.random.split(key)
+        env, _, state = create_env(key_reset, conic_observation=True)
+        unit_positions = state.unit_positions.at[0].set(jnp.array([1.0, 1.0]))
+        unit_positions = unit_positions.at[1].set(jnp.array([1.55, 1.5]))
+        # sweep around from -pi to pi
+        expected_obs_idx = 19
+        state = state.replace(unit_positions=unit_positions)
+        obs = env.get_obs(state)
+        real_obs = obs["ally_0"][
+            expected_obs_idx
+            * 2
+            * len(env.unit_features) : (expected_obs_idx * 2 + 1)
+            * len(env.unit_features)
+        ]
+        assert jnp.allclose(
+            real_obs,
+            jnp.array([1.0, 0.1374999999, 0.125, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+        )
+
+
+@pytest.mark.parametrize(("do_jit"), [False, True])
+def test_continuous_obs_max_two_observed(do_jit):
+    with jax.disable_jit(do_jit):
+        key = jax.random.PRNGKey(0)
+        key, key_reset = jax.random.split(key)
+        env, _, state = create_env(key_reset, conic_observation=True)
+        unit_positions = state.unit_positions.at[0].set(jnp.array([1.0, 1.0]))
+        unit_positions = unit_positions.at[1:4].set(jnp.array([1.55, 1.5]))
+        # sweep around from -pi to pi
+        expected_obs_idx = 19
+        state = state.replace(unit_positions=unit_positions)
+        obs = env.get_obs(state)
+        real_obs = obs["ally_0"][
+            expected_obs_idx
+            * 2
+            * len(env.unit_features) : (expected_obs_idx * 2 + 1)
+            * len(env.unit_features)
+        ]
+        expected_obs = jnp.array([1.0, 0.1374999999, 0.125, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0])
+        assert jnp.allclose(
+            real_obs,
+            expected_obs,
+        )
+
+        real_obs = obs["ally_0"][
+            (expected_obs_idx * 2 + 1) * len(env.unit_features):
+            (2 * expected_obs_idx + 2) * len(env.unit_features)
+        ]
+        assert jnp.allclose(real_obs, expected_obs)
+
+        real_obs = obs["ally_0"][
+            (expected_obs_idx * 2 + 2) * len(env.unit_features):
+            (expected_obs_idx * 2 + 3) * len(env.unit_features)
+        ]
+        assert jnp.allclose(real_obs, jnp.zeros_like(real_obs))
+
+@pytest.mark.parametrize(("do_jit"), [False, True])
 def test_obs_function(do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
@@ -247,7 +538,7 @@ def test_obs_function(do_jit):
         first_enemy_idx = (env.num_allies - 1) * len(env.unit_features)
         assert jnp.allclose(
             obs["ally_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, -0.5755913, 0.43648314, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, -0.5755913, 0.43648314, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
@@ -255,7 +546,7 @@ def test_obs_function(do_jit):
         )
         assert jnp.allclose(
             obs["enemy_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, 0.00752163, 0.5390887, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.00752163, 0.5390887, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
@@ -291,7 +582,8 @@ def test_obs_function(do_jit):
         last_ally_idx = first_enemy_idx - len(env.unit_features)
         assert jnp.allclose(
             obs["enemy_0"][last_ally_idx : last_ally_idx + len(env.unit_features)],
-            jnp.array([1.0, 0.125, 0.25, 0, -0.5, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.125, 0.25, 0, 1, 0, -0.5, 1, 0, 0, 0, 0, 0]),
+            atol=1e-07,
         )
 
 

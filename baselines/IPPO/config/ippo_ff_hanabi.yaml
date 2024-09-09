@@ -17,4 +17,4 @@
 # WandB Params
 "WANDB_MODE": "disabled"
 "ENTITY": ""
-"PROJECT": "jaxmarl-hanabi"
+"PROJECT": ""

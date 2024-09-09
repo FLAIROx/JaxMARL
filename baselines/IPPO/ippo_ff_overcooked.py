@@ -18,6 +18,7 @@ from jaxmarl.environments.overcooked import overcooked_layouts
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 import hydra
 from omegaconf import OmegaConf
+import wandb
 
 import matplotlib.pyplot as plt
 
@@ -66,7 +67,6 @@ class Transition(NamedTuple):
     reward: jnp.ndarray
     log_prob: jnp.ndarray
     obs: jnp.ndarray
-    info: jnp.ndarray
 
 def get_rollout(train_state, config):
     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
@@ -87,6 +87,8 @@ def get_rollout(train_state, config):
 
     obs, state = env.reset(key_r)
     state_seq = [state]
+    rewards = []
+    shaped_rewards = []
     while not done:
         key, key_a0, key_a1, key_s = jax.random.split(key, 4)
 
@@ -104,8 +106,18 @@ def get_rollout(train_state, config):
         # STEP ENV
         obs, state, reward, done, info = env.step(key_s, state, actions)
         done = done["__all__"]
+        rewards.append(reward['agent_0'])
+        shaped_rewards.append(info["shaped_reward"]['agent_0'])
 
         state_seq.append(state)
+
+    from matplotlib import pyplot as plt
+
+    plt.plot(rewards, label="reward")
+    plt.plot(shaped_rewards, label="shaped_reward")
+    plt.legend()
+    plt.savefig("reward.png")
+    plt.show()
 
     return state_seq
 
@@ -129,11 +141,17 @@ def make_train(config):
         config["NUM_ACTORS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
     
-    env = LogWrapper(env)
+    env = LogWrapper(env, replace_info=False)
     
     def linear_schedule(count):
         frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
         return config["LR"] * frac
+    
+    rew_shaping_anneal = optax.linear_schedule(
+        init_value=1.,
+        end_value=0.,
+        transition_steps=config["REW_SHAPING_HORIZON"]
+    )
 
     def train(rng):
 
@@ -167,12 +185,14 @@ def make_train(config):
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
-                train_state, env_state, last_obs, rng = runner_state
+                train_state, env_state, last_obs, update_step, rng = runner_state
 
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+
+                print("obs_shape", obs_batch.shape)
                 
                 pi, value = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=_rng)
@@ -188,7 +208,12 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     rng_step, env_state, env_act
                 )
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+
+                info["reward"] = reward["agent_0"]
+
+                current_timestep = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
+                reward = jax.tree_map(lambda x,y: x+y*rew_shaping_anneal(current_timestep), reward, info["shaped_reward"])
+
                 transition = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
                     action,
@@ -196,18 +221,16 @@ def make_train(config):
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
                     log_prob,
                     obs_batch,
-                    info
-                    
                 )
-                runner_state = (train_state, env_state, obsv, rng)
-                return runner_state, transition
+                runner_state = (train_state, env_state, obsv, update_step, rng)
+                return runner_state, (transition, info)
 
-            runner_state, traj_batch = jax.lax.scan(
+            runner_state, (traj_batch, info) = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
             
             # CALCULATE ADVANTAGE
-            train_state, env_state, last_obs, rng = runner_state
+            train_state, env_state, last_obs, update_step, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
             _, last_val = network.apply(train_state.params, last_obs_batch)
 
@@ -318,14 +341,28 @@ def make_train(config):
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
             train_state = update_state[0]
-            metric = traj_batch.info
-            rng = update_state[-1]
+            metric = info
+            current_timestep = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
+            metric["shaped_reward"] = metric["shaped_reward"]["agent_0"]
+            metric["shaped_reward_annealed"] = metric["shaped_reward"]*rew_shaping_anneal(current_timestep)
             
-            runner_state = (train_state, env_state, last_obs, rng)
+            rng = update_state[-1]
+
+            def callback(metric):
+                wandb.log(
+                    metric
+                )
+            update_step = update_step + 1
+            metric = jax.tree_map(lambda x: x.mean(), metric)
+            metric["update_step"] = update_step
+            metric["env_step"] = update_step*config["NUM_STEPS"]*config["NUM_ENVS"]
+            jax.debug.callback(callback, metric)
+            
+            runner_state = (train_state, env_state, last_obs, update_step, rng)
             return runner_state, metric
 
         rng, _rng = jax.random.split(rng)
-        runner_state = (train_state, env_state, obsv, _rng)
+        runner_state = (train_state, env_state, obsv, 0, _rng)
         runner_state, metric = jax.lax.scan(
             _update_step, runner_state, None, config["NUM_UPDATES"]
         )
@@ -338,14 +375,32 @@ def make_train(config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_overcooked")
 def main(config):
     config = OmegaConf.to_container(config) 
-    config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
-    rng = jax.random.PRNGKey(30)
-    num_seeds = 20
-    with jax.disable_jit(False):
-        train_jit = jax.jit(jax.vmap(make_train(config)))
-        rngs = jax.random.split(rng, num_seeds)
-        out = train_jit(rngs)
+    layout_name = config["ENV_KWARGS"]["layout"]
+    config["ENV_KWARGS"]["layout"] = overcooked_layouts[layout_name]
+
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+        name=f'ippo_ff_overcooked_{layout_name}'
+    )
+
+    rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])    
+    train_jit = jax.jit(make_train(config))
+    out = jax.vmap(train_jit)(rngs)
+
+    filename = f'{config["ENV_NAME"]}_{layout_name}'
+    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
+    state_seq = get_rollout(train_state, config)
+    viz = OvercookedVisualizer()
+    # agent_view_size is hardcoded as it determines the padding around the layout.
+    viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
     
+    
+    """
     print('** Saving Results **')
     filename = f'{config["ENV_NAME"]}_cramped_room_new'
     rewards = out["metrics"]["returned_episode_returns"].mean(-1).reshape((num_seeds, -1))
@@ -365,6 +420,7 @@ def main(config):
     viz = OvercookedVisualizer()
     # agent_view_size is hardcoded as it determines the padding around the layout.
     viz.animate(state_seq, agent_view_size=5, filename=f"{filename}.gif")
+    """
 
 if __name__ == "__main__":
     main()

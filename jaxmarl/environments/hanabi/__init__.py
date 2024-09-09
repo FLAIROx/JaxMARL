@@ -1,1 +1,1 @@
-from .hanabi import HanabiGame
+from .hanabi import HanabiEnv as Hanabi

@@ -1,4 +1,5 @@
 """ Wrappers for use with jaxmarl baselines. """
+import os
 import jax
 import jax.numpy as jnp
 import chex
@@ -8,9 +9,20 @@ from functools import partial
 
 # from gymnax.environments import environment, spaces
 from gymnax.environments.spaces import Box as BoxGymnax, Discrete as DiscreteGymnax
-from typing import Optional, List, Tuple, Union
+from typing import Dict, Optional, List, Tuple, Union
 from jaxmarl.environments.spaces import Box, Discrete, MultiDiscrete
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv, State
+
+from safetensors.flax import save_file, load_file
+from flax.traverse_util import flatten_dict, unflatten_dict
+
+def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
+    flattened_dict = flatten_dict(params, sep=',')
+    save_file(flattened_dict, filename)
+
+def load_params(filename:Union[str, os.PathLike]) -> Dict:
+    flattened_dict = load_file(filename)
+    return unflatten_dict(flattened_dict, sep=",")
 
 
 class JaxMARLWrapper(object):
@@ -236,7 +248,9 @@ class CTRolloutManager(JaxMARLWrapper):
         # assumes the observations are flattened vectors
         self.max_obs_length = max(list(map(lambda x: get_space_dim(x), self.observation_spaces.values())))
         self.max_action_space = max(list(map(lambda x: get_space_dim(x), self.action_spaces.values())))
-        self.obs_size = self.max_obs_length + len(self.agents)
+        self.obs_size = self.max_obs_length
+        if self.preprocess_obs:
+            self.obs_size += len(self.agents)
 
         # agents ids
         self.agents_one_hot = {a:oh for a, oh in zip(self.agents, jnp.eye(len(self.agents)))}
@@ -248,14 +262,13 @@ class CTRolloutManager(JaxMARLWrapper):
         if 'smax' in env.name.lower():
             self.global_state = lambda obs, state: obs['world_state']
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
-        elif 'hanabi' in env.name.lower():
-            self.global_state = self.hanabi_world_state
+            self.get_valid_actions = lambda state: jax.vmap(env.get_avail_actions)(state)
         elif 'overcooked' in env.name.lower():
-            self.global_state = lambda obs, state:  jnp.concatenate([obs[agent].ravel() for agent in self.agents], axis=-1)
+            self.global_state = lambda obs, state:  jnp.concatenate([obs[agent].flatten() for agent in self.agents], axis=-1)
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
-        elif 'utracking' in env.name.lower():
-            self.global_state = lambda obs, state: obs['world_state'].ravel() if preprocess_obs else obs['world_state']
+        elif 'hanabi' in env.name.lower():
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
+            self.get_valid_actions = lambda state: jax.vmap(env.get_legal_moves)(state)
 
     
     @partial(jax.jit, static_argnums=0)
@@ -280,8 +293,6 @@ class CTRolloutManager(JaxMARLWrapper):
 
     @partial(jax.jit, static_argnums=0)
     def wrapped_step(self, key, state, actions):
-        if 'hanabi' in self._env.name.lower():
-            actions = jax.tree_util.tree_map(lambda x:jnp.expand_dims(x, 0), actions)
         obs_, state, reward, done, infos = self._env.step(key, state, actions)
         if self.preprocess_obs:
             obs = jax.tree_util.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
@@ -302,6 +313,11 @@ class CTRolloutManager(JaxMARLWrapper):
     
     def batch_sample(self, key, agent):
         return self.batch_samplers[agent](jax.random.split(key, self.batch_size)).astype(int)
+    
+    @partial(jax.jit, static_argnums=0)
+    def get_valid_actions(self, state):
+        # default is to return the same valid actions one hot encoded for each env 
+        return {agent:jnp.tile(actions, self.batch_size).reshape(self.batch_size, -1) for agent, actions in self.valid_actions_oh.items()}
 
     @partial(jax.jit, static_argnums=0)
     def _preprocess_obs(self, arr, extra_features):
@@ -313,12 +329,3 @@ class CTRolloutManager(JaxMARLWrapper):
         # concatenate the extra features
         arr = jnp.concatenate((arr, extra_features), axis=-1)
         return arr
-    
-    @partial(jax.jit, static_argnums=0)
-    def hanabi_world_state(self, obs, state):
-        """ 
-        For each agent: [agent obs, own hand]
-        """
-        all_obs = jnp.array([obs[agent] for agent in self._env.agents])
-        hands = state.env_state.player_hands.reshape((self._env.num_agents, -1))
-        return jnp.concatenate((all_obs, hands), axis=1).ravel()

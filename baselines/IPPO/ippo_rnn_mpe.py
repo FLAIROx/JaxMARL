@@ -1,5 +1,8 @@
 """
-Based on PureJaxRL Implementation of PPO
+Based on PureJaxRL Implementation of PPO.
+
+Note, this file will only work for MPE environments with homogenous agents (e.g. Simple Spread).
+
 """
 
 import jax
@@ -36,7 +39,7 @@ class ScannedRNN(nn.Module):
         ins, resets = x
         rnn_state = jnp.where(
             resets[:, np.newaxis],
-            self.initialize_carry(ins.shape[0], ins.shape[1]),
+            self.initialize_carry(*rnn_state.shape),
             rnn_state,
         )
         new_rnn_state, y = nn.GRUCell(features=ins.shape[1])(rnn_state, ins)
@@ -57,14 +60,14 @@ class ActorCriticRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones = x
         embedding = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
         embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
-        actor_mean = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
+        actor_mean = nn.Dense(self.config["GRU_HIDDEN_DIM"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
         )
         actor_mean = nn.relu(actor_mean)
@@ -74,7 +77,7 @@ class ActorCriticRNN(nn.Module):
 
         pi = distrax.Categorical(logits=actor_mean)
 
-        critic = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
+        critic = nn.Dense(self.config["FC_DIM_SIZE"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
         )
         critic = nn.relu(critic)
@@ -142,7 +145,7 @@ def make_train(config):
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
         network_params = network.init(_rng, init_hstate, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -164,7 +167,7 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], 128)
+        init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"])
 
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
@@ -199,7 +202,7 @@ def make_train(config):
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
-                    done_batch,
+                    last_done,
                     action.squeeze(),
                     value.squeeze(),
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
@@ -260,7 +263,7 @@ def make_train(config):
                         # RERUN NETWORK
                         _, pi, value = network.apply(
                             params,
-                            init_hstate.transpose(),
+                            init_hstate.squeeze(),
                             (traj_batch.obs, traj_batch.done),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
@@ -273,10 +276,11 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean(where=(1 - traj_batch.done))
+                        ).mean()
 
                         # CALCULATE ACTOR LOSS
-                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                        logratio = log_prob - traj_batch.log_prob
+                        ratio = jnp.exp(logratio)
                         gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
                         loss_actor2 = (
@@ -288,15 +292,19 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
+
+                        # debug
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
 
                         total_loss = (
                             loss_actor
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (value_loss, loss_actor, entropy, ratio, approx_kl, clip_frac)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
@@ -316,7 +324,7 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
                 init_hstate = jnp.reshape(
-                    init_hstate, (config["NUM_STEPS"], config["NUM_ACTORS"])
+                    init_hstate, (1, config["NUM_ACTORS"], -1)
                 )
                 batch = (
                     init_hstate,
@@ -348,7 +356,7 @@ def make_train(config):
                 )
                 update_state = (
                     train_state,
-                    init_hstate,
+                    init_hstate.squeeze(),
                     traj_batch,
                     advantages,
                     targets,
@@ -356,10 +364,9 @@ def make_train(config):
                 )
                 return update_state, total_loss
 
-            init_hstate = initial_hstate[None, :].squeeze().transpose()
             update_state = (
                 train_state,
-                init_hstate,
+                initial_hstate,
                 traj_batch,
                 advantages,
                 targets,
@@ -376,6 +383,18 @@ def make_train(config):
                 ),
                 traj_batch.info,
             )
+            ratio_0 = loss_info[1][3].at[0,0].get().mean()
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            metric["loss"] = {
+                "total_loss": loss_info[0],
+                "value_loss": loss_info[1][0],
+                "actor_loss": loss_info[1][1],
+                "entropy": loss_info[1][2],
+                "ratio": loss_info[1][3],
+                "ratio_0": ratio_0,
+                "approx_kl": loss_info[1][4],
+                "clip_frac": loss_info[1][5],
+            }
             rng = update_state[-1]
 
             def callback(metric):
@@ -389,6 +408,7 @@ def make_train(config):
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
+                        **metric["loss"],
                     }
                 )
 

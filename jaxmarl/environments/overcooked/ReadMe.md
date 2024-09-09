@@ -37,6 +37,26 @@ The observations follow the featurization in the original Overcooked-AI environm
 Each observation is a sparse, (mostly) binary encoding of size `layout_height x layout_width x n_channels`, where `n_channels = 26`. 
 For a detailed description of each channel, refer to the `get_obs(...)` method in [`overcooked.py`](overcooked.py).
 
+## Reward
+
+JaxMARL's Overcooked reward is the same as the original environment, which corresponds to the score of the game. Specifically, a +1 reward is given to all agents when a recipe is correctly completed and delivered.
+
+Additionally, we include a shaped reward as per the original Overcooked environment. The shaped reward is as follows:
+
+```
+BASE_REW_SHAPING_PARAMS = {
+    "PLACEMENT_IN_POT_REW": 3, # reward for putting ingredients 
+    "PLATE_PICKUP_REWARD": 3, # reward for picking up a plate
+    "SOUP_PICKUP_REWARD": 5, # reward for picking up a ready soup
+    "DISH_DISP_DISTANCE_REW": 0,
+    "POT_DISTANCE_REW": 0,
+    "SOUP_DISTANCE_REW": 0,
+}
+```
+
+The shaped reward is accessible in the ```infos``` returned by the step function of the environment.
+
+
 ## Get started
 We provide an introduction on how to initialize, visualize and unroll a policy in the environment in `../../tutorials/overcooked_introduction.py`.
 

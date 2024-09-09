@@ -1,7 +1,9 @@
 "LR": 5.0e-4
-"NUM_ENVS": 128 
-"NUM_STEPS": 128 # must be 128
+"NUM_ENVS": 1024 
+"NUM_STEPS": 128 
 "TOTAL_TIMESTEPS": 1e10
+"FC_DIM_SIZE": 128
+"GRU_HIDDEN_DIM": 128
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -11,7 +13,7 @@
 "ENT_COEF": 0.01
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
-"ACTIVATION": "tanh"
+"ACTIVATION": "relu"
 "ENV_NAME": "hanabi"
 "SEED": 30
 "NUM_SEEDS": 2
@@ -21,4 +23,6 @@
 # WandB Params
 "WANDB_MODE": "disabled"
 "ENTITY": ""
-"PROJECT": "jaxmarl-hanabi"
+"PROJECT": ""
+
+"SAVE_PATH": "baselines/MAPPO/checkpoints"

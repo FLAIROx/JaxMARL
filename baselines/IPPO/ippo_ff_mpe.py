@@ -273,6 +273,11 @@ def make_train(config):
                 update_state = (train_state, traj_batch, advantages, targets, rng)
                 return update_state, loss_info
 
+            def callback(metric):
+                wandb.log(
+                    metric
+                )
+
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
@@ -280,11 +285,13 @@ def make_train(config):
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
-            
+
+            r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
+            # jax.debug.print('ratio0 {x}', x=r0["ratio0"])
             loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
             metric = jax.tree_map(lambda x: x.mean(), metric)
-            metric = {**metric, **loss_info}
-            
+            metric = {**metric, **loss_info, **r0}
+            jax.experimental.io_callback(callback, None, metric)
             runner_state = (train_state, env_state, last_obs, rng)
             return runner_state, metric
 

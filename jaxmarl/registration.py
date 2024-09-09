@@ -23,10 +23,11 @@ from .environments import (
     HalfCheetah,
     InTheGrid,
     InTheGrid_2p,
-    HanabiGame,
+    InTheMatrix,
+    Hanabi,
     Overcooked,
     CoinGame,
-    UTracking,
+    JaxNav,
 )
 
 
@@ -77,7 +78,7 @@ def make(env_id: str, **env_kwargs):
         env = LearnedPolicyEnemySMAX(**env_kwargs)
 
     # 4. MABrax
-    elif env_id == "ant_4x2":
+    if env_id == "ant_4x2":
         env = Ant(**env_kwargs)
     elif env_id == "halfcheetah_6x1":
         env = HalfCheetah(**env_kwargs)
@@ -94,10 +95,12 @@ def make(env_id: str, **env_kwargs):
     # 5. InTheGrid
     elif env_id == "storm_2p":
         env = InTheGrid_2p(**env_kwargs)
+    elif env_id == "storm_np":
+        env = InTheMatrix(**env_kwargs)
     
     # 6. Hanabi
     elif env_id == "hanabi":
-        env = HanabiGame(**env_kwargs)
+        env = Hanabi(**env_kwargs)
 
     # 7. Overcooked
     elif env_id == "overcooked":
@@ -106,6 +109,10 @@ def make(env_id: str, **env_kwargs):
     # 8. Coin Game
     elif env_id == "coin_game":
         env = CoinGame(**env_kwargs)
+        
+    # 9. JaxNav
+    elif env_id == "jaxnav":
+        env = JaxNav(**env_kwargs)
 
     # 9. Utracking
     elif env_id == 'utracking':
@@ -138,8 +145,9 @@ registered_envs = [
     "walker2d_2x3",
     "storm",
     "storm_2p",
+    "storm_np",
     "hanabi",
     "overcooked",
     "coin_game",
-    "utracking"
+    "jaxnav",
 ]

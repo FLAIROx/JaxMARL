@@ -2,6 +2,8 @@
 "NUM_ENVS": 1024
 "NUM_STEPS": 128
 "TOTAL_TIMESTEPS": 1e10
+"FC_DIM_SIZE": 128
+"GRU_HIDDEN_DIM": 128
 "UPDATE_EPOCHS": 4
 "NUM_MINIBATCHES": 4
 "GAMMA": 0.99
@@ -14,11 +16,9 @@
 "ENV_NAME": "hanabi"
 "ENV_KWARGS": {}
 "ANNEAL_LR": True
-"NUM_FC_LAYERS": 2
-"LAYER_WIDTH": 128
 "SEED": 30
 
 # WandB Params
 "WANDB_MODE": "disabled"
 "ENTITY": ""
-"PROJECT": "jaxmarl-hanabi"
+"PROJECT": ""

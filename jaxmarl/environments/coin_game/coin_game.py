@@ -59,13 +59,14 @@ class CoinGame(MultiAgentEnv):
         self,
         num_inner_steps: int = 10,
         num_outer_steps: int = 10,
-        cnn: bool = True,
+        cnn: bool = False,
         egocentric: bool = False,
+        shared_rewards: bool = False,
         payoff_matrix=[[1, 1, -2], [1, 1, -2]],
     ):
 
         super().__init__(num_agents=2)
-        self.agents = list(range(2))
+        self.agents = [str(i) for i in list(range(2))]
         self.payoff_matrix = payoff_matrix
 
         # helper functions
@@ -133,7 +134,8 @@ class CoinGame(MultiAgentEnv):
                 [obs1[:, :, 1], obs1[:, :, 0], obs1[:, :, 3], obs1[:, :, 2]],
                 axis=-1,
             )
-            return obs1, obs2
+            obs = {self.agents[0]: obs1, self.agents[1]: obs2}
+            return obs
 
         def _relative_position(state: EnvState) -> jnp.ndarray:
             """Assume canonical agent is red player"""
@@ -188,19 +190,21 @@ class CoinGame(MultiAgentEnv):
                         coop2=state.coop2,
                     )
                 )
+                obs = (obs1, obs2)
+                obs = {agent: obs for agent, obs in zip(self.agents, obs)}
             else:
-                obs1, obs2 = _abs_position(state)
+                obs = _abs_position(state)
 
             if not cnn:
-                return obs1.flatten(), obs2.flatten()
-            return obs1, obs2
+                return {agent: obs[agent].flatten() for agent in obs}
+            return obs
 
         def _step(
             key: chex.PRNGKey,
             state: EnvState,
             actions: Tuple[int, int],
         ):
-            action_0, action_1 = actions
+            action_0, action_1 = list(actions.values())
             new_red_pos = (state.red_pos + MOVES[action_0]) % 3
             new_blue_pos = (state.blue_pos + MOVES[action_1]) % 3
             red_reward, blue_reward = 0, 0
@@ -300,7 +304,7 @@ class CoinGame(MultiAgentEnv):
                 last_state=last_state,
             )
 
-            obs1, obs2 = _state_to_obs(next_state)
+            obs = _state_to_obs(next_state)
 
             # now calculate if done for inner or outer episode
             inner_t = next_state.inner_t
@@ -340,17 +344,28 @@ class CoinGame(MultiAgentEnv):
                 last_state=jnp.where(reset_inner, jnp.zeros(2), last_state),
             )
 
-            obs1 = jnp.where(reset_inner, reset_obs[0], obs1)
-            obs2 = jnp.where(reset_inner, reset_obs[1], obs2)
+            obs = {agent: obs for agent, obs in zip(self.agents, [jnp.where(reset_inner, reset_obs[i], obs[i]) for i in obs])}
 
             blue_reward = jnp.where(reset_inner, 0.0, blue_reward)
             red_reward = jnp.where(reset_inner, 0.0, red_reward)
+
+            if shared_rewards:
+                # shared reward (social welfare\sum of agents individual rewards)
+                rewards = {agent: reward for agent, reward in zip(self.agents, (sum((red_reward, blue_reward)),  sum((red_reward, blue_reward))))}
+            else:
+                # individual reward
+                rewards = {agent: reward for agent, reward in zip(self.agents, (red_reward, blue_reward))}
+
+            dones = {agent: reset_inner for agent in self.agents}
+            dones['__all__'] = reset_inner
+            
+            infos = {}
             return (
-                (obs1, obs2),
+                obs,
                 next_state,
-                (red_reward, blue_reward),
-                reset_inner,
-                {"discount": jnp.zeros((), dtype=jnp.int8)},
+                rewards,
+                dones,
+                infos,
             )
 
         def _reset(
@@ -380,8 +395,8 @@ class CoinGame(MultiAgentEnv):
                 coop2=state_stats,
                 last_state=jnp.zeros(2),
             )
-            obs1, obs2 = _state_to_obs(state)
-            return (obs1, obs2), state
+            obs = _state_to_obs(state)
+            return obs, state
 
         # overwrite Gymnax as it makes single-agent assumptions
         self.step = jax.jit(_step)

@@ -1,0 +1,26 @@
+"LR": 0.0005
+"NUM_ENVS": 64
+"NUM_STEPS": 256
+"TOTAL_TIMESTEPS": 5e6
+"UPDATE_EPOCHS": 4
+"NUM_MINIBATCHES": 16
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+"ENV_NAME": "overcooked"
+"REW_SHAPING_HORIZON": 2.5e6 # for how many timesteps add a shaping reward
+"ENV_KWARGS": 
+  "layout" : "counter_circuit"
+"ANNEAL_LR": True
+"SEED": 30
+"NUM_SEEDS": 1
+"TUNE": False
+
+# WandB Params
+"ENTITY": ""
+"PROJECT": ""
+"WANDB_MODE" : "disabled"

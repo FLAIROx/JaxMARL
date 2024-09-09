@@ -58,7 +58,7 @@ class ActorCriticRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones, avail_actions = x
         embedding = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(obs)
         embedding = nn.relu(embedding)
 
@@ -77,7 +77,7 @@ class ActorCriticRNN(nn.Module):
 
         pi = distrax.Categorical(logits=action_logits)
 
-        critic = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))(
+        critic = nn.Dense(self.config["FC_DIM_SIZE"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
             embedding
         )
         critic = nn.relu(critic)
@@ -208,7 +208,7 @@ def make_train(config):
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
-                    done_batch,
+                    last_done,
                     action.squeeze(),
                     value.squeeze(),
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
@@ -287,10 +287,11 @@ def make_train(config):
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = 0.5 * jnp.maximum(
                             value_losses, value_losses_clipped
-                        ).mean(where=(1 - traj_batch.done))
+                        ).mean()
 
                         # CALCULATE ACTOR LOSS
-                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                        logratio = log_prob - traj_batch.log_prob
+                        ratio = jnp.exp(logratio)
                         gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
                         loss_actor2 = (
@@ -302,15 +303,19 @@ def make_train(config):
                             * gae
                         )
                         loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = loss_actor.mean(where=(1 - traj_batch.done))
-                        entropy = pi.entropy().mean(where=(1 - traj_batch.done))
+                        loss_actor = loss_actor.mean()
+                        entropy = pi.entropy().mean()
+
+                        # debug
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
 
                         total_loss = (
                             loss_actor
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (value_loss, loss_actor, entropy, ratio, approx_kl, clip_frac)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
@@ -373,7 +378,7 @@ def make_train(config):
 
             update_state = (
                 train_state,
-                init_hstate,
+                initial_hstate,
                 traj_batch,
                 advantages,
                 targets,
@@ -390,6 +395,19 @@ def make_train(config):
                 ),
                 traj_batch.info,
             )
+            ratio_0 = loss_info[1][3].at[0,0].get().mean()
+            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            metric["loss"] = {
+                "total_loss": loss_info[0],
+                "value_loss": loss_info[1][0],
+                "actor_loss": loss_info[1][1],
+                "entropy": loss_info[1][2],
+                "ratio": loss_info[1][3],
+                "ratio_0": ratio_0,
+                "approx_kl": loss_info[1][4],
+                "clip_frac": loss_info[1][5],
+            }
+            
             rng = update_state[-1]
 
             def callback(metric):
@@ -406,6 +424,7 @@ def make_train(config):
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
+                        **metric["loss"],
                     }
                 )
 
