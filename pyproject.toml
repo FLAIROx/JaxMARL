@@ -44,7 +44,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-alg = [
+algs = [
   "optax",
   "distrax",
   "safetensors",
