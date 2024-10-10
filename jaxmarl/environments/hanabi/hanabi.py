@@ -9,7 +9,7 @@ from jax import lax
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from gymnax.environments.spaces import Discrete
+from jaxmarl.environments.spaces import Discrete
 from .hanabi_game import HanabiGame, State
 
 

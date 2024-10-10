@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.spaces import Box, Discrete
 
 # Obstacle Colours
 OBS_COLOUR = [(191, 64, 64), (64, 191, 64), (64, 64, 191)]

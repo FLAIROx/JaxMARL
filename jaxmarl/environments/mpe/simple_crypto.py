@@ -6,7 +6,7 @@ from flax import struct
 from functools import partial
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
 LISTENER = "bob_0"
