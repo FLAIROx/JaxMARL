@@ -86,13 +86,15 @@ pip install jaxmarl
     ```
     git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
     ```
-2. Requirements can be installed with:
+2. Install requirements:
     ``` 
     pip install -e .[algs]
     export PYTHONPATH=./JaxMARL:$PYTHONPATH
     ```
+3. For the fastest start, we reccoment using our Dockerfile, the usage of which is outlined below.
 
-**Development** - If you would like to run our test suite, install the additonal dependencies with `pip install -e .[dev]`.
+**Development** - If you would like to run our test suite, install the additonal dependencies with:
+ `pip install -e .[dev]`, after cloning the repository.
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
 
