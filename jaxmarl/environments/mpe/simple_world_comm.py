@@ -11,8 +11,7 @@ from jaxmarl.environments.mpe.simple import (
     OBS_COLOUR,
 )
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box, Discrete
-
+from jaxmarl.environments.spaces import Box, Discrete
 
 # NOTE food and forests are part of world.landmarks
 

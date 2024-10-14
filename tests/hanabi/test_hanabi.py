@@ -4,7 +4,6 @@ import numpy as np
 import jax
 from jax import numpy as jnp
 from jaxmarl import make
-from jaxmarl.wrappers.baselines import LogWrapper
 
 env = make("hanabi")
 dir_path = os.path.dirname(os.path.realpath(__file__))

@@ -1,3 +1,4 @@
+""" Built off Gymnax spaces.py, this module contains jittable classes for action and observation spaces. """
 from typing import Tuple, Union, Sequence
 from collections import OrderedDict
 import chex

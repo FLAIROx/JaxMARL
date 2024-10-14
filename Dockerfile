@@ -17,7 +17,7 @@ RUN apt-get update && \
     apt-get install -y tmux
 
 #jaxmarl from source if needed, all the requirements
-RUN pip install -e .
+RUN pip install -e .[algs,dev]
 
 USER ${MYUSER}
 

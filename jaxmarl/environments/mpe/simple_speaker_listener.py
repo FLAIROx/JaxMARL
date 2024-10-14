@@ -4,7 +4,7 @@ import chex
 from typing import Tuple, Dict
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.spaces import Box, Discrete
 
 SPEAKER = "speaker_0"
 LISTENER = "listener_0"
