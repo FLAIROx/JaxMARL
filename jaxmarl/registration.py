@@ -28,6 +28,7 @@ from .environments import (
     Overcooked,
     CoinGame,
     JaxNav,
+    UTracking,
 )
 
 
@@ -150,4 +151,5 @@ registered_envs = [
     "overcooked",
     "coin_game",
     "jaxnav",
+    "utracking",
 ]

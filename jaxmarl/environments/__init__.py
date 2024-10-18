@@ -22,4 +22,5 @@ from .hanabi import Hanabi
 from .storm import InTheGrid, InTheGrid_2p, InTheMatrix
 from .coin_game import CoinGame
 from .jaxnav import JaxNav
+from .utracking import UTracking
 
