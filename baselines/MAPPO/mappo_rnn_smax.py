@@ -255,7 +255,7 @@ def make_train(config):
             tx=actor_tx,
         )
         critic_train_state = TrainState.create(
-            apply_fn=actor_network.apply,
+            apply_fn=critic_network.apply,
             params=critic_network_params,
             tx=critic_tx,
         )
