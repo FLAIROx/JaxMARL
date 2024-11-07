@@ -259,7 +259,7 @@ def make_train(config):
                     batchify(avail_actions, env.agents, config["NUM_ACTORS"])
                 )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                print(obs_batch.shape)
+                print("obs shape:", obs_batch.shape)
                 ac_in = (
                     obs_batch[np.newaxis, :],
                     last_done[np.newaxis, :],
@@ -643,7 +643,7 @@ def make_train(config):
                             # TODO: check which dimension is squeezed, gives problem with 1 agent
                             new_last_done = batchify(
                                 done, env.agents, env.num_agents
-                            ).squeeze()
+                            ).squeeze(-1)
 
                             return (
                                 rng,

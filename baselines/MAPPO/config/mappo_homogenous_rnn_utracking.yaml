@@ -1,7 +1,7 @@
 "LR": 0.0005
-"NUM_ENVS": 128
+"NUM_ENVS": 512
 "NUM_STEPS": 128
-"TOTAL_TIMESTEPS": 1e9
+"TOTAL_TIMESTEPS": 2e9
 "FC_DIM_SIZE": 128
 "GRU_HIDDEN_DIM": 128
 "UPDATE_EPOCHS": 4
@@ -14,21 +14,25 @@
 "VF_COEF": 0.5
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
-"ANNEAL_LR": True
+"ANNEAL_LR": False
 
 # ENV
 "ENV_NAME": "utracking"
 "ENV_KWARGS": {
-  "num_agents": 2,
-  "num_landmarks": 2,
-  "max_steps": 128,
+  "num_agents": 1,
+  "num_landmarks": 1,
+  "max_steps": 256,
   "dt": 30,
-  "prop_range_landmark": [0, 5, 10], # possible propulsor velocities of the landmarks
+  "prop_range_landmark": [5, 10, 15], # possible propulsor velocities of the landmarks
+  "rew_type": "tracking",
+  "rew_pred_thr": 3,
   "min_valid_distance": 5,
   "min_init_distance": 30,
-  "max_init_distance": 100,
+  "max_init_distance": 150,
   "pre_init_pos_len": 1000000,
-  "max_range_dist": 800,
+  "max_range_dist": 500,
+  "tracking_method": "pf",
+  "pf_num_particles": 500,
 }
 
 # EXP
@@ -36,9 +40,9 @@
 "NUM_SEEDS": 1
 "TUNE": False
 "SAVE_PATH": "models"
-"ALG_NAME": "mappo_rnn_crashing_penalty"
-"ANIMATION_LOG_INTERVAL": 0.25 # percentage of total update steps. animating will slow down training and use more memory
-"ANIMATION_MAX_STEPS": 128 # should be the same of the env
+"ALG_NAME": "mappo_rnn_pf_minimize_tracking_error"
+"ANIMATION_LOG_INTERVAL": 0.1 # percentage of total update steps. animating will slow down training and use more memory
+"ANIMATION_MAX_STEPS": 256 # should be the same of the env
 
 # WANDB
 "WANDB_MODE": "online"
