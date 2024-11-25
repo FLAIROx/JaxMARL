@@ -10,7 +10,6 @@ __pycache__/
 docker/*
 *.pickle
 results/
-docs/
 tmp/
 *-checkpoint.py
 wandb/
