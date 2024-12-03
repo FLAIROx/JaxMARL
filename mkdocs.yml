@@ -1,5 +1,5 @@
 site_name: JaxMARL Documentation
-site_url: https://sitename.example
+site_url: https://jaxmarl.foersterlab
 theme:
   name: material
   palette:
