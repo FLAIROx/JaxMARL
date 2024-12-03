@@ -1,0 +1,31 @@
+site_name: JaxMARL Documentation
+site_url: https://jaxmarl.foersterlab
+theme:
+  name: material
+  palette:
+    # Dark Mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Dark mode
+      primary: green
+      accent: deep purple
+
+    # Light Mode
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Light mode
+      primary: blue
+      accent: deep orange
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [../examples,../jaxmarl,..]
+          options:
+            show_docstring_examples: true
+            show_root_heading: false
+            show_source: False
