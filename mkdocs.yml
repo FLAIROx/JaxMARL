@@ -20,5 +20,12 @@ theme:
       accent: deep orange
 
 plugins:
-- search
-- mkdocstrings
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [../examples,../jaxmarl,..]
+          options:
+            show_docstring_examples: true
+            show_root_heading: false
+            show_source: False
