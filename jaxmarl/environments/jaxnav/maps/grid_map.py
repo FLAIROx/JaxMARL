@@ -981,7 +981,7 @@ class GridMapFromBuffer(GridMapCircleAgents):
                 with open(filepath, "rb") as f:
                     tc = pickle.load(f)
                     print('tc c', tc)
-                    test_cases = jax.tree_map(lambda x, y: jnp.concatenate((x, y), axis=0), test_cases, tc)
+                    test_cases = jax.tree.map(lambda x, y: jnp.concatenate((x, y), axis=0), test_cases, tc)
             self.test_cases = test_cases
             self.num_test_cases = test_cases[0].shape[0]
             print('test cases', test_cases)
@@ -993,7 +993,7 @@ class GridMapFromBuffer(GridMapCircleAgents):
     def sample_scenario(self, key):
         print('-- sampling scenarios -- ')
         idx = jax.random.randint(key, (1,), minval=0, maxval=self.num_test_cases)[0]
-        tc = jax.tree_map(lambda x: x[idx], self.test_cases)
+        tc = jax.tree.map(lambda x: x[idx], self.test_cases)
         print('tc ', tc)
         map_data = tc[0]
         print('map data', map_data.shape)
