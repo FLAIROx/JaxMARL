@@ -383,7 +383,7 @@ def make_train(config, env):
                     return x
 
                 rng, _rng = jax.random.split(rng)
-                minibatches = jax.tree_util.tree.map(
+                minibatches = jax.tree.map(
                     lambda x: preprocess_transition(x, _rng),
                     transitions,
                 )  # num_minibatches, num_agents, num_envs/num_minbatches ...

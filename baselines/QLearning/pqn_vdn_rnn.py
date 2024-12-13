@@ -336,7 +336,7 @@ def make_train(config, env):
                         minibatch.last_done,
                     )
                     # batchify the agent input: num_agents*batch_size
-                    agent_in = jax.tree_util.tree.map(
+                    agent_in = jax.tree.map(
                         lambda x: x.reshape(x.shape[0], -1, *x.shape[3:]), agent_in
                     )  # (num_steps, num_agents*batch_size, ...)
 
@@ -442,7 +442,7 @@ def make_train(config, env):
                     return x
 
                 rng, _rng = jax.random.split(rng)
-                minibatches = jax.tree_util.tree.map(
+                minibatches = jax.tree.map(
                     lambda x: preprocess_transition(x, _rng),
                     memory_transitions,
                 )  # num_minibatches, num_steps+memory_window, num_agents, batch_size/num_minbatches, num_agents, ...

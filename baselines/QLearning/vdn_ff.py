@@ -240,7 +240,7 @@ def make_train(config, env):
             )  # update timesteps count
 
             # BUFFER UPDATE
-            timesteps = jax.tree_util.tree.map(
+            timesteps = jax.tree.map(
                 lambda x: x.reshape(-1, *x.shape[2:]), timesteps
             )  # (num_envs*num_steps, ...)
             buffer_state = buffer.add(buffer_state, timesteps)

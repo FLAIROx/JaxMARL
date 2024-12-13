@@ -118,7 +118,7 @@ if 'agent' in params.keys():
 def obs_to_act(obs, dones, params=params):
 
 
-    obs = jax.tree_util.tree.map(_preprocess_obs, obs, agents_one_hot)
+    obs = jax.tree.map(_preprocess_obs, obs, agents_one_hot)
 
     # add a dummy temporal dimension
     obs_   = jax.tree.map(lambda x: x[np.newaxis, np.newaxis, :], obs) # add also a dummy batch dim to obs
@@ -129,8 +129,8 @@ def obs_to_act(obs, dones, params=params):
     hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
 
     # get actions from q vals
-    valid_q_vals = jax.tree_util.tree.map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, valid_actions)
-    actions = jax.tree_util.tree.map(lambda q: jnp.argmax(q, axis=-1).squeeze(0), valid_q_vals)
+    valid_q_vals = jax.tree.map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, valid_actions)
+    actions = jax.tree.map(lambda q: jnp.argmax(q, axis=-1).squeeze(0), valid_q_vals)
         
     return actions 
 

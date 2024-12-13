@@ -319,7 +319,7 @@ def make_train(config, env):
             )  # update timesteps count
 
             # BUFFER UPDATE
-            buffer_traj_batch = jax.tree_util.tree.map(
+            buffer_traj_batch = jax.tree.map(
                 lambda x: jnp.swapaxes(x, 0, 1)[
                     :, np.newaxis
                 ],  # put the batch dim first and add a dummy sequence dim

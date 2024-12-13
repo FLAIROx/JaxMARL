@@ -384,7 +384,7 @@ class Transition(NamedTuple):
 
 def tree_mean(tree):
     return jnp.array(
-        jax.tree_util.tree_leaves(jax.tree.map(lambda x: x.mean(), tree))
+        jax.tree_leaves(jax.tree.map(lambda x: x.mean(), tree))
     ).mean()
 
 
@@ -487,8 +487,8 @@ def make_train(config, env):
         network_stats  = {'agent':agent_params['batch_stats'],'mixer':mixer_params['batch_stats']}
 
         # print number of params
-        agent_params = sum(x.size for x in jax.tree_util.tree_leaves(network_params['agent']))
-        mixer_params = sum(x.size for x in jax.tree_util.tree_leaves(network_params['mixer']))
+        agent_params = sum(x.size for x in jax.tree_leaves(network_params['agent']))
+        mixer_params = sum(x.size for x in jax.tree_leaves(network_params['mixer']))
         jax.debug.print("Number of agent params: {x}", x=agent_params)
         jax.debug.print("Number of mixer params: {x}", x=mixer_params) 
         
@@ -609,7 +609,7 @@ def make_train(config, env):
                 # get the q_values from the agent netwoek
                 _, hstate, q_vals = homogeneous_pass(env_params, env_batch_norm, hstate, obs_, dones_, train=False)
                 # remove the dummy time_step dimension and index qs by the valid actions of each agent 
-                valid_q_vals = jax.tree_util.tree.map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, wrapped_env.valid_actions)
+                valid_q_vals = jax.tree.map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, wrapped_env.valid_actions)
                 # explore with epsilon greedy_exploration
                 actions = explorer.choose_actions(valid_q_vals, t, key_a)
 
@@ -641,7 +641,7 @@ def make_train(config, env):
             )
 
             # BUFFER UPDATE: save the collected trajectory in the buffer
-            buffer_traj_batch = jax.tree_util.tree.map(
+            buffer_traj_batch = jax.tree.map(
                 lambda x:jnp.swapaxes(x, 0, 1)[:, np.newaxis], # put the batch dim first and add a dummy sequence dim
                 traj_batch
             ) # (num_envs, 1, time_steps, ...)
@@ -702,7 +702,7 @@ def make_train(config, env):
                     )
 
                     # get the target q value of the greedy actions for each agent
-                    valid_q_vals = jax.tree_util.tree.map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
+                    valid_q_vals = jax.tree.map(lambda q, valid_idx: q[..., valid_idx], q_vals, wrapped_env.valid_actions)
                     target_max_qvals = jax.tree.map(
                         lambda t_q, q: q_of_action(t_q, jnp.argmax(q, axis=-1))[1:], # avoid first timestep
                         target_q_vals,
@@ -867,7 +867,7 @@ def make_train(config, env):
                 obs_   = jax.tree.map(lambda x: x[np.newaxis, :], obs_)
                 dones_ = jax.tree.map(lambda x: x[np.newaxis, :], last_dones)
                 _, hstate, q_vals = homogeneous_pass(env_params, env_batch_norm, hstate, obs_, dones_, train=False)
-                actions = jax.tree_util.tree.map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, test_env.valid_actions)
+                actions = jax.tree.map(lambda q, valid_idx: jnp.argmax(q.squeeze(0)[..., valid_idx], axis=-1), q_vals, test_env.valid_actions)
                 obs, env_state, rewards, dones, infos = test_env.batch_step(key_s, env_state, actions)
                 step_state = (env_state, obs, dones, hstate, rng)
                 return step_state, (rewards, dones, infos)

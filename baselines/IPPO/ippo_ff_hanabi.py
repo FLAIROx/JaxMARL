@@ -258,11 +258,11 @@ def make_train(config):
                 batch = (traj_batch, advantages.squeeze(), targets.squeeze())
                 permutation = jax.random.permutation(_rng, config["NUM_ACTORS"])
 
-                shuffled_batch = jax.tree_util.tree.map(
+                shuffled_batch = jax.tree.map(
                     lambda x: jnp.take(x, permutation, axis=1), batch
                 )
 
-                minibatches = jax.tree_util.tree.map(
+                minibatches = jax.tree.map(
                     lambda x: jnp.swapaxes(
                         jnp.reshape(
                             x,
