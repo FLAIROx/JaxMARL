@@ -33,6 +33,31 @@ Anyone doing research on or looking to use multi-agent reinforcment learning!
 
 [JAX](https://jax.readthedocs.io/en/latest/) is a Python library that enables programmers to use a simple numpy-like interface to easily run programs on accelerators. Recently, doing end-to-end single-agent RL on the accelerator using JAX has shown incredible benefits. To understand the reasons for such massive speed-ups in depth, we recommend reading the [PureJaxRL blog post](https://chrislu.page/blog/meta-disco/) and [repository](https://github.com/luchris429/purejaxrl).
 
+## Basic JaxMARL API Usage 
+
+Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. The done dictionary contains an additional `"__all__"` key, specifying whether the episode has ended. We follow a parallel structure, with each agent passing an action at each timestep. For asynchronous games, such as Hanabi, a dummy action is passed for agents not acting at a given timestep.
+
+```python 
+import jax
+from jaxmarl import make
+
+key = jax.random.PRNGKey(0)
+key, key_reset, key_act, key_step = jax.random.split(key, 4)
+
+# Initialise environment.
+env = make('MPE_simple_world_comm_v3')
+
+# Reset the environment.
+obs, state = env.reset(key_reset)
+
+# Sample random actions.
+key_act = jax.random.split(key_act, env.num_agents)
+actions = {agent: env.action_space(agent).sample(key_act[i]) for i, agent in enumerate(env.agents)}
+
+# Perform the step transition.
+obs, state, reward, done, infos = env.step(key_step, state, actions)
+```
+
 ## Performance Examples
 *coming soon*
 
