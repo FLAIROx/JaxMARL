@@ -4,7 +4,7 @@
 
 Before installing, ensure you have the correct [JAX installation](https://github.com/google/jax#installation) for your hardware accelerator. We have tested up to JAX version 0.4.25. The JaxMARL environments can be installed directly from PyPi:
 
-``` sh { .yaml .copy }
+``` sh
 pip install jaxmarl 
 ```
 
@@ -13,11 +13,11 @@ pip install jaxmarl
 If you would like to also run the algorithms, install the source code as follows:
 
 1. Clone the repository:
-    ``` sh { .yaml .copy }
+    ``` sh
     git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
     ```
 2. Install requirements:
-    ``` sh { .yaml .copy }
+    ``` sh
     pip install -e .[algs] && export PYTHONPATH=./JaxMARL:$PYTHONPATH
     ```
 3. For the fastest start, we reccoment using our Dockerfile, the usage of which is outlined below.
