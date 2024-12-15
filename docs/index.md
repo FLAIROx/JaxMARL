@@ -65,19 +65,18 @@ obs, state, reward, done, infos = env.step(key_step, state, actions)
 Speed of JaxMARL's training pipeline compared to two popular MARL libraries when training an RNN agent using IPPO on an MPE task.
 ///
 
-Our paper contains further results but the plot above illustrated the speed ups made possible by JIT-compiling the entire traning loop. JaxMARL is much much faster than traditional approaches, while also producing results consistent with existing implementations. 
+Our paper contains further results but the plot above illustrates the speed-ups made possible by JIT-compiling the entire traning loop. JaxMARL is 14x faster than traditional approaches for MPE, while also producing results consistent with existing implementations. For SMAC, as SMAX does not require the StarCraft II game engine to be run, we are over 31x faster.
 
 ## Related Works
 This works is heavily related to and builds on many other works, PureJaxRL provides a [list of projects](https://github.com/luchris429/purejaxrl/blob/main/RESOURCES.md) within the JaxRL ecosystem. Those particularly relevant to multi-agent work are:
 
 JAX-native algorithms:
 
-- [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
+- [Mava](https://github.com/instadeepai/Mava): JAX implementations of popular MARL algorithms.
 - [PureJaxRL](https://github.com/luchris429/purejaxrl): JAX implementation of PPO, and demonstration of end-to-end JAX-based RL training.
 
 JAX-native environments:
 
-- [Gymnax](https://github.com/RobertTLange/gymnax): Implementations of classic RL tasks including classic control, bsuite and MinAtar.
 - [Jumanji](https://github.com/instadeepai/jumanji): A diverse set of environments ranging from simple games to NP-hard combinatorial problems.
 - [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
 - [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks. We use this as the base for MABrax (as the name suggests!)
@@ -86,13 +85,13 @@ JAX-native environments:
 Other great JAX related works from our lab are below:
 
 - [JaxIRL](https://github.com/FLAIROx/jaxirl?tab=readme-ov-file): JAX implementation of algorithms for inverse reinforcement learning.
-- [Craftax](https://github.com/MichaelTMatthews/Craftax): (Crafter + NetHack) in JAX.
 - [JaxUED](https://github.com/DramaCow/jaxued?tab=readme-ov-file): JAX implementations of autocurricula baselines for RL.
+- [Craftax](https://github.com/MichaelTMatthews/Craftax): (Crafter + NetHack) in JAX.
 - [Kinetix](https://kinetix-env.github.io/): Large-scale training of RL agents in a vast and diverse space of simulated tasks, enabled by JAX.
 
 Other things that could help:
 
-- [Benchmarl](https://github.com/facebookresearch/BenchMARL): A collection of MARL benchmarks based on TorchRL
+- [Benchmarl](https://github.com/facebookresearch/BenchMARL): A collection of MARL benchmarks based on TorchRL.
 
 
 ## Citing JaxMARL
