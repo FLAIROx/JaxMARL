@@ -20,97 +20,203 @@ from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, JaxMARLWrappe
 from jaxmarl.viz.utracking_visualizer import animate_from_infos
 
 
-class ScannedRNN(nn.Module):
-    @functools.partial(
+class EncoderBlock(nn.Module):
+    hidden_dim: int  # Input dimension is needed here since it is equal to the output dimension (residual connection)
+    num_heads: int
+    dim_feedforward: int
+    dropout_prob: float = 0.0
+
+    def setup(self):
+        # Attention layer
+        self.self_attn = nn.MultiHeadDotProductAttention(
+            num_heads=self.num_heads,
+            dropout_rate=self.dropout_prob,
+            kernel_init=nn.initializers.xavier_uniform(),
+            use_bias=False,
+        )
+        # Two-layer MLP
+        self.linear = [
+            nn.Dense(
+                self.dim_feedforward,
+                kernel_init=nn.initializers.xavier_uniform(),
+                bias_init=constant(0.0),
+            ),
+            nn.Dense(
+                self.hidden_dim,
+                kernel_init=nn.initializers.xavier_uniform(),
+                bias_init=constant(0.0),
+            ),
+        ]
+        # Layers to apply in between the main layers
+        self.norm1 = nn.LayerNorm()
+        self.norm2 = nn.LayerNorm()
+        self.dropout = nn.Dropout(self.dropout_prob)
+
+    def __call__(self, x, mask=None, deterministic=True):
+
+        # Attention part
+        if mask is not None:  # masking is not compatible with fast self attention
+            mask = jnp.repeat(
+                nn.make_attention_mask(mask, mask), self.num_heads, axis=-3
+            )
+        attended = self.self_attn(
+            inputs_q=x, inputs_kv=x, mask=mask, deterministic=deterministic
+        )
+
+        x = self.norm1(attended + x)
+        x = x + self.dropout(x, deterministic=deterministic)
+
+        # MLP part
+        feedforward = self.linear[0](x)
+        feedforward = nn.relu(feedforward)
+        feedforward = self.linear[1](feedforward)
+
+        x = self.norm2(feedforward + x)
+        x = x + self.dropout(x, deterministic=deterministic)
+
+        return x
+
+
+class Embedder(nn.Module):
+    hidden_dim: int
+    activation: bool = True
+
+    @nn.compact
+    def __call__(self, x):
+        x = nn.Dense(
+            self.hidden_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+        )(x)
+        if self.activation:
+            x = nn.relu(x)
+        return x
+
+
+class ScannedTransformer(nn.Module):
+
+    hidden_dim: int
+    transf_num_layers: int
+    transf_num_heads: int
+    transf_dim_feedforward: int
+    transf_dropout_prob: float = 0
+    deterministic: bool = True
+    return_embeddings: bool = False
+
+    def setup(self):
+        self.encoders = [
+            EncoderBlock(
+                self.hidden_dim,
+                self.transf_num_heads,
+                self.transf_dim_feedforward,
+                self.transf_dropout_prob,
+            )
+            for _ in range(self.transf_num_layers)
+        ]
+
+    @partial(
         nn.scan,
         variable_broadcast="params",
         in_axes=0,
         out_axes=0,
         split_rngs={"params": False},
     )
-    @nn.compact
     def __call__(self, carry, x):
-        """Applies the module."""
-        rnn_state = carry
-        ins, resets = x
-        # print('ins', ins)
-        rnn_state = jnp.where(
-            resets[:, np.newaxis],
-            self.initialize_carry(ins.shape[0], ins.shape[1]),
-            rnn_state,
+        hs = carry
+        embeddings, mask, done = x
+
+        # reset hidden state and add 
+        hs = jnp.where(
+            done[:, np.newaxis], # batch_wize, 1,
+            self.initialize_carry(*done.shape, self.hidden_dim), # batch_size, hidden_dim
+            hs, # batch size, hidden_dim
         )
-        new_rnn_state, y = nn.GRUCell(features=ins.shape[1])(rnn_state, ins)
-        return new_rnn_state, y
+        embeddings = jnp.concatenate(
+            (
+                hs[..., np.newaxis, :], # batch size, 1, hidden_dim
+                embeddings,
+            ),
+            axis=-2,
+        )
+        for layer in self.encoders:
+            embeddings = layer(embeddings, mask=mask, deterministic=self.deterministic)
+        hs = embeddings[..., 0, :] # batch size, hidden_dim
+
+        # as y return the entire embeddings if required (i.e. transformer mixer), otherwise only agents' hs embeddings
+        if self.return_embeddings:
+            return hs, embeddings
+        else:
+            return hs, hs
 
     @staticmethod
-    def initialize_carry(batch_size, hidden_size):
-        # Use a dummy key since the default state init fn is just zeros.
-        cell = nn.GRUCell(features=hidden_size)
-        return cell.initialize_carry(jax.random.PRNGKey(0), (batch_size, hidden_size))
+    def initialize_carry(*shape):
+        return jnp.zeros(shape)
 
 
-class ActorRNN(nn.Module):
-    action_dim: Sequence[int]
+class TransformerAgent(nn.Module):
+    action_dim: int
     config: Dict
 
     @nn.compact
-    def __call__(self, hidden, x):
-        obs, dones, avail_actions = x
-        embedding = nn.Dense(
-            self.config["FC_DIM_SIZE"],
-            kernel_init=orthogonal(np.sqrt(2)),
-            bias_init=constant(0.0),
-        )(obs)
-        embedding = nn.relu(embedding)
+    def __call__(self, hs, x, return_all_hs=False):
 
-        rnn_in = (embedding, dones)
-        hidden, embedding = ScannedRNN()(hidden, rnn_in)
+        ins, resets, avail_actions = x
+        embeddings = Embedder(
+            self.config['HIDDEN_DIM'],
+        )(ins)
 
-        actor_mean = nn.Dense(
-            self.config["GRU_HIDDEN_DIM"],
-            kernel_init=orthogonal(2),
-            bias_init=constant(0.0),
-        )(embedding)
-        actor_mean = nn.relu(actor_mean)
-        actor_mean = nn.Dense(
-            self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
-        )(actor_mean)
+        print('actor embeddings shape:', embeddings.shape)
+
+        last_hs, hidden_states = ScannedTransformer(
+            hidden_dim=self.config['HIDDEN_DIM'],
+            transf_num_layers=self.config['AGENT_NUM_LAYERS'],
+            transf_num_heads=self.config['AGENT_NUM_HEADS'],
+            transf_dim_feedforward=self.config['AGENT_FF_DIM'],
+            deterministic=True,
+            return_embeddings=False,
+        )(hs, (embeddings, None, resets))
+
+        logits = nn.Dense(
+            self.action_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+        )(hidden_states)
+
         unavail_actions = 1 - avail_actions
-        action_logits = actor_mean - (unavail_actions * 1e10)
-
+        action_logits = logits - (unavail_actions * 1e10)
         pi = distrax.Categorical(logits=action_logits)
 
-        return hidden, pi
+        if return_all_hs:
+            return last_hs, (hidden_states, pi)
+        else:
+            return last_hs, pi
 
 
-class CriticRNN(nn.Module):
+class TransformerCritic(nn.Module):
     config: Dict
 
     @nn.compact
-    def __call__(self, hidden, x):
-        world_state, dones = x
-        embedding = nn.Dense(
-            self.config["FC_DIM_SIZE"],
-            kernel_init=orthogonal(np.sqrt(2)),
-            bias_init=constant(0.0),
+    def __call__(self, hs, x):
+
+        world_state, resets = x
+
+        embeddings= Embedder(
+            self.config['HIDDEN_DIM'],
         )(world_state)
-        embedding = nn.relu(embedding)
 
-        rnn_in = (embedding, dones)
+        print('critic embeddings shape:', embeddings.shape)
 
-        hidden, embedding = ScannedRNN()(hidden, rnn_in)
+        last_hs, hidden_states = ScannedTransformer(
+            hidden_dim=self.config['HIDDEN_DIM'],
+            transf_num_layers=self.config['CRITIC_NUM_LAYERS'],
+            transf_num_heads=self.config['CRITIC_NUM_HEADS'],
+            transf_dim_feedforward=self.config['CRITIC_FF_DIM'],
+            deterministic=True,
+            return_embeddings=False,
+        )(hs, (embeddings, None, resets))
 
-        critic = nn.Dense(
-            self.config["GRU_HIDDEN_DIM"],
-            kernel_init=orthogonal(2),
-            bias_init=constant(0.0),
-        )(embedding)
-        critic = nn.relu(critic)
+        # critic output
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
-            critic
+            hidden_states
         )
 
-        return hidden, jnp.squeeze(critic, axis=-1)
+        return last_hs, jnp.squeeze(critic, axis=-1)
 
 
 class Transition(NamedTuple):
@@ -128,9 +234,16 @@ class Transition(NamedTuple):
 
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
-    # print('batchify', x.shape)
     return x.reshape((num_actors, -1))
 
+
+def batchify_transformer(x: dict, agent_list, num_actors):
+    # bathify specifically for transformer keeping the last two dimensions (entities, features)
+    x = jnp.stack([x[a] for a in agent_list])
+    num_entities = x.shape[-2]
+    num_feats = x.shape[-1]
+    x = x.reshape((num_actors, num_entities, num_feats))
+    return x
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
@@ -171,18 +284,18 @@ def make_train(config):
     def train(rng):
         original_seed = rng[0]
         # INIT NETWORK
-        actor_network = ActorRNN(env.action_space(env.agents[0]).n, config=config)
-        critic_network = CriticRNN(config=config)
+        actor_network = TransformerAgent(env.action_space(env.agents[0]).n, config=config)
+        critic_network = TransformerCritic(config=config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
         ac_init_x = (
             jnp.zeros(
-                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
-            ),
-            jnp.zeros((1, config["NUM_ENVS"])),
-            jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
+                (1, config["NUM_ENVS"], *env.observation_space(env.agents[0]).shape)
+            ), # (time_step, batch_size, n_entities, obs_size)
+            jnp.zeros((1, config["NUM_ENVS"])), # (time_step, batch_size)
+            jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)), # (time_step, batch_size, num_actions)
         )
-        ac_init_hstate = ScannedRNN.initialize_carry(
-            config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
+        ac_init_hstate = ScannedTransformer.initialize_carry(
+            config["NUM_ENVS"], config["HIDDEN_DIM"],  # (batch_size, hidden_dim)
         )
         actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
         cr_init_x = (
@@ -190,13 +303,13 @@ def make_train(config):
                 (
                     1,
                     config["NUM_ENVS"],
-                    env.world_state_space.shape[0],
+                    *env.world_state_space.shape,
                 )
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        cr_init_hstate = ScannedRNN.initialize_carry(
-            config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
+        cr_init_hstate = ScannedTransformer.initialize_carry(
+            config["NUM_ENVS"], config["HIDDEN_DIM"], # (batch_size, hidden_dim)
         )
         critic_network_params = critic_network.init(
             _rng_critic, cr_init_hstate, cr_init_x
@@ -235,11 +348,11 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        ac_init_hstate = ScannedRNN.initialize_carry(
-            config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"]
+        ac_init_hstate = ScannedTransformer.initialize_carry(
+            config["NUM_ACTORS"], config["HIDDEN_DIM"]
         )
-        cr_init_hstate = ScannedRNN.initialize_carry(
-            config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"]
+        cr_init_hstate = ScannedTransformer.initialize_carry(
+            config["NUM_ACTORS"], config["HIDDEN_DIM"]
         )
 
         # TRAIN LOOP
@@ -258,7 +371,7 @@ def make_train(config):
                 avail_actions = jax.lax.stop_gradient(
                     batchify(avail_actions, env.agents, config["NUM_ACTORS"])
                 )
-                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+                obs_batch = batchify_transformer(last_obs, env.agents, config["NUM_ACTORS"])
                 print("obs shape:", obs_batch.shape)
                 ac_in = (
                     obs_batch[np.newaxis, :],
@@ -282,8 +395,8 @@ def make_train(config):
                     world_state, env.num_agents, axis=0
                 )  # repeat world_state for each agent
                 world_state = world_state.reshape(
-                    (config["NUM_ACTORS"], -1)
-                )  # (num_actors, world_state_size)
+                    (config["NUM_ACTORS"], world_state.shape[-2], world_state.shape[-1])
+                )  # (num_actors, entities, state_size)
 
                 cr_in = (
                     world_state[None, :],
@@ -336,7 +449,7 @@ def make_train(config):
                 last_world_state, env.num_agents, axis=0
             )  # repeat world_state for each agent
             last_world_state = last_world_state.reshape(
-                (config["NUM_ACTORS"], -1)
+                (config["NUM_ACTORS"], last_world_state.shape[-2], last_world_state.shape[-1])
             )  # (num_actors, world_state_size)
 
             cr_in = (
@@ -572,7 +685,8 @@ def make_train(config):
                         == 0
                     ):
                         animation_path = os.path.join(
-                            wandb.run.dir, f"animation_step{int(metrics['update_steps'])}"
+                            wandb.run.dir,
+                            f"animation_step{int(metrics['update_steps'])}",
                         )
                         animate_from_infos(
                             render_infos,
@@ -588,7 +702,7 @@ def make_train(config):
                                     caption=f"step{int(metrics['update_steps'])}",
                                     fps=10,
                                     format="gif",
-                                )
+                                ),
                             },
                             step=metrics["update_steps"],
                         )
@@ -604,14 +718,14 @@ def make_train(config):
                         init_obs, init_env_state = env.reset(_rng)
                         init_dones = jnp.zeros((env.num_agents), dtype=bool)
 
-                        init_hstate = ScannedRNN.initialize_carry(
-                            env.num_agents, config["GRU_HIDDEN_DIM"]
+                        init_hstate = ScannedTransformer.initialize_carry(
+                            env.num_agents, config["HIDDEN_DIM"]
                         )
 
                         def step_agent(rng, hstate, obsv, last_done, env_state):
 
                             avail_actions = env.get_avail_actions(env_state.env_state)
-                            obs_batch = batchify(obsv, env.agents, env.num_agents)
+                            obs_batch = batchify_transformer(obsv, env.agents, env.num_agents)
                             avail_actions = batchify(
                                 avail_actions, env.agents, env.num_agents
                             )
@@ -803,7 +917,7 @@ def tune(default_config):
 @hydra.main(
     version_base=None,
     config_path="config",
-    config_name="mappo_homogenous_rnn_utracking",
+    config_name="mappo_homogenous_transf_utracking",
 )
 def main(config):
     if config["TUNE"]:

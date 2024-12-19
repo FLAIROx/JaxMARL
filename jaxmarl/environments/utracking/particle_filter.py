@@ -25,7 +25,7 @@ class ParticleFilter:
 
     def __init__(
         self,
-        num_particles,
+        num_particles=5000,
         std_range=10,  # m (standard deviation error of the range measurements)
         mu_init_vel=0.1,  # m/s
         std_init_vel=0.1,  # m/s
@@ -71,7 +71,7 @@ class ParticleFilter:
         return ParticlesState(particles=particles, weights=weights)
 
     @partial(jax.jit, static_argnums=0)
-    def step_and_predict(self, rng, state, pos, obs, mask):
+    def step_and_predict(self, rng, state, pos, obs, mask, dt=30.0):
         """
         Step of the particle filter.
         - state: ParticlesState
@@ -83,26 +83,19 @@ class ParticleFilter:
         key_update, key_resample = jax.random.split(rng, 2)
 
         # Update particles
-        state = self.update_particles(key_update, state)
+        state = self.update_particles(key_update, state, dt)
 
         # Update weights
         state = self.update_weights(state, pos, obs, mask)
 
         # Resample or reinit particles if the weights are too low
-        reinit_cond = jnp.isnan(state.weights).any() # reinit if the max weight is too low or if there are NaNs
-        state = jax.lax.cond(
-            reinit_cond,
-            lambda _: self.reset(
-                key_update, pos[0], obs[0]
-            ),  # reset with the first observation (TODO: take into account masking here)
-            lambda _: self.resample(key_resample, state),
-            operand=None,
-        )
+        state = self.resample_reinit_particles(key_resample, state, pos, obs, mask)
 
         # Estimate position
         pos_est = self.estimate_pos(state)
 
         return state, pos_est
+
 
     @partial(jax.jit, static_argnums=0)
     def update_particles(self, key, state, dt=30.0):
@@ -204,6 +197,33 @@ class ParticleFilter:
         resampled_particles = jax.tree_map(lambda x: x[indexes], state.particles)
 
         return ParticlesState(particles=resampled_particles, weights=state.weights)
+    
+    @partial(jax.jit, static_argnums=0)
+    def resample_reinit_particles(self, rng, state, pos, obs, mask):
+        """
+        Resample or reinit particles.
+        """
+
+        key_reinit, key_resample = jax.random.split(rng, 2)
+
+        # reinit if the max weight is too low or if there are NaNs
+        reinit_cond = jnp.isnan(state.weights).any() # reinit if the max weight is too low or if there are NaNs
+
+        # make sure to reinit with valid observations
+        reinit_idx = jnp.argmax(mask)
+        pos_reinit = jnp.where(mask.any(), pos[reinit_idx], pos[0])
+        obs_reinit = jnp.where(mask.any(), obs[reinit_idx], 0.) # reinit around the agent if there are no valid observations
+
+        state = jax.lax.cond(
+            reinit_cond,
+            lambda _: self.reset(
+                key_reinit, pos_reinit, obs_reinit
+            ),  # reset with the first observation (TODO: take into account masking here)
+            lambda _: self.resample(key_resample, state),
+            operand=None,
+        )
+
+        return state
 
     @partial(jax.jit, static_argnums=0)
     def estimate_pos(self, state):

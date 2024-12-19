@@ -91,11 +91,14 @@ class UTracking(MultiAgentEnv):
         lost_comm_prob=0.1,  # probability of loosing communications
         min_steps_ls: int = 2,  # minimum steps for collecting data and start predicting landmarks positions with least squares
         rew_type: str = "tracking",  # type of reward (follow, tracking_threshold, tracking)
+        penalty_failed_episode: bool = True,  # if true, the reward at end of episode is negative of the cumulative reward, so failed episodes will have a 0 sum reward
         rew_pred_thr: float = 10.0,  # tracking error threshold for tracking reward
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
         seed_init_pos: int = 0,  # random seed for precomputing initial distance
         pre_init_pos_len: int = 100000,  # how many initial positions precompute
-        matrix_obs: bool = False,  # if true, the obs and state are matrices of features relative to all the entities, otherwise flattened
+        matrix_obs: bool = False,  # if true, the obs is a matrix with vertex features relative to all the entities, otherwise flattened
+        matrix_state: bool = False,  # if true, the state is represented with vertex features relative to all the entities
+        state_as_edges: bool = True,  # if true, the matrix state is represented as edge features, otherwise as vertex features
         debug_obs: bool = False,
         space_unit: float = 1e-3,  # unit of space for space observations (default to hundreds of meters)
         infos_for_render: bool = False,  # if true, additional infos are returned for rendering porpouses
@@ -149,10 +152,13 @@ class UTracking(MultiAgentEnv):
         self.min_steps_ls = min_steps_ls
         self.rew_pred_thr = rew_pred_thr
         self.rew_type = rew_type
+        self.penalty_failed_episode = penalty_failed_episode
         self.pre_init_pos = pre_init_pos
         self.pre_init_pos_len = pre_init_pos_len
         self.matrix_obs = matrix_obs
-        self.space_unit = space_unit   
+        self.matrix_state = matrix_state
+        self.state_as_edges = state_as_edges
+        self.space_unit = space_unit
         self.debug_obs = debug_obs
         self.infos_for_render = infos_for_render
 
@@ -171,14 +177,29 @@ class UTracking(MultiAgentEnv):
             self.action_spaces = {i: Box(-0.24, 0.24, (1,)) for i in self.agents}
 
         # obs space
-        self.observation_spaces = {
-            i: Box(-jnp.inf, jnp.inf, (6 * self.num_entities,)) for i in self.agents
-        }
+        if self.matrix_obs:
+            self.observation_spaces = {
+                i: Box(-jnp.inf, jnp.inf, (self.num_entities, 8)) for i in self.agents
+            } 
+        else:
+            self.observation_spaces = {
+                i: Box(-jnp.inf, jnp.inf, (self.num_entities*8,)) for i in self.agents
+            }
 
-        # world state size
-        self.world_state_size = (
-            7 * self.num_entities
-        )  # [pos_x, pos_y, pos_z, direction, vel, pred_error, is_agent]*n_entities
+        # world state shape
+        self.num_edges = (
+            self.num_agents
+            * (self.num_agents - 1)  # undirected graph agent<->agent
+            + self.num_agents * self.num_landmarks  # directed graph agent->landmark
+        )
+        # if edges: [delta_x, delta_y, delta_z, obs_delta_x, obs_delta_y, obs_delta_z, range, is_self(oh)]
+        # else: [pos_x, pos_y, pos_z, direction, vel, pred_error, is_agent]
+        self.state_features = 9 if self.state_as_edges else 7
+        if self.matrix_state:  
+            self.world_state_space = Box(-jnp.inf, jnp.inf, (self.num_entities, self.state_features))
+        else:
+            self.world_state_space = Box(-jnp.inf, jnp.inf, (self.num_entities*self.state_features,))
+        
 
         # preprocess the traj models
         self.traj_model_prop = jnp.array(
@@ -343,7 +364,9 @@ class UTracking(MultiAgentEnv):
                 )
                 for i, a in enumerate(self.agents)
             }
-        obs["world_state"] = self.get_global_state(pos, vel, ranges, land_pred_pos)
+        obs["world_state"] = self.get_global_state(
+            delta_xyz, ranges, comm_drop, pos, vel, land_pred_pos
+        )
 
         # env state
         state = State(
@@ -430,7 +453,7 @@ class UTracking(MultiAgentEnv):
                 for i, a in enumerate(self.agents)
             }
         obs["world_state"] = self.get_global_state(
-            pos, state.vel, ranges, land_pred_pos
+            delta_xyz, ranges, comm_drop, pos, state.vel, land_pred_pos
         )
 
         state = state.replace(
@@ -445,6 +468,7 @@ class UTracking(MultiAgentEnv):
         )
         return obs, state, rewards, done, info
 
+    
     @partial(jax.jit, static_argnums=0)
     def get_obs(
         self,
@@ -454,57 +478,84 @@ class UTracking(MultiAgentEnv):
         pos: chex.Array,
         land_pred_pos: chex.Array,
     ) -> Dict[str, chex.Array]:
-        # first a matrix with all the observations is created, composed by
-        # the position of the agent or the relative position of other agents (comunication) and landmarks (tracking)
-        # the absolute distance (ranges) is_agent, is_self features
-        # [pos_x, pos_y, pos_z, dist, is_agent, is_self]*n_entities
-        other_agents_dist = jnp.where(
-            comm_drop[:, :, None], 0, delta_xyz[:, : self.num_agents]
-        )  # 0 for communication drop
-        self_mask = (
-            jnp.arange(self.num_agents) == np.arange(self.num_agents)[:, np.newaxis]
-        )
-        agents_rel_pos = jnp.where(
-            self_mask[:, :, None], pos[: self.num_agents, [0, 1, 3]], other_agents_dist
-        )  # for self use pos_x, pos_y, angle
-        lands_rel_pos = (
-            land_pred_pos - pos[: self.num_agents, None, :3]
-        )  # relative distance from predicted positions
-        pos_feats = jnp.concatenate((agents_rel_pos, lands_rel_pos), axis=1)
-        is_agent_feat = jnp.tile(
-            jnp.concatenate((jnp.ones(self.num_agents), jnp.zeros(self.num_landmarks))),
-            (self.num_agents, 1),
-        )
-        is_self_feat = (
-            jnp.arange(self.num_entities) == jnp.arange(self.num_agents)[:, np.newaxis]
-        )
-        # the distance based feats are rescaled to hundreds of meters (better for NNs)
-        feats = jnp.concatenate(
-            (
-                pos_feats * self.space_unit,
-                ranges[:, :, None] * self.space_unit,
-                is_agent_feat[:, :, None],
-                is_self_feat[:, :, None],
-            ),
-            axis=2,
+        """
+        obs:[
+            [ x, y, z, angle, [is_self=1, not_self=0], [is_agent=1, not_agent=0]], # SELF
+            [ delta_x, delta_y, delta_z, range, [is_self, not_self], [is_agent, not_agent], ]*num_entities, # OTHERS
+        ]
+        """
+
+        def agent_obs(aidx, pos_, delta_xyz_, ranges_, comm_drop_, land_pred_pos_):
+
+            # self obs is [x, y, z, angle, is_self, is_agent]
+            self_obs = jnp.concatenate((pos_, jnp.array([1, 0]), jnp.array([1, 0])))
+
+            # where comunication drops delta_xyz becomes 0(ranges should be==0 if dropped already)
+            other_agents_dist = jnp.where(
+                comm_drop_[:, None], 0, delta_xyz_[: self.num_agents]
+            )
+
+            # other agents obs is [delta_x, delta_y, delta_z, range, is_self, is_agent]
+            other_agents_obs = jnp.concatenate(
+                (
+                    other_agents_dist,
+                    ranges_[: self.num_agents][:, None],
+                    jnp.tile(jnp.array([0, 1]), (self.num_agents, 1)),  # not self
+                    jnp.tile(jnp.array([1, 0]), (self.num_agents, 1)),  # is agent
+                ),
+                axis=1,
+            )
+
+            self_mask = jnp.arange(self.num_agents) == aidx
+            agents_obs = jnp.where(
+                self_mask[:, None],
+                self_obs,  # self obs for the self agent
+                other_agents_obs,  # other agent for the other agents
+            )
+
+            # put self features first
+            agents_obs = jnp.roll(agents_obs, -aidx, axis=0)
+
+            # landmark obs is [delta_x, delta_y, delta_z, range, is_self, is_agent]
+            landmarks_obs = jnp.concatenate(
+                (
+                    (land_pred_pos_ - pos_[:3]),  # relative position from agent
+                    ranges_[self.num_agents :][:, None],
+                    jnp.tile(jnp.array([0, 1]), (self.num_agents, 1)),  # not self
+                    jnp.tile(jnp.array([0, 1]), (self.num_agents, 1)),  # not agent
+                ),
+                axis=1,
+            )
+
+            obs = jnp.vstack((agents_obs, landmarks_obs))
+            return obs
+
+        obs = jax.vmap(agent_obs)(
+            jnp.arange(self.num_agents),
+            pos[: self.num_agents] * self.space_unit,
+            delta_xyz * self.space_unit,
+            ranges * self.space_unit,
+            comm_drop,
+            land_pred_pos * self.space_unit,
         )
 
         # than it is assigned to each agent its obs
         return {
-            a: feats[i] if self.matrix_obs else feats[i].ravel()
+            a: obs[i] if self.matrix_obs else obs[i].ravel()
             for i, a in enumerate(self.agents)
         }
 
     @partial(jax.jit, static_argnums=0)
-    def get_global_state(
+    def get_vertex_state(
         self,
         pos: chex.Array,
         vel: chex.Array,
         ranges: chex.Array,
         land_pred_pos: chex.Array,
     ) -> chex.Array:
+        # state as vertex features
         # state is obs, vel, is_agent, pred_error for each entity
-        # pos = pos.at[:, :3].multiply(self.space_unit) # scale to hundreds of meters
+
         is_agent = jnp.concatenate(
             (jnp.ones(self.num_agents), jnp.zeros(self.num_landmarks))
         )
@@ -530,8 +581,84 @@ class UTracking(MultiAgentEnv):
             (pos * self.space_unit, vel[:, None], preds[:, None] * self.space_unit, is_agent[:, None]),
             axis=-1,
         )
+        return state
 
-        if self.matrix_obs:
+    @partial(jax.jit, static_argnums=0)
+    def get_edges_state(
+        self,
+        delta_xyz: chex.Array,
+        ranges: chex.Array,
+        comm_drop: chex.Array,
+        pos: chex.Array,
+        land_pred_pos: chex.Array,
+    ) -> chex.Array:
+
+        def agent_edge_feats(aidx, delta_xyz_, ranges_, comm_drop_, land_pred_pos_):
+            """computes the edge features for the agent aidx"""
+            others_delta = jnp.delete(
+                delta_xyz_, aidx, axis=0, assume_unique_indices=True
+            )  # real distance in xyz
+
+            # observed distance other agents (xyz)
+            other_agents_dist = jnp.where(
+                comm_drop_[:, None], 0, delta_xyz_[: self.num_agents]
+            )
+            other_agents_dist = jnp.delete(
+                other_agents_dist, aidx, axis=0, assume_unique_indices=True
+            )  # delete self
+
+            # observed distance other agents+landmarks (xyz)
+            others_observed_delta = jnp.vstack((other_agents_dist, land_pred_pos_))
+
+            # the other is_agent
+            is_agent = jnp.vstack(
+                (
+                    jnp.zeros((self.num_agents - 1, 2)).at[:, 0].set(1),  # is agent
+                    jnp.zeros((self.num_landmarks, 2)).at[:, 1].set(1),  # is landmark
+                )
+            )
+
+            others_ranges = jnp.delete(ranges_, aidx, assume_unique_indices=True)
+            edges_feats = jnp.concatenate(
+                (
+                    others_delta,
+                    others_observed_delta,
+                    others_ranges[:, None],  # delete self
+                    is_agent,
+                ),
+                axis=1,
+            )
+            return edges_feats
+
+        edges = jax.vmap(agent_edge_feats)(
+            jnp.arange(self.num_agents),
+            delta_xyz * self.space_unit,
+            ranges * self.space_unit,
+            comm_drop,
+            land_pred_pos * self.space_unit,
+        )
+
+        return jnp.vstack(edges)
+
+    @partial(jax.jit, static_argnums=0)
+    def get_global_state(
+        self,
+        delta_xyz: chex.Array,
+        ranges: chex.Array,
+        comm_drop: chex.Array,
+        pos: chex.Array,
+        vel: chex.Array,
+        land_pred_pos: chex.Array,
+    ):
+
+        if self.state_as_edges:
+            state = self.get_edges_state(
+                delta_xyz, ranges, comm_drop, pos, land_pred_pos
+            )
+        else:
+            state = self.get_vertex_state(pos, vel, ranges, land_pred_pos)
+        
+        if self.matrix_state:
             return state
         else:
             return state.ravel()
@@ -585,16 +712,10 @@ class UTracking(MultiAgentEnv):
         if self.rew_type == "follow":
             # reward based on percentage of landmarks followed
             rew = (min_land_dist <= self.min_agent_dist * 2).sum() / self.num_landmarks
-            rew = jnp.where(
-                failed_episode, -cum_rew, rew
-            )  # if failed episode, episode reward goes to 0
 
         elif self.rew_type == "tracking_threshold":
             # reward based on percentage of landmarks correctly tracked
             rew = (pred_2d_err <= self.rew_pred_thr).sum() / self.num_landmarks
-            rew = jnp.where(
-                failed_episode, -cum_rew, rew
-            )  # if failed episode, episode reward goes to 0
 
         elif self.rew_type == "tracking":
             # reward based on the tracking error
@@ -606,16 +727,15 @@ class UTracking(MultiAgentEnv):
                 -(-jnp.log(thr_start_val) / self.rew_pred_thr) * x
             )
             rew = rew_fun(pred_2d_err.sum())
-            rew = jnp.where(
-                failed_episode, -cum_rew, rew
-            )  # if failed episode, current episode negative reward is extended to the max steps
 
         elif self.rew_type == "tracking_error":
             # reward based on the tracking error
             rew = -self.space_unit * pred_2d_err.sum()
+
+        if self.penalty_failed_episode and self.rew_type != "tracking_threshold":
             rew = jnp.where(
-                failed_episode, cum_rew + (cum_rew * self.max_steps - t), rew
-            )  # if failed episode, current episode negative reward is extended to the max steps
+                failed_episode, -cum_rew, rew
+            )  # if failed episode, episode reward goes to 0
 
         done = jnp.logical_or(
             t == self.max_steps,  # max steps reached
@@ -633,6 +753,7 @@ class UTracking(MultiAgentEnv):
             "tracking_error_mean": pred_2d_err.mean(keepdims=True),
             "land_dist_mean": min_land_dist.mean(keepdims=True),
             "crash": (agent_dist < self.min_valid_distance).any(keepdims=True),
+            'normalized_reward': cum_rew+rew / self.max_steps,
         }
         if self.infos_for_render:
             info["render"] = {

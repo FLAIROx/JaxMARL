@@ -1,0 +1,66 @@
+"LR": 0.0005
+"NUM_ENVS": 128
+"NUM_STEPS": 64
+"TOTAL_TIMESTEPS": 5e7
+"HIDDEN_DIM": 32
+"AGENT_NUM_LAYERS": 2 
+"AGENT_NUM_HEADS": 4
+"AGENT_FF_DIM": 128
+"CRITIC_NUM_LAYERS": 2 
+"CRITIC_NUM_HEADS": 4
+"CRITIC_FF_DIM": 128
+"UPDATE_EPOCHS": 4
+"NUM_MINIBATCHES": 4
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"SCALE_CLIP_EPS": False
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+"ANNEAL_LR": False
+
+# just for the 
+"FC_DIM_SIZE": 128
+"GRU_HIDDEN_DIM": 128
+
+# ENV
+"ENV_NAME": "utracking"
+"ENV_KWARGS": {
+  "num_agents": 2,
+  "num_landmarks": 2,
+  "max_steps": 512,
+  "dt": 30,
+  "prop_range_landmark": [0, 5, 10, 15], # possible propulsor velocities of the landmarks
+  "rew_type": "follow",
+  "penalty_failed_episode": False,
+  "rew_pred_thr": 10,
+  "min_valid_distance": 5,
+  "min_init_distance": 30,
+  "max_init_distance": 200,
+  "pre_init_pos_len": 1000000,
+  "max_range_dist": 600,
+  "tracking_method": "pf",
+  "matrix_obs": True, # essential for transformer
+  "matrix_state": True,
+  "state_as_edges": False,
+  "pf_num_particles": 1000,
+}
+
+# EXP
+"SEED": 0
+"NUM_SEEDS": 1
+"TUNE": False
+"SAVE_PATH": "models"
+"ALG_NAME": "mappo_transformer"
+"ANIMATION_LOG_INTERVAL": #0.33 # percentage of total update steps. animating will slow down training and use more memory
+"ANIMATION_MAX_STEPS": 256 # should be the same of the env
+
+# WANDB
+"WANDB_MODE": "online"
+"ENTITY": "mttga"
+"PROJECT": "utracking_new"
+"WANDB_LOG_ALL_SEEDS": False
+
+
