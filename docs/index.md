@@ -37,7 +37,7 @@ Anyone doing research on or looking to use multi-agent reinforcment learning!
 
 Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. The done dictionary contains an additional `"__all__"` key, specifying whether the episode has ended. We follow a parallel structure, with each agent passing an action at each timestep. For asynchronous games, such as Hanabi, a dummy action is passed for agents not acting at a given timestep.
 
-```python 
+``` python 
 import jax
 from jaxmarl import make
 
@@ -66,6 +66,9 @@ Speed of JaxMARL's training pipeline compared to two popular MARL libraries when
 ///
 
 Our paper contains further results but the plot above illustrates the speed-ups made possible by JIT-compiling the entire traning loop. JaxMARL is 14x faster than traditional approaches for MPE, while also producing results consistent with existing implementations. For SMAC, as SMAX does not require the StarCraft II game engine to be run, we are over 31x faster.
+
+## Contributing
+Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. If you're looking for a project, we also have a few suggestions listed under the roadmap :) 
 
 ## Related Works
 This works is heavily related to and builds on many other works, PureJaxRL provides a [list of projects](https://github.com/luchris429/purejaxrl/blob/main/RESOURCES.md) within the JaxRL ecosystem. Those particularly relevant to multi-agent work are:
@@ -97,10 +100,11 @@ Other things that could help:
 ## Citing JaxMARL
 If you use JaxMARL in your work, please cite us as follows:
 ``` bibtex
-@article{flair2023jaxmarl,
-    title={JaxMARL: Multi-Agent RL Environments in JAX},
-    author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gardar Ingvarsson and Timon Willi and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rocktaschel and Chris Lu and Jakob Nicolaus Foerster},
-    journal={arXiv preprint arXiv:2311.10090},
-    year={2023}
+@inproceedings{
+    flair2024jaxmarl,
+    title={JaxMARL: Multi-Agent RL Environments and Algorithms in JAX},
+    author={Alexander Rutherford and Benjamin Ellis and Matteo Gallici and Jonathan Cook and Andrei Lupu and Gar{\dh}ar Ingvarsson and Timon Willi and Ravi Hammond and Akbir Khan and Christian Schroeder de Witt and Alexandra Souly and Saptarashmi Bandyopadhyay and Mikayel Samvelyan and Minqi Jiang and Robert Tjarko Lange and Shimon Whiteson and Bruno Lacerda and Nick Hawes and Tim Rockt{\"a}schel and Chris Lu and Jakob Nicolaus Foerster},
+    booktitle={The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks Track},
+    year={2024},
 }
 ```
