@@ -118,19 +118,19 @@ if 'agent' in params.keys():
 def obs_to_act(obs, dones, params=params):
 
 
-    obs = jax.tree_util.tree_map(_preprocess_obs, obs, agents_one_hot)
+    obs = jax.tree.map(_preprocess_obs, obs, agents_one_hot)
 
     # add a dummy temporal dimension
-    obs_   = jax.tree_map(lambda x: x[np.newaxis, np.newaxis, :], obs) # add also a dummy batch dim to obs
-    dones_ = jax.tree_map(lambda x: x[np.newaxis, :], dones)
+    obs_   = jax.tree.map(lambda x: x[np.newaxis, np.newaxis, :], obs) # add also a dummy batch dim to obs
+    dones_ = jax.tree.map(lambda x: x[np.newaxis, :], dones)
 
     # pass in one with homogeneous pass
     hstate = ScannedRNN.initialize_carry(agent_hidden_dim, len(env_jax.agents))
     hstate, q_vals = agent.homogeneous_pass(params, hstate, obs_, dones_)
 
     # get actions from q vals
-    valid_q_vals = jax.tree_util.tree_map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, valid_actions)
-    actions = jax.tree_util.tree_map(lambda q: jnp.argmax(q, axis=-1).squeeze(0), valid_q_vals)
+    valid_q_vals = jax.tree.map(lambda q, valid_idx: q.squeeze(0)[..., valid_idx], q_vals, valid_actions)
+    actions = jax.tree.map(lambda q: jnp.argmax(q, axis=-1).squeeze(0), valid_q_vals)
         
     return actions 
 
@@ -184,7 +184,7 @@ for e in tqdm.tqdm(range(num_ep)):
         acts = obs_to_act(obs_jax, done_jax)
         #print('acts', acts)
         obs_jax, state, rew_jax, done_jax, _ = env_jax.step(key_s, state, acts)
-        done_jax = jax.tree_map(lambda x: x[None], done_jax)
+        done_jax = jax.tree.map(lambda x: x[None], done_jax)
 
         rew_batch = np.array([rew_jax[a] for a in env_jax.agents])
         rew_tallys_jax[j] = rew_batch

@@ -532,7 +532,7 @@ class HanabiEnv(HanabiGame):
         """Binarize the discard pile to reduce dimensionality."""
 
         def binarize_ranks(n_ranks):
-            tree = jax.tree_util.tree_map(
+            tree = jax.tree.map(
                 lambda n_rank_present, max_ranks: jnp.where(
                     jnp.arange(max_ranks) >= n_rank_present,
                     jnp.zeros(max_ranks),

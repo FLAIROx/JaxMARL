@@ -74,7 +74,7 @@ def main():
         return jnp.concatenate((img, jnp.expand_dims(obs['agent_dir'], 0)), axis=-1)
 
     def extract_obs(obs, idx):
-        return jax.tree_map(lambda x: x[idx], obs)
+        return jax.tree.map(lambda x: x[idx], obs)
 
     def sample_random_action(key):
         return jax.random.randint(key, shape=(), minval=0, maxval=n_actions)

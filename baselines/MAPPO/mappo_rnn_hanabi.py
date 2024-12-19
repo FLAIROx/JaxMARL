@@ -275,7 +275,7 @@ def make_train(config):
                 env_act = unbatchify(
                     action, env.agents, config["NUM_ENVS"], env.num_agents
                 )
-                env_act = jax.tree_map(lambda x: x.squeeze(), env_act)
+                env_act = jax.tree.map(lambda x: x.squeeze(), env_act)
 
                 # VALUE
                 # output of wrapper is (num_envs, num_agents, world_state_size)
@@ -294,7 +294,7 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(
                     env.step, in_axes=(0, 0, 0)
                 )(rng_step, env_state, env_act)
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
@@ -447,7 +447,7 @@ def make_train(config):
                 ) = update_state
                 rng, _rng = jax.random.split(rng)
 
-                init_hstates = jax.tree_map(lambda x: jnp.reshape(
+                init_hstates = jax.tree.map(lambda x: jnp.reshape(
                     x, (1, config["NUM_ACTORS"], -1)
                 ), initial_hstates)
                 
@@ -460,11 +460,11 @@ def make_train(config):
                 )
                 permutation = jax.random.permutation(_rng, config["NUM_ACTORS"])
 
-                shuffled_batch = jax.tree_util.tree_map(
+                shuffled_batch = jax.tree.map(
                     lambda x: jnp.take(x, permutation, axis=1), batch
                 )
 
-                minibatches = jax.tree_util.tree_map(
+                minibatches = jax.tree.map(
                     lambda x: jnp.swapaxes(
                         jnp.reshape(
                             x,
@@ -482,7 +482,7 @@ def make_train(config):
                 )
                 update_state = (
                     train_states,
-                    jax.tree_map(lambda x: x.squeeze(), init_hstates),
+                    jax.tree.map(lambda x: x.squeeze(), init_hstates),
                     traj_batch,
                     advantages,
                     targets,
@@ -502,7 +502,7 @@ def make_train(config):
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
             loss_info["ratio_0"] = loss_info["ratio"].at[0,0].get()
-            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
+            loss_info = jax.tree.map(lambda x: x.mean(), loss_info)
             
             train_states = update_state[0]
             metric = traj_batch.info

@@ -186,7 +186,7 @@ class HeuristicEnemySMAX(EnemySMAX):
         )
 
     def get_enemy_policy_initial_state(self, key):
-        return jax.tree_map(
+        return jax.tree.map(
             lambda *xs: jnp.stack(xs),
             *([get_heuristic_policy_initial_state()] * self.num_enemies),
         )

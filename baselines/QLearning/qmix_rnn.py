@@ -260,7 +260,7 @@ def make_train(config, env):
         _, sample_traj = jax.lax.scan(
             _env_sample_step, _env_state, None, config["NUM_STEPS"]
         )
-        sample_traj_unbatched = jax.tree_map(
+        sample_traj_unbatched = jax.tree.map(
             lambda x: x[:, 0], sample_traj
         )  # remove the NUM_ENV dim
 
@@ -376,7 +376,7 @@ def make_train(config, env):
                 timestep = Timestep(
                     obs=last_obs,
                     actions=actions,
-                    rewards=jax.tree_map(lambda x:config.get("REW_SCALE", 1)*x, rewards),
+                    rewards=jax.tree.map(lambda x:config.get("REW_SCALE", 1)*x, rewards),
                     dones=dones,
                     avail_actions=avail_actions,
                 )
@@ -407,7 +407,7 @@ def make_train(config, env):
             )  # update timesteps count
 
             # BUFFER UPDATE
-            buffer_traj_batch = jax.tree_util.tree_map(
+            buffer_traj_batch = jax.tree.map(
                 lambda x: jnp.swapaxes(x, 0, 1)[
                     :, np.newaxis
                 ],  # put the batch dim first and add a dummy sequence dim
@@ -421,7 +421,7 @@ def make_train(config, env):
                 train_state, rng = carry
                 rng, _rng = jax.random.split(rng)
                 minibatch = buffer.sample(buffer_state, _rng).experience
-                minibatch = jax.tree_map(
+                minibatch = jax.tree.map(
                     lambda x: jnp.swapaxes(
                         x[:, 0], 0, 1
                     ),  # remove the dummy sequence dim (1) and swap batch and temporal dims
@@ -544,7 +544,7 @@ def make_train(config, env):
                 "loss": loss.mean(),
                 "qvals": qvals.mean(),
             }
-            metrics.update(jax.tree_map(lambda x: x.mean(), infos))
+            metrics.update(jax.tree.map(lambda x: x.mean(), infos))
 
             # update the test metrics
             if config.get("TEST_DURING_TRAINING", True):
@@ -623,7 +623,7 @@ def make_train(config, env):
             step_state, (rewards, dones, infos) = jax.lax.scan(
                 _greedy_env_step, step_state, None, config["TEST_NUM_STEPS"]
             )
-            metrics = jax.tree_map(
+            metrics = jax.tree.map(
                 lambda x: jnp.nanmean(
                     jnp.where(
                         infos["returned_episode"],
@@ -718,7 +718,7 @@ def single_run(config):
         )
 
         for i, rng in enumerate(rngs):
-            params = jax.tree_map(lambda x: x[i], model_state.params)
+            params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
                 f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
