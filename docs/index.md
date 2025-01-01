@@ -65,7 +65,7 @@ obs, state, reward, done, infos = env.step(key_step, state, actions)
 Speed of JaxMARL's training pipeline compared to two popular MARL libraries when training an RNN agent using IPPO on an MPE task.
 ///
 
-Our paper contains further results but the plot above illustrates the speed-ups made possible by JIT-compiling the entire traning loop. JaxMARL is 14x faster than traditional approaches for MPE, while also producing results consistent with existing implementations. For SMAC, as SMAX does not require the StarCraft II game engine to be run, we are over 31x faster.
+As illustrated above, by JIT-compiling the entire traning loop JAX leads to significant training speed ups. JaxMARL is 14x faster than traditional approaches for MPE, while also producing results consistent with existing implementations. For SMAC, as SMAX does not require the StarCraft II game engine to be run, so we are over 31x faster. More results are given in our paper.
 
 ## Contributing
 Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. If you're looking for a project, we also have a few suggestions listed under the roadmap :) 

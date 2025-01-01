@@ -5,10 +5,7 @@
 
 Spatial-Temporal Representations of Matrix Games (STORM) is inspired by the "in the Matrix" games in [Melting Pot 2.0](https://arxiv.org/abs/2211.13746), the [STORM](https://openreview.net/forum?id=54F8woU8vhq) environment expands on matrix games by representing them as grid-world scenarios. Agents collect resources which define their strategy during interactions and are rewarded based on a pre-specified payoff matrix. This allows for the embedding of fully cooperative, competitive or general-sum games, such as the prisoner's dilemma. 
 
-Thus, STORM can be used for studying paradigms such as *opponent shaping*, where agents act with the intent to change other agents' learning dynamics. Compared to the Coin Game or matrix games, the grid-world setting presents a variety of new challenges such as partial observability, multi-step agent interactions, temporally-extended actions, and longer time horizons. Unlike the "in the Matrix" games from Melting Pot, STORM features stochasticity, increasing the difficulty
-
-## Environment explanation
-
+Thus, STORM can be used for studying paradigms such as *opponent shaping*, where agents act with the intent to change other agents' learning dynamics. Compared to the Coin Game or matrix games, the grid-world setting presents a variety of new challenges such as partial observability, multi-step agent interactions, temporally-extended actions, and longer time horizons. Unlike the "in the Matrix" games from Melting Pot, STORM features stochasticity, increasing the difficulty.
 
 
 ## Visualisation

@@ -22,11 +22,12 @@ If you would like to also run the algorithms, install the source code as follows
     ```
 3. For the fastest start, we reccoment using our Dockerfile, the usage of which is outlined below.
 
-## Development
+## Development 🔨
 
-If you would like to run our test suite, install the additonal dependencies with:
- `pip install -e .[dev]`, after cloning the repository.
-
+If you would like to run our test suite, install the additonal dependencies as follows after cloning the repository:
+``` sh
+pip install -e .[dev]
+```
 
 ## Dockerfile 🐋
 
