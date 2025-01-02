@@ -377,7 +377,7 @@ def make_train(config, env):
                     obs=last_obs,
                     actions=actions,
                     rewards=jax.tree.map(lambda x:config.get("REW_SCALE", 1)*x, rewards),
-                    dones=dones,
+                    dones=last_dones,
                     avail_actions=avail_actions,
                 )
                 return (new_hs, new_obs, dones, new_env_state, rng), (timestep, infos)
