@@ -31,6 +31,5 @@ RUN export TF_FORCE_GPU_ALLOW_GROWTH=true
 # RUN pip install jupyterlab
 
 #for secrets and debug
-ENV WANDB_API_KEY=""
 ENV WANDB_ENTITY=""
 RUN git config --global --add safe.directory /home/${MYUSER}
