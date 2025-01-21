@@ -18,6 +18,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         num_agents=2,
         num_landmarks=3,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         assert num_agents == 2, "SimpleSpeakerListnerMPE only supports 2 agents"
         assert num_landmarks == 3, "SimpleSpeakerListnerMPE only supports 3 landmarks"
@@ -81,6 +82,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
             moveable=moveable,
             silent=silent,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:

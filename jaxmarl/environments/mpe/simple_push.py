@@ -20,6 +20,7 @@ class SimplePushMPE(SimpleMPE):
         num_adversaries=1,
         num_landmarks=2,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         assert (
             num_landmarks == 2
@@ -71,6 +72,7 @@ class SimplePushMPE(SimpleMPE):
             colour=colour,
             rad=rad,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:

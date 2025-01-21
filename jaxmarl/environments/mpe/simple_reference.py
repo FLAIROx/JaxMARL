@@ -17,6 +17,7 @@ class SimpleReferenceMPE(SimpleMPE):
         num_landmarks=3,
         local_ratio=0.5,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         assert num_agents == 2, "SimpleReferenceMPE only supports 2 agents"
         assert num_landmarks == 3, "SimpleReferenceMPE only supports 3 landmarks"
@@ -57,6 +58,7 @@ class SimpleReferenceMPE(SimpleMPE):
             colour=colour,
             silent=silent,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
