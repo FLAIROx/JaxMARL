@@ -58,7 +58,7 @@ class State:
     range_buffer: chex.Array # [num_agents, num_landmarks, (observer_xy, observed_range), len(buffer)], tracking buffer for each agent-landmark pair
     range_buffer_head: int  # head iterator of the tracking buffer
     pf_state: ParticlesState | None  # state of the particle filter
-    steps_next_land_action: chex.Array # [int]*num_landmarks, step until when the landmarks are gonna change directions
+    steps_next_land_action: chex.Array  # [int]*num_landmarks, step until when the landmarks are gonna change directions
     t: int  # step
     cum_rew: float  # cumulative episode reward
 
@@ -124,7 +124,8 @@ class UTracking(MultiAgentEnv):
             "follow",
             "tracking_threshold",
             "tracking",
-        ], "reward type must be 'follow', 'tracking_threshold' or 'tracking'"
+            "tracking_error",
+        ], "reward type must be 'follow', 'tracking_threshold', 'tracking' or 'tracking_error'"
 
         self.max_steps = max_steps
         self.num_agents = num_agents
@@ -180,26 +181,28 @@ class UTracking(MultiAgentEnv):
         if self.matrix_obs:
             self.observation_spaces = {
                 i: Box(-jnp.inf, jnp.inf, (self.num_entities, 8)) for i in self.agents
-            } 
+            }
         else:
             self.observation_spaces = {
-                i: Box(-jnp.inf, jnp.inf, (self.num_entities*8,)) for i in self.agents
+                i: Box(-jnp.inf, jnp.inf, (self.num_entities * 8,)) for i in self.agents
             }
 
         # world state shape
         self.num_edges = (
-            self.num_agents
-            * (self.num_agents - 1)  # undirected graph agent<->agent
+            self.num_agents * (self.num_agents - 1)  # undirected graph agent<->agent
             + self.num_agents * self.num_landmarks  # directed graph agent->landmark
         )
         # if edges: [delta_x, delta_y, delta_z, obs_delta_x, obs_delta_y, obs_delta_z, range, is_self(oh)]
         # else: [pos_x, pos_y, pos_z, direction, vel, pred_error, is_agent]
         self.state_features = 9 if self.state_as_edges else 7
-        if self.matrix_state:  
-            self.world_state_space = Box(-jnp.inf, jnp.inf, (self.num_entities, self.state_features))
+        if self.matrix_state:
+            self.world_state_space = Box(
+                -jnp.inf, jnp.inf, (self.num_entities, self.state_features)
+            )
         else:
-            self.world_state_space = Box(-jnp.inf, jnp.inf, (self.num_entities*self.state_features,))
-        
+            self.world_state_space = Box(
+                -jnp.inf, jnp.inf, (self.num_entities * self.state_features,)
+            )
 
         # preprocess the traj models
         self.traj_model_prop = jnp.array(
@@ -250,7 +253,7 @@ class UTracking(MultiAgentEnv):
     @property
     def name(self) -> str:
         """Environment name."""
-        return f"utracking_{self.num_agents}v{self.num_landmarks}_mean_rew"
+        return f"utracking_{self.num_agents}v{self.num_landmarks}"
 
     @partial(jax.jit, static_argnums=0)
     def reset(self, rng: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
@@ -468,7 +471,6 @@ class UTracking(MultiAgentEnv):
         )
         return obs, state, rewards, done, info
 
-    
     @partial(jax.jit, static_argnums=0)
     def get_obs(
         self,
@@ -578,7 +580,12 @@ class UTracking(MultiAgentEnv):
         )  # 0 pred error for agents
 
         state = jnp.concatenate(
-            (pos * self.space_unit, vel[:, None], preds[:, None] * self.space_unit, is_agent[:, None]),
+            (
+                pos * self.space_unit,
+                vel[:, None],
+                preds[:, None] * self.space_unit,
+                is_agent[:, None],
+            ),
             axis=-1,
         )
         return state
@@ -657,7 +664,7 @@ class UTracking(MultiAgentEnv):
             )
         else:
             state = self.get_vertex_state(pos, vel, ranges, land_pred_pos)
-        
+
         if self.matrix_state:
             return state
         else:
@@ -732,10 +739,18 @@ class UTracking(MultiAgentEnv):
             # reward based on the tracking error
             rew = -self.space_unit * pred_2d_err.sum()
 
-        if self.penalty_failed_episode and self.rew_type != "tracking_threshold":
-            rew = jnp.where(
-                failed_episode, -cum_rew, rew
-            )  # if failed episode, episode reward goes to 0
+        if self.penalty_failed_episode:
+            if self.rew_type == "tracking_error":
+                rew = jnp.where(
+                    failed_episode,
+                    rew - self.space_unit * (self.max_steps - t) * 100.0,
+                    rew,
+                )
+
+            else:
+                rew = jnp.where(
+                    failed_episode, -cum_rew, rew
+                )  # if failed episode, episode reward goes to 0
 
         done = jnp.logical_or(
             t == self.max_steps,  # max steps reached
@@ -753,7 +768,7 @@ class UTracking(MultiAgentEnv):
             "tracking_error_mean": pred_2d_err.mean(keepdims=True),
             "land_dist_mean": min_land_dist.mean(keepdims=True),
             "crash": (agent_dist < self.min_valid_distance).any(keepdims=True),
-            'normalized_reward': cum_rew+rew / self.max_steps,
+            "normalized_reward": cum_rew + rew / self.max_steps,
         }
         if self.infos_for_render:
             info["render"] = {

@@ -18,6 +18,7 @@ from functools import partial
 from jaxmarl import make
 from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, JaxMARLWrapper
 from jaxmarl.viz.utracking_visualizer import animate_from_infos
+from jaxmarl.wrappers.baselines import save_params, load_params
 
 
 class EncoderBlock(nn.Module):
@@ -55,7 +56,7 @@ class EncoderBlock(nn.Module):
     def __call__(self, x, mask=None, deterministic=True):
 
         # Attention part
-        if mask is not None:  # masking is not compatible with fast self attention
+        if mask is not None:
             mask = jnp.repeat(
                 nn.make_attention_mask(mask, mask), self.num_heads, axis=-3
             )
@@ -123,22 +124,24 @@ class ScannedTransformer(nn.Module):
         hs = carry
         embeddings, mask, done = x
 
-        # reset hidden state and add 
+        # reset hidden state and add
         hs = jnp.where(
-            done[:, np.newaxis], # batch_wize, 1,
-            self.initialize_carry(*done.shape, self.hidden_dim), # batch_size, hidden_dim
-            hs, # batch size, hidden_dim
+            done[:, np.newaxis],  # batch_wize, 1,
+            self.initialize_carry(
+                *done.shape, self.hidden_dim
+            ),  # batch_size, hidden_dim
+            hs,  # batch size, hidden_dim
         )
         embeddings = jnp.concatenate(
             (
-                hs[..., np.newaxis, :], # batch size, 1, hidden_dim
+                hs[..., np.newaxis, :],  # batch size, 1, hidden_dim
                 embeddings,
             ),
             axis=-2,
         )
         for layer in self.encoders:
             embeddings = layer(embeddings, mask=mask, deterministic=self.deterministic)
-        hs = embeddings[..., 0, :] # batch size, hidden_dim
+        hs = embeddings[..., 0, :]  # batch size, hidden_dim
 
         # as y return the entire embeddings if required (i.e. transformer mixer), otherwise only agents' hs embeddings
         if self.return_embeddings:
@@ -160,16 +163,16 @@ class TransformerAgent(nn.Module):
 
         ins, resets, avail_actions = x
         embeddings = Embedder(
-            self.config['HIDDEN_DIM'],
+            self.config["HIDDEN_DIM"],
         )(ins)
 
-        print('actor embeddings shape:', embeddings.shape)
+        print("actor embeddings shape:", embeddings.shape)
 
         last_hs, hidden_states = ScannedTransformer(
-            hidden_dim=self.config['HIDDEN_DIM'],
-            transf_num_layers=self.config['AGENT_NUM_LAYERS'],
-            transf_num_heads=self.config['AGENT_NUM_HEADS'],
-            transf_dim_feedforward=self.config['AGENT_FF_DIM'],
+            hidden_dim=self.config["HIDDEN_DIM"],
+            transf_num_layers=self.config["NUM_LAYERS"],
+            transf_num_heads=self.config["NUM_HEADS"],
+            transf_dim_feedforward=self.config["FF_DIM"],
             deterministic=True,
             return_embeddings=False,
         )(hs, (embeddings, None, resets))
@@ -196,17 +199,17 @@ class TransformerCritic(nn.Module):
 
         world_state, resets = x
 
-        embeddings= Embedder(
-            self.config['HIDDEN_DIM'],
+        embeddings = Embedder(
+            self.config["HIDDEN_DIM"],
         )(world_state)
 
-        print('critic embeddings shape:', embeddings.shape)
+        print("critic embeddings shape:", embeddings.shape)
 
         last_hs, hidden_states = ScannedTransformer(
-            hidden_dim=self.config['HIDDEN_DIM'],
-            transf_num_layers=self.config['CRITIC_NUM_LAYERS'],
-            transf_num_heads=self.config['CRITIC_NUM_HEADS'],
-            transf_dim_feedforward=self.config['CRITIC_FF_DIM'],
+            hidden_dim=self.config["HIDDEN_DIM"],
+            transf_num_layers=self.config["NUM_LAYERS"],
+            transf_num_heads=self.config["NUM_HEADS"],
+            transf_dim_feedforward=self.config["FF_DIM"],
             deterministic=True,
             return_embeddings=False,
         )(hs, (embeddings, None, resets))
@@ -245,6 +248,7 @@ def batchify_transformer(x: dict, agent_list, num_actors):
     x = x.reshape((num_actors, num_entities, num_feats))
     return x
 
+
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
@@ -273,6 +277,11 @@ def make_train(config):
 
     env = LogWrapper(env)
 
+    if config["LOAD_PATH"] is not None:
+        config["MODEL_PARAMS"] = load_params(config["LOAD_PATH"])
+        print("loaded model from", config["LOAD_PATH"])
+
+
     def linear_schedule(count):
         frac = (
             1.0
@@ -284,36 +293,51 @@ def make_train(config):
     def train(rng):
         original_seed = rng[0]
         # INIT NETWORK
-        actor_network = TransformerAgent(env.action_space(env.agents[0]).n, config=config)
+        actor_network = TransformerAgent(
+            env.action_space(env.agents[0]).n, config=config
+        )
         critic_network = TransformerCritic(config=config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
-        ac_init_x = (
-            jnp.zeros(
-                (1, config["NUM_ENVS"], *env.observation_space(env.agents[0]).shape)
-            ), # (time_step, batch_size, n_entities, obs_size)
-            jnp.zeros((1, config["NUM_ENVS"])), # (time_step, batch_size)
-            jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)), # (time_step, batch_size, num_actions)
-        )
-        ac_init_hstate = ScannedTransformer.initialize_carry(
-            config["NUM_ENVS"], config["HIDDEN_DIM"],  # (batch_size, hidden_dim)
-        )
-        actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
-        cr_init_x = (
-            jnp.zeros(
-                (
-                    1,
-                    config["NUM_ENVS"],
-                    *env.world_state_space.shape,
-                )
-            ),
-            jnp.zeros((1, config["NUM_ENVS"])),
-        )
-        cr_init_hstate = ScannedTransformer.initialize_carry(
-            config["NUM_ENVS"], config["HIDDEN_DIM"], # (batch_size, hidden_dim)
-        )
-        critic_network_params = critic_network.init(
-            _rng_critic, cr_init_hstate, cr_init_x
-        )
+        
+        if config["LOAD_PATH"] is not None:
+            actor_network_params = config["MODEL_PARAMS"]["actor"]
+            critic_network_params = config["MODEL_PARAMS"]["critic"]
+        else:
+            ac_init_x = (
+                jnp.zeros(
+                    (1, config["NUM_ENVS"], *env.observation_space(env.agents[0]).shape)
+                ),  # (time_step, batch_size, n_entities, obs_size)
+                jnp.zeros((1, config["NUM_ENVS"])),  # (time_step, batch_size)
+                jnp.zeros(
+                    (1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)
+                ),  # (time_step, batch_size, num_actions)
+            )
+            ac_init_hstate = ScannedTransformer.initialize_carry(
+                config["NUM_ENVS"],
+                config["HIDDEN_DIM"],  # (batch_size, hidden_dim)
+            )
+            actor_network_params = actor_network.init(
+                _rng_actor, ac_init_hstate, ac_init_x
+            )
+
+        if config["LOAD_PATH"] is not None and not config["LOAD_CRITIC"]:
+            cr_init_x = (
+                jnp.zeros(
+                    (
+                        1,
+                        config["NUM_ENVS"],
+                        *env.world_state_space.shape,
+                    )
+                ),
+                jnp.zeros((1, config["NUM_ENVS"])),
+            )
+            cr_init_hstate = ScannedTransformer.initialize_carry(
+                config["NUM_ENVS"],
+                config["HIDDEN_DIM"],  # (batch_size, hidden_dim)
+            )
+            critic_network_params = critic_network.init(
+                _rng_critic, cr_init_hstate, cr_init_x
+            )
 
         if config["ANNEAL_LR"]:
             actor_tx = optax.chain(
@@ -371,7 +395,9 @@ def make_train(config):
                 avail_actions = jax.lax.stop_gradient(
                     batchify(avail_actions, env.agents, config["NUM_ACTORS"])
                 )
-                obs_batch = batchify_transformer(last_obs, env.agents, config["NUM_ACTORS"])
+                obs_batch = batchify_transformer(
+                    last_obs, env.agents, config["NUM_ACTORS"]
+                )
                 print("obs shape:", obs_batch.shape)
                 ac_in = (
                     obs_batch[np.newaxis, :],
@@ -449,7 +475,11 @@ def make_train(config):
                 last_world_state, env.num_agents, axis=0
             )  # repeat world_state for each agent
             last_world_state = last_world_state.reshape(
-                (config["NUM_ACTORS"], last_world_state.shape[-2], last_world_state.shape[-1])
+                (
+                    config["NUM_ACTORS"],
+                    last_world_state.shape[-2],
+                    last_world_state.shape[-1],
+                )
             )  # (num_actors, world_state_size)
 
             cr_in = (
@@ -486,6 +516,8 @@ def make_train(config):
                 return advantages, advantages + traj_batch.value
 
             advantages, targets = _calculate_gae(traj_batch, last_val)
+            # standardization should go here
+            # advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
             # UPDATE NETWORK
             def _update_epoch(update_state, unused):
@@ -525,7 +557,11 @@ def make_train(config):
                         approx_kl = ((ratio - 1) - logratio).mean()
                         clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
 
-                        actor_loss = loss_actor - config["ENT_COEF"] * entropy
+                        actor_loss = (
+                            loss_actor
+                            - config["ENT_COEF"] * entropy
+                            + config["KL_COEF"] * approx_kl
+                        )
 
                         return actor_loss, (
                             loss_actor,
@@ -725,7 +761,9 @@ def make_train(config):
                         def step_agent(rng, hstate, obsv, last_done, env_state):
 
                             avail_actions = env.get_avail_actions(env_state.env_state)
-                            obs_batch = batchify_transformer(obsv, env.agents, env.num_agents)
+                            obs_batch = batchify_transformer(
+                                obsv, env.agents, env.num_agents
+                            )
                             avail_actions = batchify(
                                 avail_actions, env.agents, env.num_agents
                             )
