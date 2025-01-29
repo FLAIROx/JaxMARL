@@ -2,7 +2,7 @@
 
 Pure JAX implementations of:
 
-* PQN-VDN (Prallelised Q-Network)
+* PQN-VDN (Parallelised Q-Network)
 * IQL (Independent Q-Learners)
 * VDN (Value Decomposition Network)
 * QMIX
