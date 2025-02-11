@@ -31,6 +31,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         num_food=2,
         num_forests=2,
         action_type=CONTINUOUS_ACT,
+        **kwargs,
     ):
         # Fixed parameters
         dim_c = 4  # communication channel dimension
@@ -132,6 +133,7 @@ class SimpleWorldCommMPE(SimpleMPE):
             collide=collide,
             accel=accel,
             max_speed=max_speed,
+            **kwargs,
         )
 
     def set_actions(self, actions: dict):

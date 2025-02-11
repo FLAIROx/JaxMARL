@@ -31,7 +31,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-  "jax",
+  "jax<=0.4.38",
   "jaxlib",
   "flax",
   "safetensors",
