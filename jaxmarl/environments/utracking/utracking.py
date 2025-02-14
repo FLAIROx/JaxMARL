@@ -61,6 +61,7 @@ class State:
     steps_next_land_action: chex.Array  # [int]*num_landmarks, step until when the landmarks are gonna change directions
     t: int  # step
     cum_rew: float  # cumulative episode reward
+    last_actions: chex.Array  # last action taken by the agent
 
 
 class UTracking(MultiAgentEnv):
@@ -75,30 +76,34 @@ class UTracking(MultiAgentEnv):
         dt: int = 30,
         max_steps: int = 128,
         discrete_actions: bool = True,
+        actions_as_angles: bool = False,
         agent_depth: Tuple[float, float] = (0.0, 0.0),  # defines the range of depth for spawning agents
         landmark_depth: Tuple[float, float] = (5.0, 20.0),  # defines the range of depth for spawning landmarks
+        landmark_depth_known: bool = True, # agents know the depth of the landmarks 
         min_valid_distance: float = 5.0,  # under this distance it's considered a crash
         min_init_distance: float = 30.0,  # minimum initial distance between vehicles
         max_init_distance: float = 200.0,  # maximum initial distance between vehicles
-        max_range_dist: float = 800.0,  # above this distance a landmark is lost
+        max_range_dist: float = 450.0,  # above this distance a landmark is lost
         prop_agent: int = 30,  # rpm of agent's propellor, defines the speeds for agents (30rpm is ~1m/s)
-        prop_range_landmark: Tuple[int] = (0, 5, 10, 15, 20),  # defines the possible (propellor) speeds for landmarks (only some speeds are alid for now)
-        rudder_range_landmark: Tuple[float, float] = (0.05, 0.15,),  # defines the angle of movement change for landmarks
+        prop_range_landmark: Tuple[int] = (0, 5, 6, 7, 8, 9, 10, 11, 12),  # defines the possible (propellor) speeds for landmarks (only some speeds are alid for now)
+        rudder_range_landmark: Tuple[float, float] = (0.10, 0.25),  # defines the angle of movement change for landmarks
         dirchange_time_range_landmark: Tuple[int, int] = (5, 15,),  # defines how many random steps to wait for changing the landmark directions
         tracking_method: str = "pf",  # method for tracking the landmarks positions (ls, pf)
         tracking_buffer_len: int = 32,  # maximum number of range observations kept for predicting the landmark positions
-        range_noise_std: float = 10.0,  # standard deviation of the gaussian noise added to range measurements
+        range_noise_std: float = 10.0,  # standard deviation of the gaussian noise added to range measurements (meters)
+        traj_noise_std: float = 0.1,  # standard deviation of the gaussian noise added to the traj models (radians)
         lost_comm_prob=0.1,  # probability of loosing communications
         min_steps_ls: int = 2,  # minimum steps for collecting data and start predicting landmarks positions with least squares
         rew_type: str = "tracking",  # type of reward (follow, tracking_threshold, tracking)
-        penalty_failed_episode: bool = True,  # if true, the reward at end of episode is negative of the cumulative reward, so failed episodes will have a 0 sum reward
+        truncate_failed_episode: bool = True, # if true, the episode is truncated when a crash or lost landmark is detected
+        penalty_failed_episode: bool = False,  # if true, the reward at end of episode is negative of the cumulative reward, so failed episodes will have a 0 sum reward
         rew_pred_thr: float = 10.0,  # tracking error threshold for tracking reward
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
         seed_init_pos: int = 0,  # random seed for precomputing initial distance
         pre_init_pos_len: int = 100000,  # how many initial positions precompute
         matrix_obs: bool = False,  # if true, the obs is a matrix with vertex features relative to all the entities, otherwise flattened
         matrix_state: bool = False,  # if true, the state is represented with vertex features relative to all the entities
-        state_as_edges: bool = True,  # if true, the matrix state is represented as edge features, otherwise as vertex features
+        state_as_edges: bool = False,  # if true, the matrix state is represented as edge features, otherwise as vertex features
         debug_obs: bool = False,
         space_unit: float = 1e-3,  # unit of space for space observations (default to hundreds of meters)
         infos_for_render: bool = False,  # if true, additional infos are returned for rendering porpouses
@@ -122,10 +127,11 @@ class UTracking(MultiAgentEnv):
         ], "tracking method must be ls (Least Squares) or pf (Particle Filter)"
         assert rew_type in [
             "follow",
+            "follow_dense",
             "tracking_threshold",
             "tracking",
             "tracking_error",
-        ], "reward type must be 'follow', 'tracking_threshold', 'tracking' or 'tracking_error'"
+        ], "reward type must be 'follow', 'follow_dense', 'tracking_threshold', 'tracking' or 'tracking_error'"
 
         self.max_steps = max_steps
         self.num_agents = num_agents
@@ -136,8 +142,10 @@ class UTracking(MultiAgentEnv):
         self.entities = self.agents + self.landmarks
 
         self.discrete_actions = discrete_actions
+        self.actions_as_angles = actions_as_angles
         self.agent_depth = agent_depth
         self.landmark_depth = landmark_depth
+        self.landmark_depth_known = landmark_depth_known
         self.min_valid_distance = min_valid_distance
         self.min_init_distance = min_init_distance
         self.max_init_distance = max_init_distance
@@ -149,11 +157,13 @@ class UTracking(MultiAgentEnv):
         self.tracking_method = tracking_method
         self.tracking_buffer_len = tracking_buffer_len
         self.range_noise_std = range_noise_std
+        self.traj_noise_std = traj_noise_std
         self.lost_comm_prob = lost_comm_prob
         self.min_steps_ls = min_steps_ls
         self.rew_pred_thr = rew_pred_thr
         self.rew_type = rew_type
         self.penalty_failed_episode = penalty_failed_episode
+        self.truncate_failed_episode = truncate_failed_episode
         self.pre_init_pos = pre_init_pos
         self.pre_init_pos_len = pre_init_pos_len
         self.matrix_obs = matrix_obs
@@ -178,13 +188,14 @@ class UTracking(MultiAgentEnv):
             self.action_spaces = {i: Box(-0.24, 0.24, (1,)) for i in self.agents}
 
         # obs space
+        self.obs_feats = 6
         if self.matrix_obs:
             self.observation_spaces = {
-                i: Box(-jnp.inf, jnp.inf, (self.num_entities, 8)) for i in self.agents
+                i: Box(-jnp.inf, jnp.inf, (self.num_entities, self.obs_feats)) for i in self.agents
             }
         else:
             self.observation_spaces = {
-                i: Box(-jnp.inf, jnp.inf, (self.num_entities * 8,)) for i in self.agents
+                i: Box(-jnp.inf, jnp.inf, (self.num_entities * self.obs_feats,)) for i in self.agents
             }
 
         # world state shape
@@ -334,7 +345,7 @@ class UTracking(MultiAgentEnv):
             key_ranges, pos
         )
         range_buffer, range_buffer_head, comm_drop = self.communicate(
-            key_comm, ranges_2d, pos, range_buffer, range_buffer_head
+            key_comm, ranges_real_2d, ranges_2d, pos, range_buffer, range_buffer_head
         )
 
         # init particle filter state if required
@@ -384,46 +395,73 @@ class UTracking(MultiAgentEnv):
             pf_state=pf_state,
             t=t,
             cum_rew=0.0,
+            last_actions=jnp.zeros(self.num_agents),
         )
         return obs, state
 
     @partial(jax.jit, static_argnums=0)
     def world_step(
         self,
-        rudder_actions: chex.Array,
+        rng: chex.PRNGKey,
+        actions: chex.Array,
         pos: chex.Array,
         vel: chex.Array,
         traj_coeffs: chex.Array,
         traj_intercepts: chex.Array,
     ) -> chex.Array:
-        # update the angle
-        angle_change = rudder_actions * traj_coeffs + traj_intercepts
-        # update the x-y position (depth remains constant)
-        pos = pos.at[:, -1].add(angle_change)
+        
+        if self.actions_as_angles:
+            pos = pos.at[:, -1].set(actions)
+        else:
+            # update the angle
+            angle_change = actions * traj_coeffs + traj_intercepts
+            # add noise
+            angle_change += jax.random.normal(rng, shape=angle_change.shape) * self.traj_noise_std
+            # update the x-y position (depth remains constant)
+            pos = pos.at[:, -1].add(angle_change)
+            
         pos = pos.at[:, 0].add(jnp.cos(pos[:, -1]) * vel * self.dt)
         pos = pos.at[:, 1].add(jnp.sin(pos[:, -1]) * vel * self.dt)
         return pos
 
     @partial(jax.jit, static_argnums=0)
     def step_env(
-        self, rng: chex.PRNGKey, state: State, actions: dict
+        self, rng: chex.PRNGKey, state: State, actions: dict,
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool]]:
+        
 
-        # preprocess actions
-        agent_actions = jnp.array([actions[a] for a in self.agents])
-        agent_actions = self.preprocess_actions(agent_actions)
-        landmark_actions, steps_next_land_action = self.get_landmarks_actions(
-            rng, state.steps_next_land_action, state.t
-        )
+        if False:
+            pos = jnp.stack([actions[a] for a in self.entities])
+            landmark_actions, steps_next_land_action = self.get_landmarks_actions(
+                rng, state.steps_next_land_action, state.t
+            )
+            last_actions = jnp.zeros(self.num_agents).astype(float)
+
 
         # update physical positions
-        pos = self.world_step(
-            jnp.concatenate((agent_actions, landmark_actions)),
-            state.pos,
-            state.vel,
-            state.traj_coeffs,
-            state.traj_intercepts,
-        )
+        else:
+            # preprocess actions
+            agent_actions = jnp.array([actions[a] for a in self.agents])
+            last_actions = agent_actions.astype(float)
+            agent_actions = self.preprocess_actions(agent_actions)
+            landmark_actions, steps_next_land_action = self.get_landmarks_actions(
+                rng, state.steps_next_land_action, state.t
+            )
+            
+            if self.actions_as_angles: # this is used to inject angle actions in the environment for debugging
+                actions = jnp.array([actions[a] for a in self.entities])
+            else:
+                actions = jnp.concatenate((agent_actions, landmark_actions))
+
+            rng, _rng = jax.random.split(rng)
+            pos = self.world_step(
+                _rng,
+                actions,
+                state.pos,
+                state.vel,
+                state.traj_coeffs,
+                state.traj_intercepts,
+            )
 
         # update tracking
         rng, key_ranges, key_comm = jax.random.split(rng, 3)
@@ -431,7 +469,7 @@ class UTracking(MultiAgentEnv):
             key_ranges, pos
         )
         range_buffer, range_buffer_head, comm_drop = self.communicate(
-            key_comm, ranges_2d, pos, state.range_buffer, state.range_buffer_head
+            key_comm, ranges_real_2d, ranges_2d, pos, state.range_buffer, state.range_buffer_head
         )
         rng, rng_ = jax.random.split(rng)
         pf_state, land_pred_pos = self.update_predictions(
@@ -468,85 +506,62 @@ class UTracking(MultiAgentEnv):
             pf_state=pf_state,
             t=state.t + 1,
             cum_rew=state.cum_rew + reward,
+            last_actions=last_actions,
         )
         return obs, state, rewards, done, info
 
     @partial(jax.jit, static_argnums=0)
-    def get_obs(
-        self,
-        delta_xyz: chex.Array,
-        ranges: chex.Array,
-        comm_drop: chex.Array,
-        pos: chex.Array,
-        land_pred_pos: chex.Array,
-    ) -> Dict[str, chex.Array]:
-        """
-        obs:[
-            [ x, y, z, angle, [is_self=1, not_self=0], [is_agent=1, not_agent=0]], # SELF
-            [ delta_x, delta_y, delta_z, range, [is_self, not_self], [is_agent, not_agent], ]*num_entities, # OTHERS
-        ]
-        """
-
-        def agent_obs(aidx, pos_, delta_xyz_, ranges_, comm_drop_, land_pred_pos_):
-
-            # self obs is [x, y, z, angle, is_self, is_agent]
-            self_obs = jnp.concatenate((pos_, jnp.array([1, 0]), jnp.array([1, 0])))
-
-            # where comunication drops delta_xyz becomes 0(ranges should be==0 if dropped already)
-            other_agents_dist = jnp.where(
-                comm_drop_[:, None], 0, delta_xyz_[: self.num_agents]
-            )
-
-            # other agents obs is [delta_x, delta_y, delta_z, range, is_self, is_agent]
-            other_agents_obs = jnp.concatenate(
-                (
-                    other_agents_dist,
-                    ranges_[: self.num_agents][:, None],
-                    jnp.tile(jnp.array([0, 1]), (self.num_agents, 1)),  # not self
-                    jnp.tile(jnp.array([1, 0]), (self.num_agents, 1)),  # is agent
-                ),
-                axis=1,
-            )
-
-            self_mask = jnp.arange(self.num_agents) == aidx
-            agents_obs = jnp.where(
-                self_mask[:, None],
-                self_obs,  # self obs for the self agent
-                other_agents_obs,  # other agent for the other agents
-            )
-
-            # put self features first
-            agents_obs = jnp.roll(agents_obs, -aidx, axis=0)
-
-            # landmark obs is [delta_x, delta_y, delta_z, range, is_self, is_agent]
-            landmarks_obs = jnp.concatenate(
-                (
-                    (land_pred_pos_ - pos_[:3]),  # relative position from agent
-                    ranges_[self.num_agents :][:, None],
-                    jnp.tile(jnp.array([0, 1]), (self.num_agents, 1)),  # not self
-                    jnp.tile(jnp.array([0, 1]), (self.num_agents, 1)),  # not agent
-                ),
-                axis=1,
-            )
-
-            obs = jnp.vstack((agents_obs, landmarks_obs))
-            return obs
-
-        obs = jax.vmap(agent_obs)(
-            jnp.arange(self.num_agents),
-            pos[: self.num_agents] * self.space_unit,
-            delta_xyz * self.space_unit,
-            ranges * self.space_unit,
-            comm_drop,
-            land_pred_pos * self.space_unit,
+    def get_obs(self, delta_xyz, ranges, comm_drop, pos, land_pred_pos):
+        # first a matrix with all the observations is created, composed by
+        # the position of the agent or the relative position of other agents (comunication) and landmarks (tracking)
+        # the absolute distance (ranges) is_agent, is_self features
+        # [pos_x, pos_y, pos_z, dist, is_agent, is_self]*n_entities
+        other_agents_dist = jnp.where(
+            comm_drop[:, :, None], 0, delta_xyz[:, : self.num_agents]
+        )  # 0 for communication drop
+        self_mask = (
+            jnp.arange(self.num_agents) == np.arange(self.num_agents)[:, np.newaxis]
+        )
+        agents_rel_pos = jnp.where(
+            self_mask[:, :, None], pos[: self.num_agents, [0, 1, 3]], other_agents_dist
+        )  # for self use pos_x, pos_y, angle
+        lands_rel_pos = (
+            pos[: self.num_agents, None, :3] - land_pred_pos
+        )  # relative distance from predicted positions
+        pos_feats = jnp.concatenate((agents_rel_pos, lands_rel_pos), axis=1)
+        is_agent_feat = jnp.tile(
+            jnp.concatenate((jnp.ones(self.num_agents), jnp.zeros(self.num_landmarks))),
+            (self.num_agents, 1),
+        )
+        is_self_feat = (
+            jnp.arange(self.num_entities) == jnp.arange(self.num_agents)[:, np.newaxis]
+        )
+        # the distance based feats are rescaled to hundreds of meters (better for NNs)
+        feats = jnp.concatenate(
+            (
+                pos_feats * self.space_unit,
+                ranges[:, :, None] * self.space_unit,
+                is_agent_feat[:, :, None],
+                is_self_feat[:, :, None],
+            ),
+            axis=2,
         )
 
         # than it is assigned to each agent its obs
         return {
-            a: obs[i] if self.matrix_obs else obs[i].ravel()
+            a: feats[i] if self.matrix_obs else feats[i].ravel()
             for i, a in enumerate(self.agents)
         }
 
+        # temporary adding id
+        agent_ids = jnp.eye(self.num_agents)
+        return {
+            a: jnp.concatenate((feats[i].ravel(), agent_ids[i]), axis=-1)
+            for i, a in enumerate(self.agents)
+        }
+
+        
+    
     @partial(jax.jit, static_argnums=0)
     def get_vertex_state(
         self,
@@ -712,19 +727,28 @@ class UTracking(MultiAgentEnv):
         )  # distance between agents and other agents
 
         failed_episode = (agent_dist < self.min_valid_distance).any() | (
-            (min_land_dist >= self.max_range_dist).any()
+            (min_land_dist >= self.max_range_dist*2).any()
         )  # failed episode if crash or lost landmark
 
         # rewards
         if self.rew_type == "follow":
             # reward based on percentage of landmarks followed
             rew = (min_land_dist <= self.min_agent_dist * 2).sum() / self.num_landmarks
+            
+        elif self.rew_type == "follow_dense":
+            rew = - self.space_unit*min_land_dist.sum()
 
         elif self.rew_type == "tracking_threshold":
             # reward based on percentage of landmarks correctly tracked
             rew = (pred_2d_err <= self.rew_pred_thr).sum() / self.num_landmarks
 
-        elif self.rew_type == "tracking":
+        elif self.rew_type == 'tracking':
+
+            # Tracking accuracy component (maximize negative error)
+            rew = -0.001*(jnp.sum(pred_2d_err))
+            #tracking_rew = jnp.clip(tracking_rew, -1.0, 1.0)
+
+        elif self.rew_type == "tracking_":
             # reward based on the tracking error
             # exponential decay of the reward based on the tracking error
             # goes to 0 if the tracking error is above the threshold
@@ -737,25 +761,24 @@ class UTracking(MultiAgentEnv):
 
         elif self.rew_type == "tracking_error":
             # reward based on the tracking error
-            rew = -self.space_unit * pred_2d_err.sum()
+            rew = 0.01 * (-pred_2d_err+self.rew_pred_thr).min()
 
         if self.penalty_failed_episode:
-            if self.rew_type == "tracking_error":
+            if self.rew_type == "tracking_error" or self.rew_type == "follow_dense":
                 rew = jnp.where(
                     failed_episode,
-                    rew - self.space_unit * (self.max_steps - t) * 100.0,
+                    rew - (self.max_steps - t) * 1.0,
                     rew,
                 )
-
             else:
                 rew = jnp.where(
                     failed_episode, -cum_rew, rew
-                )  # if failed episode, episode reward goes to 0
+                )  # if failed episode, penalty
 
-        done = jnp.logical_or(
-            t == self.max_steps,  # max steps reached
-            failed_episode,  # failed episode if crash or lost landmark
-        )
+        # failed episode if crash or lost landmark
+        done = t == self.max_steps
+        if self.truncate_failed_episode: # truncate the episode if failed
+            done = done | failed_episode
 
         # return different infos if the env is gonna be used for rendering or training
         info = {
@@ -784,6 +807,8 @@ class UTracking(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=0)
     def preprocess_actions(self, actions: chex.Array) -> chex.Array:
+        if self.actions_as_angles:
+            return actions
         if self.discrete_actions:
             return self.discrete_actions_mapping[actions]
         else:
@@ -837,23 +862,26 @@ class UTracking(MultiAgentEnv):
         noise = (
             jax.random.normal(key_noise, shape=ranges_real.shape) * self.range_noise_std
         )
-        ranges_2d = ranges_real_2d + noise
+        
         ranges = ranges_real + noise
-        ranges = jnp.where(
-            (jax.random.uniform(key_lost, shape=ranges.shape) > self.lost_comm_prob)
-            | (
-                ranges_real > self.max_range_dist
-            ),  # lost communication or landmark too far
-            ranges,
-            0,
-        )  # lost communications
+        lost_range = (
+            (jax.random.uniform(key_lost, shape=ranges.shape) <= self.lost_comm_prob)
+            | (ranges_real > self.max_range_dist)
+        ) # lost communication or landmark too far
+        ranges = jnp.where(lost_range, 0., ranges) 
         ranges = fill_diagonal_zeros(ranges)  # reset to 0s the self-ranges
+
+        ranges_2d = ranges_real_2d + noise
+        ranges_2d = jnp.where(lost_range, 0., ranges_2d)
+        ranges_2d = fill_diagonal_zeros(ranges_2d)
+
         return delta_xyz, ranges_real_2d, ranges_real, ranges_2d, ranges
 
     @partial(jax.jit, static_argnums=0)
     def communicate(
         self,
         rng: chex.Array,
+        ranges_real: chex.Array,
         ranges: chex.Array,
         pos: chex.Array,
         range_buffer: chex.Array,
@@ -867,6 +895,9 @@ class UTracking(MultiAgentEnv):
             jax.random.uniform(key_comm, shape=(self.num_agents, self.num_agents))
             < self.lost_comm_prob
         )
+
+        # communication is dropped also for the agents that are too far
+        comm_drop = comm_drop | (ranges_real[:, :self.num_agents] > self.max_range_dist) # too far
         comm_drop = fill_diagonal_zeros(comm_drop).astype(bool)
 
         # exchange landmark ranges between agents
@@ -1000,6 +1031,13 @@ class UTracking(MultiAgentEnv):
     def estimate_depth(
         self, pred_xy: chex.Array, pos: chex.Array, ranges: chex.Array
     ) -> chex.Array:
+
+        if self.landmark_depth_known:
+            # repeat the depth of the landmarks for each agent
+            return jnp.tile(
+                pos[self.num_agents:, 2], (self.num_agents)
+            ).reshape(self.num_agents, self.num_landmarks)
+
         # bad depth estimation using pitagora
         pos_xy = pos[: self.num_agents, :2]
         ranges = ranges[:, self.num_agents :]  # ranges between agents and landmarks
@@ -1013,10 +1051,25 @@ class UTracking(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0,))
     def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
 
-        return {
-            agent: jnp.ones((len(self.discrete_actions_mapping),), dtype=jnp.uint8)
-            for i, agent in enumerate(self.agents)
-        }
+        if not self.discrete_actions:
+            raise NotImplementedError('"get_avail_actions" supports only discrete actions')
+
+        def close_action_valid(last_action_idx):
+            avail_actions = jnp.zeros(len(self.discrete_actions_mapping))
+            avail_actions = avail_actions.at[last_action_idx].set(1)
+            return jnp.where(
+                last_action_idx==0,
+                avail_actions.at[1].set(1),
+                jnp.where(
+                    last_action_idx==len(self.discrete_actions_mapping)-1,
+                    avail_actions.at[-2].set(1),
+                    jnp.minimum(avail_actions.at[last_action_idx-1].set(1)+avail_actions.at[last_action_idx+1].set(1),1)
+                )
+            )
+        
+        avail_actions = jax.vmap(close_action_valid)(state.last_actions.astype(int))
+        return {a: avail_actions[i] for i, a in enumerate(self.agents)}
+        
 
     @partial(jax.jit, static_argnums=0)
     def get_init_pos(
