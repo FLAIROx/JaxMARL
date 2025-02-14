@@ -77,13 +77,14 @@ class UTracking(MultiAgentEnv):
         max_steps: int = 128,
         discrete_actions: bool = True,
         actions_as_angles: bool = False,
-        agent_depth: Tuple[float, float] = (0.0, 0.0),  # defines the range of depth for spawning agents
+        agent_depth: Tuple[float, float] = (0.0, 0.0003),  # defines the range of depth for spawning agents
         landmark_depth: Tuple[float, float] = (5.0, 20.0),  # defines the range of depth for spawning landmarks
         landmark_depth_known: bool = True, # agents know the depth of the landmarks 
         min_valid_distance: float = 5.0,  # under this distance it's considered a crash
         min_init_distance: float = 30.0,  # minimum initial distance between vehicles
         max_init_distance: float = 200.0,  # maximum initial distance between vehicles
-        max_range_dist: float = 450.0,  # above this distance a landmark is lost
+        max_range_dist: float = 450.0,  # above this distance can't recieve landmark ranges
+        max_comm_dist: float = 1500.0,  # above this distance can't communicate
         prop_agent: int = 30,  # rpm of agent's propellor, defines the speeds for agents (30rpm is ~1m/s)
         prop_range_landmark: Tuple[int] = (0, 5, 6, 7, 8, 9, 10, 11, 12),  # defines the possible (propellor) speeds for landmarks (only some speeds are alid for now)
         rudder_range_landmark: Tuple[float, float] = (0.10, 0.25),  # defines the angle of movement change for landmarks
@@ -101,6 +102,7 @@ class UTracking(MultiAgentEnv):
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
         seed_init_pos: int = 0,  # random seed for precomputing initial distance
         pre_init_pos_len: int = 100000,  # how many initial positions precompute
+        ranges_in_obs: bool = False,  # if true, the agents can observed the collected ranges
         matrix_obs: bool = False,  # if true, the obs is a matrix with vertex features relative to all the entities, otherwise flattened
         matrix_state: bool = False,  # if true, the state is represented with vertex features relative to all the entities
         state_as_edges: bool = False,  # if true, the matrix state is represented as edge features, otherwise as vertex features
@@ -150,6 +152,7 @@ class UTracking(MultiAgentEnv):
         self.min_init_distance = min_init_distance
         self.max_init_distance = max_init_distance
         self.max_range_dist = max_range_dist
+        self.max_comm_dist = max_comm_dist
         self.prop_agent = prop_agent
         self.prop_range_landmark = prop_range_landmark
         self.rudder_range_landmark = np.array(rudder_range_landmark)
@@ -166,6 +169,7 @@ class UTracking(MultiAgentEnv):
         self.truncate_failed_episode = truncate_failed_episode
         self.pre_init_pos = pre_init_pos
         self.pre_init_pos_len = pre_init_pos_len
+        self.ranges_in_obs = ranges_in_obs
         self.matrix_obs = matrix_obs
         self.matrix_state = matrix_state
         self.state_as_edges = state_as_edges
@@ -417,8 +421,9 @@ class UTracking(MultiAgentEnv):
             angle_change = actions * traj_coeffs + traj_intercepts
             # add noise
             angle_change += jax.random.normal(rng, shape=angle_change.shape) * self.traj_noise_std
+            new_angles = (pos[:, -1] + angle_change + jnp.pi) % (2 * jnp.pi) - jnp.pi
             # update the x-y position (depth remains constant)
-            pos = pos.at[:, -1].add(angle_change)
+            pos = pos.at[:, -1].set(new_angles)
             
         pos = pos.at[:, 0].add(jnp.cos(pos[:, -1]) * vel * self.dt)
         pos = pos.at[:, 1].add(jnp.sin(pos[:, -1]) * vel * self.dt)
@@ -536,6 +541,7 @@ class UTracking(MultiAgentEnv):
         is_self_feat = (
             jnp.arange(self.num_entities) == jnp.arange(self.num_agents)[:, np.newaxis]
         )
+        ranges *= 1. if self.ranges_in_obs else 0. # mask the ranges if not in obs
         # the distance based feats are rescaled to hundreds of meters (better for NNs)
         feats = jnp.concatenate(
             (
@@ -897,7 +903,7 @@ class UTracking(MultiAgentEnv):
         )
 
         # communication is dropped also for the agents that are too far
-        comm_drop = comm_drop | (ranges_real[:, :self.num_agents] > self.max_range_dist) # too far
+        comm_drop = comm_drop | (ranges_real[:, :self.num_agents] > self.max_comm_dist) # too far
         comm_drop = fill_diagonal_zeros(comm_drop).astype(bool)
 
         # exchange landmark ranges between agents
