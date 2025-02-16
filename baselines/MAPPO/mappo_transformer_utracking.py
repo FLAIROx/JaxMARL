@@ -1,4 +1,5 @@
 import os
+import time
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -88,6 +89,7 @@ class Embedder(nn.Module):
             self.hidden_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(x)
         if self.activation:
+            x = nn.LayerNorm()(x)
             x = nn.relu(x)
         return x
 
@@ -320,7 +322,7 @@ def make_train(config):
                 _rng_actor, ac_init_hstate, ac_init_x
             )
 
-        if config["LOAD_PATH"] is not None and not config["LOAD_CRITIC"]:
+        if config["LOAD_PATH"] is None or not config["LOAD_CRITIC"]:
             cr_init_x = (
                 jnp.zeros(
                     (
@@ -873,11 +875,13 @@ def single_run(config):
         mode=config["WANDB_MODE"],
         name=f'{alg_name}_{env_name}_seed{config["SEED"]}',
     )
-
+    
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_jit = jax.jit(make_train(config))
+    t0 = time.time()
     outs = jax.vmap(train_jit)(rngs)
+    print("time taken:", time.time() - t0)
 
     if config.get("SAVE_PATH", None) is not None:
         from jaxmarl.wrappers.baselines import save_params
