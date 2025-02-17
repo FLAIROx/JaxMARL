@@ -96,9 +96,11 @@ class UTracking(MultiAgentEnv):
         lost_comm_prob=0.1,  # probability of loosing communications
         min_steps_ls: int = 2,  # minimum steps for collecting data and start predicting landmarks positions with least squares
         rew_type: str = "tracking",  # type of reward (follow, tracking_threshold, tracking)
-        truncate_failed_episode: bool = True, # if true, the episode is truncated when a crash or lost landmark is detected
-        penalty_failed_episode: bool = False,  # if true, the reward at end of episode is negative of the cumulative reward, so failed episodes will have a 0 sum reward
-        rew_pred_thr: float = 10.0,  # tracking error threshold for tracking reward
+        truncate_failed_episode: bool = False, # if true, the episode is truncated when a crash or lost landmark is detected
+        penalty_for_crashing: bool = True,  # if true, the reward at end of episode is negative of the cumulative reward, so failed episodes will have a 0 sum reward
+        rew_pred_ideal: float = 5.0, # ideal prediction error for tracking reward (in meters)
+        rew_pred_thr: float = 30.0,  # tracking error threshold for tracking reward
+        rew_norm_landmarks: bool = True,  # if true, the reward is normalized by the number of landmarks
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
         seed_init_pos: int = 0,  # random seed for precomputing initial distance
         pre_init_pos_len: int = 100000,  # how many initial positions precompute
@@ -129,11 +131,8 @@ class UTracking(MultiAgentEnv):
         ], "tracking method must be ls (Least Squares) or pf (Particle Filter)"
         assert rew_type in [
             "follow",
-            "follow_dense",
-            "tracking_threshold",
             "tracking",
-            "tracking_error",
-        ], "reward type must be 'follow', 'follow_dense', 'tracking_threshold', 'tracking' or 'tracking_error'"
+        ], "reward type must be 'follow' or 'tracking'"
 
         self.max_steps = max_steps
         self.num_agents = num_agents
@@ -163,9 +162,11 @@ class UTracking(MultiAgentEnv):
         self.traj_noise_std = traj_noise_std
         self.lost_comm_prob = lost_comm_prob
         self.min_steps_ls = min_steps_ls
+        self.rew_pred_ideal = rew_pred_ideal
         self.rew_pred_thr = rew_pred_thr
+        self.rew_norm_landmarks = rew_norm_landmarks
         self.rew_type = rew_type
-        self.penalty_failed_episode = penalty_failed_episode
+        self.penalty_for_crashing = penalty_for_crashing
         self.truncate_failed_episode = truncate_failed_episode
         self.pre_init_pos = pre_init_pos
         self.pre_init_pos_len = pre_init_pos_len
@@ -732,58 +733,38 @@ class UTracking(MultiAgentEnv):
             axis=1
         )  # distance between agents and other agents
 
-        failed_episode = (agent_dist < self.min_valid_distance).any() | (
-            (min_land_dist >= self.max_range_dist*2).any()
-        )  # failed episode if crash or lost landmark
 
         # rewards
         if self.rew_type == "follow":
-            # reward based on percentage of landmarks followed
-            rew = (min_land_dist <= self.min_agent_dist * 2).sum() / self.num_landmarks
-            
-        elif self.rew_type == "follow_dense":
-            rew = - self.space_unit*min_land_dist.sum()
+            # reward based on number of landmarks followed, i.e. that have at least one agent at min distance
+            rew = (min_land_dist <= self.min_agent_dist * 2).sum()
 
-        elif self.rew_type == "tracking_threshold":
-            # reward based on percentage of landmarks correctly tracked
-            rew = (pred_2d_err <= self.rew_pred_thr).sum() / self.num_landmarks
-
-        elif self.rew_type == 'tracking':
-
-            # Tracking accuracy component (maximize negative error)
-            rew = -0.001*(jnp.sum(pred_2d_err))
-            #tracking_rew = jnp.clip(tracking_rew, -1.0, 1.0)
-
-        elif self.rew_type == "tracking_":
+        elif self.rew_type == "tracking":
             # reward based on the tracking error
             # exponential decay of the reward based on the tracking error
             # goes to 0 if the tracking error is above the threshold
             # goes to 1 if the tracking error is 0
-            thr_start_val = 0.05
-            rew_fun = lambda x: jnp.exp(
-                -(-jnp.log(thr_start_val) / self.rew_pred_thr) * x
-            )
-            rew = rew_fun(pred_2d_err.sum())
+            def exponential_decay(x, x1=self.rew_pred_ideal, x2=self.rew_pred_thr):
+                t = (x - x1) / (x2 - x1)
+                t = jnp.clip(t, 0, 1 - 1e-10)  # Avoid division by zero
+                return jnp.where(x < x1, 1, jnp.where(x > x2, 0, jnp.exp(-2*t / (1 - t))))
+            rew = jax.vmap(exponential_decay)(pred_2d_err)
+            rew = rew.sum()
 
-        elif self.rew_type == "tracking_error":
-            # reward based on the tracking error
-            rew = 0.01 * (-pred_2d_err+self.rew_pred_thr).min()
+        if self.rew_norm_landmarks:
+            rew /= self.num_landmarks
 
-        if self.penalty_failed_episode:
-            if self.rew_type == "tracking_error" or self.rew_type == "follow_dense":
-                rew = jnp.where(
-                    failed_episode,
-                    rew - (self.max_steps - t) * 1.0,
-                    rew,
-                )
-            else:
-                rew = jnp.where(
-                    failed_episode, -cum_rew, rew
-                )  # if failed episode, penalty
+        # penalize crashing between agents
+        if self.penalty_for_crashing:
+            rew = jnp.where((agent_dist < self.min_valid_distance).any(), -1.0, rew)
 
-        # failed episode if crash or lost landmark
         done = t == self.max_steps
-        if self.truncate_failed_episode: # truncate the episode if failed
+
+        # truncate the episode if failed (if a landmark is lost)
+        if self.truncate_failed_episode: 
+            failed_episode = (
+                min_land_dist >= self.max_range_dist*2
+            ).any() # failed episode if a landmark is lost
             done = done | failed_episode
 
         # return different infos if the env is gonna be used for rendering or training
