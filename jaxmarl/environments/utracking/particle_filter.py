@@ -27,11 +27,11 @@ class ParticleFilter:
         self,
         num_particles=5000,
         std_range=10,  # m (standard deviation error of the range measurements)
-        mu_init_vel=0.1,  # m/s
-        std_init_vel=0.1,  # m/s
-        turn_noise=0.1,  # rad
+        mu_init_vel=0.6,  # m/s
+        std_init_vel=0.4,  # m/s
+        turn_noise=0.5,  # rad
         vel_noise=0.05,  # m/s
-        min_weight=0.01,
+        ess_threshold=0.01, # percentage of the total number of particles
     ):
         self.num_particles = num_particles
         self.std_range = std_range
@@ -39,7 +39,7 @@ class ParticleFilter:
         self.std_init_vel = std_init_vel
         self.turn_noise = turn_noise
         self.vel_noise = vel_noise
-        self.min_weight = min_weight
+        self.ess_threshold = ess_threshold * self.num_particles
 
     @partial(jax.jit, static_argnums=0)
     def reset(self, key, position, range_obs):
@@ -54,7 +54,7 @@ class ParticleFilter:
             # Randomly sample the initial position and velocity in the range around observer
             rng_a, rng_r, rng_v, rng_o = jax.random.split(rng, 4)
             angle = jax.random.uniform(rng_a, minval=0.0, maxval=2 * jnp.pi)
-            r = jax.random.uniform(rng_r) * self.std_range - self.std_range + range_obs
+            r = jax.random.normal(rng_r) * self.std_range + range_obs
             vel = jax.random.normal(rng_v) * self.std_init_vel + self.mu_init_vel
             orientation = jax.random.uniform(rng_o, minval=0, maxval=2 * jnp.pi)
             return OneParticleState(
@@ -198,32 +198,35 @@ class ParticleFilter:
 
         return ParticlesState(particles=resampled_particles, weights=state.weights)
     
+
     @partial(jax.jit, static_argnums=0)
     def resample_reinit_particles(self, rng, state, pos, obs, mask):
-        """
-        Resample or reinit particles.
-        """
-
         key_reinit, key_resample = jax.random.split(rng, 2)
-
-        # reinit if the max weight is too low or if there are NaNs
-        reinit_cond = jnp.isnan(state.weights).any() # reinit if the max weight is too low or if there are NaNs
-
-        # make sure to reinit with valid observations
-        reinit_idx = jnp.argmax(mask)
-        pos_reinit = jnp.where(mask.any(), pos[reinit_idx], pos[0])
-        obs_reinit = jnp.where(mask.any(), obs[reinit_idx], 0.) # reinit around the agent if there are no valid observations
-
+        
+        # Normalize the weights and compute the effective sample size (ESS)
+        weight_sum = jnp.sum(state.weights)
+        normalized_weights = state.weights / weight_sum
+        ess = 1.0 / jnp.sum(normalized_weights ** 2)
+        
+        has_valid = jnp.any(mask)
+        # Choose a valid observation for reinitialization (if available) or default to the first observer.
+        reinit_idx = jnp.argmax(mask)  # if mask is all False, this still returns 0.
+        pos_reinit = jax.lax.select(has_valid, pos[reinit_idx], pos[0])
+        obs_reinit = jax.lax.select(has_valid, obs[reinit_idx], 0.0)
+        
+        # Set the reinitialization condition:
+        # reinit if there are NaNs in the weights or if the ESS is too low.
+        reinit_cond = jnp.isnan(state.weights).any() | (ess < self.ess_threshold)
+        
         state = jax.lax.cond(
             reinit_cond,
-            lambda _: self.reset(
-                key_reinit, pos_reinit, obs_reinit
-            ),  # reset with the first observation (TODO: take into account masking here)
+            lambda _: self.reset(key_reinit, pos_reinit, obs_reinit),
             lambda _: self.resample(key_resample, state),
             operand=None,
         )
-
+        
         return state
+
 
     @partial(jax.jit, static_argnums=0)
     def estimate_pos(self, state):

@@ -1,4 +1,5 @@
 import os
+import copy
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -18,6 +19,7 @@ from functools import partial
 from jaxmarl import make
 from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, JaxMARLWrapper
 from jaxmarl.viz.utracking_visualizer import animate_from_infos
+from jaxmarl.wrappers.baselines import save_params, load_params
 
 
 class ScannedRNN(nn.Module):
@@ -45,7 +47,7 @@ class ScannedRNN(nn.Module):
     @staticmethod
     def initialize_carry(batch_size, hidden_size):
         # Use a dummy key since the default state init fn is just zeros.
-        cell = nn.GRUCell(features=hidden_size)
+        cell = nn.GRUCell(features=hidden_size, parent=None)
         return cell.initialize_carry(jax.random.PRNGKey(0), (batch_size, hidden_size))
 
 
@@ -55,13 +57,18 @@ class ActorRNN(nn.Module):
 
     @nn.compact
     def __call__(self, hidden, x):
+
         obs, dones, avail_actions = x
-        embedding = nn.Dense(
-            self.config["FC_DIM_SIZE"],
-            kernel_init=orthogonal(np.sqrt(2)),
-            bias_init=constant(0.0),
-        )(obs)
-        embedding = nn.relu(embedding)
+
+        embedding = obs 
+        for l in range(self.config["NUM_LAYERS"]):
+            embedding = nn.Dense(
+                self.config["FC_DIM_SIZE"],
+                kernel_init=orthogonal(np.sqrt(2)),
+                bias_init=constant(0.0),
+            )(embedding)
+            embedding = nn.LayerNorm()(embedding)
+            embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
@@ -71,10 +78,13 @@ class ActorRNN(nn.Module):
             kernel_init=orthogonal(2),
             bias_init=constant(0.0),
         )(embedding)
+        actor_mean = nn.LayerNorm()(actor_mean)
         actor_mean = nn.relu(actor_mean)
+
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
         )(actor_mean)
+
         unavail_actions = 1 - avail_actions
         action_logits = actor_mean - (unavail_actions * 1e10)
 
@@ -89,12 +99,16 @@ class CriticRNN(nn.Module):
     @nn.compact
     def __call__(self, hidden, x):
         world_state, dones = x
-        embedding = nn.Dense(
-            self.config["FC_DIM_SIZE"],
-            kernel_init=orthogonal(np.sqrt(2)),
-            bias_init=constant(0.0),
-        )(world_state)
-        embedding = nn.relu(embedding)
+
+        embedding = world_state 
+        for l in range(self.config["NUM_LAYERS"]):
+            embedding = nn.Dense(
+                self.config["FC_DIM_SIZE"],
+                kernel_init=orthogonal(np.sqrt(2)),
+                bias_init=constant(0.0),
+            )(embedding)
+            embedding = nn.LayerNorm()(embedding)
+            embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
 
@@ -105,6 +119,7 @@ class CriticRNN(nn.Module):
             kernel_init=orthogonal(2),
             bias_init=constant(0.0),
         )(embedding)
+        critic = nn.LayerNorm()(critic)
         critic = nn.relu(critic)
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
             critic
@@ -160,6 +175,10 @@ def make_train(config):
 
     env = LogWrapper(env)
 
+    if config["LOAD_PATH"] is not None:
+        config["MODEL_PARAMS"] = load_params(config["LOAD_PATH"])
+        print("loaded model from", config["LOAD_PATH"])
+
     def linear_schedule(count):
         frac = (
             1.0
@@ -174,33 +193,40 @@ def make_train(config):
         actor_network = ActorRNN(env.action_space(env.agents[0]).n, config=config)
         critic_network = CriticRNN(config=config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
-        ac_init_x = (
-            jnp.zeros(
-                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
-            ),
-            jnp.zeros((1, config["NUM_ENVS"])),
-            jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
-        )
-        ac_init_hstate = ScannedRNN.initialize_carry(
-            config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
-        )
-        actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
-        cr_init_x = (
-            jnp.zeros(
-                (
-                    1,
-                    config["NUM_ENVS"],
-                    env.world_state_space.shape[0],
-                )
-            ),
-            jnp.zeros((1, config["NUM_ENVS"])),
-        )
-        cr_init_hstate = ScannedRNN.initialize_carry(
-            config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
-        )
-        critic_network_params = critic_network.init(
-            _rng_critic, cr_init_hstate, cr_init_x
-        )
+
+        if config["LOAD_PATH"] is not None:
+            actor_network_params = config["MODEL_PARAMS"]["actor"]
+            critic_network_params = config["MODEL_PARAMS"]["critic"]
+        else:
+            ac_init_x = (
+                jnp.zeros(
+                    (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
+                ),
+                jnp.zeros((1, config["NUM_ENVS"])),
+                jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
+            )
+            ac_init_hstate = ScannedRNN.initialize_carry(
+                config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
+            )
+            actor_network_params = actor_network.init(_rng_actor, ac_init_hstate, ac_init_x)
+
+        if config["LOAD_PATH"] is None or not config["LOAD_CRITIC"]:
+            cr_init_x = (
+                jnp.zeros(
+                    (
+                        1,
+                        config["NUM_ENVS"],
+                        env.world_state_space.shape[0],
+                    )
+                ),
+                jnp.zeros((1, config["NUM_ENVS"])),
+            )
+            cr_init_hstate = ScannedRNN.initialize_carry(
+                config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
+            )
+            critic_network_params = critic_network.init(
+                _rng_critic, cr_init_hstate, cr_init_x
+            )
 
         if config["ANNEAL_LR"]:
             actor_tx = optax.chain(
@@ -412,7 +438,11 @@ def make_train(config):
                         approx_kl = ((ratio - 1) - logratio).mean()
                         clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
 
-                        actor_loss = loss_actor - config["ENT_COEF"] * entropy
+                        actor_loss = (
+                            loss_actor
+                            - config["ENT_COEF"] * entropy
+                            - config.get("KL_COEF", 0.) * approx_kl
+                        )
 
                         return actor_loss, (
                             loss_actor,
@@ -555,7 +585,7 @@ def make_train(config):
             # report on wandb if required
             if config["WANDB_MODE"] != "disabled":
 
-                def callback(metrics, original_seed, render_infos=None):
+                def callback(metrics, original_seed, render_infos=None, model_state=None):
                     if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
                             {
@@ -592,9 +622,34 @@ def make_train(config):
                             },
                             step=metrics["update_steps"],
                         )
+
+
                     else:
                         # log without animation
                         wandb.log(metrics, step=metrics["update_steps"])
+
+                    # save params
+                    if (
+                        config.get("CHECKPOINT_INTERVAL", None) is not None
+                        and metrics["update_steps"]
+                        % int(config["NUM_UPDATES"] * config["CHECKPOINT_INTERVAL"])
+                        == 0
+                    ):
+                        
+                        env_name = f'utracking_{config["ENV_KWARGS"]["num_agents"]}_vs_{config["ENV_KWARGS"]["num_landmarks"]}'
+                        alg_name = config.get("ALG_NAME", "mappo_rnn_utracking")
+                        
+                        print('Saving Checkpoint')
+    
+                        model_state = {"actor": model_state[0].params, "critic": model_state[1].params}
+                        save_dir = os.path.join(config["SAVE_PATH"], env_name, alg_name)
+                        os.makedirs(save_dir, exist_ok=True)
+
+                        save_path = os.path.join(
+                            save_dir,
+                            f"{alg_name}_{env_name}_step{int(metrics['update_steps'])}_rng{int(original_seed)}.safetensors",
+                        )
+                        save_params(model_state, save_path)
 
                 if config.get("ANIMATION_LOG_INTERVAL", None) is not None:
 
@@ -683,7 +738,7 @@ def make_train(config):
                 else:
                     render_infos = None
 
-                jax.debug.callback(callback, metrics, original_seed, render_infos)
+                jax.debug.callback(callback, metrics, original_seed, render_infos, train_states)
 
             update_steps = update_steps + 1
             runner_state = (train_states, env_state, last_obs, last_done, hstates, rng)
@@ -724,15 +779,14 @@ def single_run(config):
 
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_jit = jax.jit(make_train(config))
+    train_jit = jax.jit(make_train(copy.deepcopy(config)))
     outs = jax.vmap(train_jit)(rngs)
 
     if config.get("SAVE_PATH", None) is not None:
-        from jaxmarl.wrappers.baselines import save_params
-
+        
         model_state = outs["runner_state"][0]
         model_state = {"actor": model_state[0].params, "critic": model_state[1].params}
-        save_dir = os.path.join(config["SAVE_PATH"], env_name)
+        save_dir = os.path.join(config["SAVE_PATH"], env_name, alg_name)
         os.makedirs(save_dir, exist_ok=True)
         OmegaConf.save(
             config,
@@ -745,7 +799,7 @@ def single_run(config):
             params = jax.tree_map(lambda x: x[i], model_state)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}_final.safetensors',
             )
             save_params(params, save_path)
 

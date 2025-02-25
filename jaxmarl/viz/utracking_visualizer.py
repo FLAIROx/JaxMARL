@@ -74,10 +74,22 @@ class UTrackingAnimator(animation.TimedAnimation):
 
         animation.TimedAnimation.__init__(self, self.fig, interval=100, blit=True)
 
-    def save_animation(self, savepath="episode"):
+    def save_animation(self, savepath="episode", save_gif=True):
         with contextlib.redirect_stdout(None):
-            self.save(savepath + ".gif")
-            self.fig.savefig(savepath + ".png")
+            if save_gif:
+                self.save(savepath + ".gif")
+                self.fig.savefig(savepath + ".png")
+            else:
+                self.save_fig(savepath+ ".png")
+
+    def save_fig(self, savepath="episode"):
+        # Draw the final frame
+        self._draw_frame(self.frames - 1)
+        # Ensure the figure is rendered
+        self.fig.canvas.draw()
+        # Save the figure
+        self.fig.savefig(savepath, bbox_inches='tight')
+        plt.close(self.fig)
 
     def _episode_update(self, data, line, frame, lags, name=None):
         line.set_data(
@@ -268,7 +280,7 @@ class UTrackingAnimator(animation.TimedAnimation):
             l.set_data([], [])
 
 
-def animate_from_infos(infos, num_agents=3, save_path="./outputs"):
+def animate_from_infos(infos, num_agents=3, save_path="./outputs", save_gif=True):
     """
     Animate an episode from the infos dictionary. Remember to set 'infos_for_render' to True in the environment.
     """
@@ -293,4 +305,4 @@ def animate_from_infos(infos, num_agents=3, save_path="./outputs"):
         episode_rewards=x["reward"], # (frames,)
         episode_errors=jnp.swapaxes(x["tracking_error"], 0, 1), # (num_landmarks, frames)
     )
-    viz.save_animation(save_path)
+    viz.save_animation(save_path, save_gif=save_gif)
