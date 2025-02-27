@@ -91,7 +91,7 @@ pip install jaxmarl
     pip install -e .[algs]
     export PYTHONPATH=./JaxMARL:$PYTHONPATH
     ```
-3. For the fastest start, we reccoment using our Dockerfile, the usage of which is outlined below.
+3. For the fastest start, we recommend using our Dockerfile, the usage of which is outlined below.
 
 **Development** - If you would like to run our test suite, install the additonal dependencies with:
  `pip install -e .[dev]`, after cloning the repository.
