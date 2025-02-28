@@ -46,10 +46,10 @@ class Environment(object):
 		obs_re, state_re = self.reset_env(key_reset)
 
 		# Auto-reset environment based on termination
-		state = jax.tree_map(
+		state = jax.tree.map(
 			lambda x, y: jax.lax.select(done, x, y), state_re, state_st
 		)
-		obs = jax.tree_map(
+		obs = jax.tree.map(
 			lambda x, y: jax.lax.select(done, x, y), obs_re, obs_st
 		)
 

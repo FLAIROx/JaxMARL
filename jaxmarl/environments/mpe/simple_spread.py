@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box
+from jaxmarl.environments.spaces import Box
 
 
 class SimpleSpreadMPE(SimpleMPE):
@@ -15,6 +15,7 @@ class SimpleSpreadMPE(SimpleMPE):
         num_landmarks=3,
         local_ratio=0.5,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         dim_c = 2  # NOTE follows code rather than docs
 
@@ -54,6 +55,7 @@ class SimpleSpreadMPE(SimpleMPE):
             colour=colour,
             rad=rad,
             collide=collide,
+            **kwargs,
         )
 
     def get_obs(self, state: State) -> Dict[str, chex.Array]:

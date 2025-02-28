@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from jaxmarl.environments.mpe.simple import State, SimpleMPE
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box
+from jaxmarl.environments.spaces import Box
 
 
 class SimpleAdversaryMPE(SimpleMPE):
@@ -15,6 +15,7 @@ class SimpleAdversaryMPE(SimpleMPE):
         num_adversaries=1,
         num_obs=2,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         dim_c = 2  # NOTE follows code rather than docs
 
@@ -59,6 +60,7 @@ class SimpleAdversaryMPE(SimpleMPE):
             colour=colour,
             rad=rad,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:

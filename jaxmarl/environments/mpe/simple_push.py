@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 from functools import partial
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box
+from jaxmarl.environments.spaces import Box
 
 # Obstacle Colours
 COLOUR_1 = jnp.array([0.1, 0.9, 0.1])
@@ -20,6 +20,7 @@ class SimplePushMPE(SimpleMPE):
         num_adversaries=1,
         num_landmarks=2,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         assert (
             num_landmarks == 2
@@ -71,6 +72,7 @@ class SimplePushMPE(SimpleMPE):
             colour=colour,
             rad=rad,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:

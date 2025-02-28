@@ -6,7 +6,7 @@ from flax import struct
 from functools import partial
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
 LISTENER = "bob_0"
@@ -31,7 +31,7 @@ class SimpleCryptoMPE(SimpleMPE):
     Note, currently only have continuous actions implemented.
     """
 
-    def __init__(self, num_agents=3, num_landmarks=2, action_type=DISCRETE_ACT):
+    def __init__(self, num_agents=3, num_landmarks=2, action_type=DISCRETE_ACT, **kwargs,):
         assert num_agents == 3, "Simple Crypto only supports 3 agents"
         assert num_landmarks == 2, "Simple Crypto only supports 2 landmarks"
 
@@ -99,6 +99,7 @@ class SimpleCryptoMPE(SimpleMPE):
             moveable=moveable,
             silent=silent,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, CryptoState]:

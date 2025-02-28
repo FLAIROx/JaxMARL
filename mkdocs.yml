@@ -1,0 +1,43 @@
+site_name: JaxMARL Documentation
+site_url: https://jaxmarl.foersterlab.com
+repo_url: https://github.com/flairox/jaxmarl
+theme:
+  name: material
+  features:
+    - navigation.sections
+  palette:
+    # Dark Mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Dark mode
+      primary: green
+      accent: deep purple
+
+    # Light Mode
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Light mode
+      primary: blue
+      accent: deep orange
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [../examples,../jaxmarl,..]
+          options:
+            show_docstring_examples: true
+            show_root_heading: false
+            show_source: False
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences

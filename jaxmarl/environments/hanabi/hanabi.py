@@ -9,7 +9,7 @@ from jax import lax
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from gymnax.environments.spaces import Discrete
+from jaxmarl.environments.spaces import Discrete
 from .hanabi_game import HanabiGame, State
 
 
@@ -20,7 +20,7 @@ class HanabiEnv(HanabiGame):
         num_agents=2,
         num_colors=5,
         num_ranks=5,
-        hand_size=5,
+        hand_size=None,
         max_info_tokens=8,
         max_life_tokens=3,
         num_cards_of_rank=np.array([3, 2, 2, 2, 1]),
@@ -29,6 +29,10 @@ class HanabiEnv(HanabiGame):
         observation_spaces=None,
         num_moves=None,
     ):
+        # default hand size is 5 for 2-3 players and 4 for 4-5 players
+        if hand_size is None:
+            hand_size = 5 if num_agents < 4 else 4
+
         super().__init__(
             num_agents=num_agents,
             num_colors=num_colors,
@@ -38,6 +42,10 @@ class HanabiEnv(HanabiGame):
             max_life_tokens=max_life_tokens,
             num_cards_of_rank=num_cards_of_rank,
         )
+
+        assert num_agents > 1 and num_agents <= 5, "Number of agents must be between 2 and 5"
+        if hand_size is None:
+            hand_size = 5 if num_agents < 4 else 4
 
         if agents is None:
             self.agents = [f"agent_{i}" for i in range(num_agents)]
@@ -64,28 +72,23 @@ class HanabiEnv(HanabiGame):
         self.action_set = jnp.arange(self.num_moves)
         self.action_encoding = {}
         for i, a in enumerate(self.action_set):
-            if a < hand_size:
-                move_type = f'D{i%hand_size}'
-            elif a < hand_size*2:
-                move_type = f'P{i%hand_size}'
-            elif a < hand_size*2 + num_colors:
-                move_type = f'H{self.color_map[i - hand_size*2]}' 
-            elif a < hand_size*2 + (num_colors + num_ranks):
-                move_type = f'H{i - (hand_size*2+num_colors)+1}' 
+            if self._is_discard(a):
+                move_type = f'D{i % hand_size}'
+            elif self._is_play(a):
+                move_type = f'P{i % hand_size}'
+            elif self._is_hint_color(a):
+                action_idx = i - 2 * self.hand_size
+                hint_idx = action_idx % self.num_colors
+                target_player = action_idx // self.num_colors
+                move_type = f'H{self.color_map[hint_idx]} to P{target_player + 1} relative'
+            elif self._is_hint_rank(a):
+                action_idx = i - 2 * self.hand_size - (self.num_agents - 1) * self.num_colors
+                hint_idx = action_idx % self.num_ranks
+                target_player = action_idx // self.num_ranks
+                move_type = f'H{hint_idx + 1} to P{target_player + 1} relative'
             else:
                 move_type = 'N'
-            self.action_encoding[int(a)] = move_type
-
-        # useful ranges to know the type of the action
-        self.discard_action_range = jnp.arange(0, self.hand_size)
-        self.play_action_range = jnp.arange(self.hand_size, 2 * self.hand_size)
-        self.color_action_range = jnp.arange(
-            2 * self.hand_size, 2 * self.hand_size + self.num_colors
-        )
-        self.rank_action_range = jnp.arange(
-            2 * self.hand_size + self.num_colors,
-            2 * self.hand_size + self.num_colors + self.num_ranks,
-        )
+            self.action_encoding[i] = move_type
 
         # number of features
         self.hands_n_feats = (
@@ -136,14 +139,21 @@ class HanabiEnv(HanabiGame):
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
         """Reset the environment and return the initial observation."""
         state = self.reset_game(key)
-        obs = self.get_obs(state, state, action=20)
+        obs = self.get_obs(state, state, action=self.num_moves - 1)
         return obs, state
-    
+
     @partial(jax.jit, static_argnums=[0])
-    def reset_from_deck(self, key: chex.PRNGKey, deck:chex.Array) -> Tuple[Dict, State]:
+    def reset_from_deck(self, deck: chex.Array) -> Tuple[Dict, State]:
         """Inject a deck in the game. Useful for testing."""
-        state = self.reset_game_from_deck(key, deck)
-        obs = self.get_obs(state, state, action=20)
+        state = self.reset_game_from_deck(deck)
+        obs = self.get_obs(state, state, action=self.num_moves - 1)
+        return obs, state
+
+    @partial(jax.jit, static_argnums=[0])
+    def reset_from_deck_of_pairs(self, deck: chex.Array) -> Tuple[Dict, State]:
+        """Inject a deck from (color, rank) pairs."""
+        state = self.reset_game_from_deck_of_pairs(deck)
+        obs = self.get_obs(state, state, action=self.num_moves - 1)
         return obs, state
 
     @partial(jax.jit, static_argnums=[0])
@@ -175,16 +185,16 @@ class HanabiEnv(HanabiGame):
 
         obs = lax.stop_gradient(self.get_obs(new_state, old_state, action))
 
-        return (obs, lax.stop_gradient(new_state), rewards, dones, info)
+        return obs, lax.stop_gradient(new_state), rewards, dones, info
 
     @partial(jax.jit, static_argnums=[0])
     def get_obs(
-        self, new_state: State, old_state: State, action: chex.Array = 20
+        self, new_state: State, old_state: State, action: chex.Array
     ) -> Dict:
         """Get all agents' observations."""
 
         # no agent-specific obs
-        board_fats = self.get_board_fats(new_state)
+        board_fats = self.get_board_feats(new_state)
         discard_feats = self._binarize_discard_pile(new_state.discard_pile)
 
         def _observe(aidx: int):
@@ -196,8 +206,8 @@ class HanabiEnv(HanabiGame):
             other_hands = jnp.delete(
                 hands_from_self, 0, axis=0, assume_unique_indices=True
             ).ravel()
-            missing_cards = ~hands_from_self.any(
-                axis=(1, 2, 3)
+            missing_cards = ~jnp.all(
+                jnp.any(hands_from_self, axis=(-2, -1)), axis=1
             )  # check if some player is missing a card
             hands_feats = jnp.concatenate((other_hands, missing_cards))
 
@@ -231,63 +241,57 @@ class HanabiEnv(HanabiGame):
 
         @partial(jax.vmap, in_axes=[0, None])
         def _legal_moves(aidx: int, state: State) -> chex.Array:
-            """
-            Legal moves encoding in order:
-            - discard for all cards in hand
-            - play for all cards in hand
-            - hint for all colors and ranks for all other players
-            """
-            move_idx = 0
+            # all moves are illegal in the beginning
             legal_moves = jnp.zeros(self.num_moves)
-            hands = state.player_hands
-            info_tokens = state.info_tokens
-            # discard legal when discard tokens are not full
-            is_not_max_info_tokens = jnp.sum(state.info_tokens) < 8
-            legal_moves = legal_moves.at[move_idx : move_idx + self.hand_size].set(
-                is_not_max_info_tokens
+            all_player_hands = state.player_hands  # (num_players, hand_size, num_colors, num_ranks)
+
+            # first get all cards one is holding since only these are legally playable
+            my_hand = all_player_hands.at[aidx].get()  # (hand_size, num_colors, num_ranks)
+            holding_cards_idx = jax.vmap(lambda c: jnp.any(c))(my_hand)
+
+            # discard is legal when tokens are not full and when card is in hand
+            can_get_token = jnp.sum(state.info_tokens) < self.max_info_tokens
+            legal_discard_idx = holding_cards_idx * can_get_token
+            legal_moves = legal_moves.at[self.discard_action_range].set(legal_discard_idx)
+
+            # play is legal for cards in hand - if empty card, not legal.
+            legal_moves = legal_moves.at[self.play_action_range].set(holding_cards_idx)
+
+            # hints depend on cards held by other players and not our own
+            other_players_hands = jnp.delete(
+                all_player_hands, aidx, axis=0, assume_unique_indices=True
             )
-            move_idx += self.hand_size
-            # play moves always legal
-            legal_moves = legal_moves.at[move_idx : move_idx + self.hand_size].set(1)
-            move_idx += self.hand_size
-            # hints depend on other player cards
-            other_hands = jnp.delete(hands, aidx, axis=0, assume_unique_indices=True)
-
-            def _get_hints_for_hand(carry, unused):
-                """Generates valid hints given hand"""
-                aidx, other_hands = carry
-                hand = other_hands[aidx]
-
-                # get occurrences of each card
-                card_counts = jnp.sum(hand, axis=0)
-                # get occurrences of each color
-                color_counts = jnp.sum(card_counts, axis=1)
-                # get occurrences of each rank
-                rank_counts = jnp.sum(card_counts, axis=0)
-                # check which colors/ranks in hand
-                colors_present = jnp.where(color_counts > 0, 1, 0)
-                ranks_present = jnp.where(rank_counts > 0, 1, 0)
-
-                valid_hints = jnp.concatenate([colors_present, ranks_present])
-                carry = (aidx + 1, other_hands)
-
-                return carry, valid_hints
-
-            _, valid_hints = lax.scan(
-                _get_hints_for_hand, (0, other_hands), None, self.num_agents - 1
-            )
-            # make other player positions relative to current player
-            valid_hints = jnp.roll(valid_hints, -aidx, axis=0)
-            # include valid hints in legal moves
-            num_hints = (self.num_agents - 1) * (self.num_colors + self.num_ranks)
-            valid_hints = jnp.concatenate(valid_hints, axis=0)
-            info_tokens_available = jnp.sum(info_tokens) != 0
-            valid_hints *= info_tokens_available
-            legal_moves = legal_moves.at[move_idx : move_idx + num_hints].set(
-                valid_hints
+            # adjust to have relative positions
+            other_players_hands = jnp.roll(
+                other_players_hands, -aidx, axis=0
             )
 
-            # only enable noop if not current player
+            # cards can be hinted only if info tokens are available
+            info_tokens_available = jnp.sum(state.info_tokens) > 0
+
+            # get all the colors that can be hinted
+            def _hintable_colors(hand):
+                # Hand: (num_cards, num_colors, num_ranks)
+                card_colors = jnp.sum(hand, axis=2)
+                hintable_colors = card_colors.any(axis=0)
+                return hintable_colors
+
+            legal_color_hints = jax.vmap(_hintable_colors)(other_players_hands).ravel()
+            legal_color_hints = legal_color_hints * info_tokens_available
+            legal_moves = legal_moves.at[self.color_action_range].set(legal_color_hints)
+
+            # get all the ranks that can be hinted.
+            def _hintable_ranks(hand):
+                # Hand: (num_cards, num_colors, num_ranks)
+                card_ranks = jnp.sum(hand, axis=1)
+                hintable_ranks = card_ranks.any(axis=0)
+                return hintable_ranks
+
+            legal_rank_hints = jax.vmap(_hintable_ranks)(other_players_hands).ravel()
+            legal_rank_hints = legal_rank_hints * info_tokens_available
+            legal_moves = legal_moves.at[self.rank_action_range].set(legal_rank_hints)
+
+            # Only legalize noop if not current player.
             cur_player = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
             not_cur_player = aidx != cur_player
             legal_moves -= legal_moves * not_cur_player
@@ -305,71 +309,76 @@ class HanabiEnv(HanabiGame):
     ):
         """Get the features of the last action taken"""
 
-        acting_player_index = old_state.cur_player_idx  # absolute OH index
-        target_player_index = new_state.cur_player_idx  # absolute OH index
+        acting_player_index = old_state.cur_player_idx
         acting_player_relative_index = jnp.roll(
             acting_player_index, -aidx
         )  # relative OH index
+
+        acting_player_absolute_idx = jnp.nonzero(acting_player_index, size=1)[0][0]
+        target_player, hint_idx = self._get_target_player_and_hint_index(acting_player_absolute_idx, action)
         target_player_relative_index = jnp.roll(
-            target_player_index, -aidx
+            jax.nn.one_hot(target_player, num_classes=self.num_agents), -aidx
         )  # relative OH index
 
         # in obl the encoding order here is: play, discard, reveal_c, reveal_r
-        move_type = jnp.where(  # hard encoded but hey ho let's go
-            (action >= 0) & (action < 5),  # discard
-            jnp.array([0, 1, 0, 0]),
+        move_type = jnp.where(
+            self._is_play(action),
+            jnp.array([1, 0, 0, 0]),
             jnp.where(
-                (action >= 5) & (action < 10),  # play
-                jnp.array([1, 0, 0, 0]),
+                self._is_discard(action),
+                jnp.array([0, 1, 0, 0]),
                 jnp.where(
-                    (action >= 10) & (action < 15),  # reveal_c
+                    self._is_hint_color(action),
                     jnp.array([0, 0, 1, 0]),
                     jnp.where(
-                        (action >= 15) & (action < 20),  # reveal_r
+                        self._is_hint_rank(action),
                         jnp.array([0, 0, 0, 1]),
-                        jnp.array([0, 0, 0, 0]),  # invalid
+                        jnp.array([0, 0, 0, 0]),
                     ),
                 ),
-            ),
+            )
         )
 
         target_player_relative_index_feat = jnp.where(
-            action >= 10,  # only for hint actions
+            self._is_hint(action),  # only for hint actions
             target_player_relative_index,
             jnp.zeros(self.num_agents),
         )
 
         # get the hand of the target player
-        target_hand = new_state.player_hands[
-            jnp.nonzero(target_player_index, size=1)[0][0]
-        ]
+        target_hand = new_state.player_hands[target_player]
 
-        color_revealed = jnp.where(  # which color was revealed by action (oh)?
-            action == self.color_action_range,
-            1.0,
-            jnp.zeros(self.color_action_range.size),
+        color_revealed = jnp.where(
+            self._is_hint_color(action),
+            jax.nn.one_hot(hint_idx, num_classes=self.num_colors),
+            jnp.zeros(self.num_colors)
         )
-
-        rank_revealed = jnp.where(  # which rank was revealed by action (oh)?
-            action == self.rank_action_range,
-            1.0,
-            jnp.zeros(self.rank_action_range.size),
+        rank_revealed = jnp.where(
+            self._is_hint_rank(action),
+            jax.nn.one_hot(hint_idx, num_classes=self.num_ranks),
+            jnp.zeros(self.num_ranks)
         )
 
         # cards that have the color that was revealed
         color_revealed_cards = jnp.where(
-            (target_hand.sum(axis=(2)) == color_revealed).all(
-                axis=1
-            ),  # color of the card==color reveled
+            jnp.logical_and(
+                self._is_hint_color(action),
+                (target_hand.sum(axis=2) == color_revealed).all(
+                    axis=1
+                ),  # color of the card==color reveled
+            ),
             1,
             0,
         )
 
         # cards that have the color that was revealed
         rank_revealed_cards = jnp.where(
-            (target_hand.sum(axis=(1)) == rank_revealed).all(
-                axis=1
-            ),  # color of the card==color reveled
+            jnp.logical_and(
+                self._is_hint_rank(action),
+                (target_hand.sum(axis=1) == rank_revealed).all(
+                    axis=1
+                )  # color of the card==color reveled
+            ),
             1,
             0,
         )
@@ -379,8 +388,8 @@ class HanabiEnv(HanabiGame):
 
         # card that was played-discarded
         pos_played_discarded = jnp.where(
-            action < 2 * self.hand_size,
-            jnp.arange(self.hand_size) == action % self.hand_size,
+            jnp.logical_or(self._is_play(action), self._is_discard(action)),
+            jnp.arange(self.hand_size) == (action % self.hand_size),
             jnp.zeros(self.hand_size),
         )
         actor_hand_before = old_state.player_hands[
@@ -402,7 +411,7 @@ class HanabiEnv(HanabiGame):
 
         # "added info token" boolean is present only when you get an info from playing the 5 of the color
         added_info_tokens = jnp.where(
-            (action >= 5) & (action < 10),
+            self._is_play(action),
             new_state.info_tokens.sum() > old_state.info_tokens.sum(),
             0,
         )
@@ -421,7 +430,7 @@ class HanabiEnv(HanabiGame):
         }
 
         return feats
-    
+
     @partial(jax.jit, static_argnums=[0])
     def get_last_action_feats(
         self, aidx: int, old_state: State, new_state: State, action: chex.Array
@@ -443,9 +452,8 @@ class HanabiEnv(HanabiGame):
 
         return last_action
 
-
     @partial(jax.jit, static_argnums=[0])
-    def get_board_fats(self, state: State):
+    def get_board_feats(self, state: State):
         """Get the features of the board."""
         # by default the fireworks are incremental, i.e. [1,1,0,0,0] one and two are in the board
         # must be OH of only the highest rank, i.e. [0,1,0,0,0]
@@ -499,6 +507,12 @@ class HanabiEnv(HanabiGame):
             )  # count of the remaining cards
             normalized_knowledge = knowledge * count
             normalized_knowledge /= normalized_knowledge.sum(axis=1)[:, np.newaxis]
+            # knowledge is zero when we are missing a card in hand
+            normalized_knowledge = jnp.where(
+                knowledge.any(axis=1, keepdims=True),
+                normalized_knowledge,
+                0
+            )
             return jnp.concatenate(
                 (normalized_knowledge, color_hint, rank_hint), axis=-1
             ).ravel()
@@ -518,7 +532,7 @@ class HanabiEnv(HanabiGame):
         """Binarize the discard pile to reduce dimensionality."""
 
         def binarize_ranks(n_ranks):
-            tree = jax.tree_util.tree_map(
+            tree = jax.tree.map(
                 lambda n_rank_present, max_ranks: jnp.where(
                     jnp.arange(max_ranks) >= n_rank_present,
                     jnp.zeros(max_ranks),
@@ -579,7 +593,7 @@ class HanabiEnv(HanabiGame):
                     f"agent {i} representation of the belief of its {z}th-relative agent:",
                     b,
                 )
-    
+
     def card_to_string(self, card: chex.Array) -> str:
         # transforms a card matrix to string
         if ~card.any():  # empyt card
@@ -670,7 +684,7 @@ class HanabiEnv(HanabiGame):
 
     def get_obs_str(self, new_state, old_state=None, action=20, include_belief=False, best_belief=5):
         """Get the observation as a string."""
-        
+
         output = ""
 
         def get_actor_hand_str(aidx: int, belief: chex.Array=None, mask_hand=False) -> str:

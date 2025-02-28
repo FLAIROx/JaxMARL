@@ -142,7 +142,7 @@ def make_benchmark(config):
             obsv, env_state, _, _, info = jax.vmap(env.step)(
                 rng_step, env_state, env_act
             )
-            info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+            info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
             runner_state = (params, env_state, obsv, rng)
             return runner_state, None
 

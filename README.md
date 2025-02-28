@@ -11,6 +11,8 @@
         <img src="https://colab.research.google.com/assets/colab-badge.svg" /></a>
        <a href= "https://arxiv.org/abs/2311.10090">
         <img src="https://img.shields.io/badge/arXiv-2311.10090-b31b1b.svg" /></a>
+       <a href= "https://jaxmarl.foersterlab.com/">
+        <img src="https://img.shields.io/badge/docs-green" /></a>
        
 </p>
 
@@ -28,13 +30,15 @@
         <div class="row" align="centre">
             <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/coin_game.png?raw=true" alt="coin_game" width="20%">
             <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true" alt="MPE" width="20%">
-            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/switch_riddle.png?raw=true" alt="switch_riddle" width="20%">
+            <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/jaxnav-ma.gif?raw=true" alt="jaxnav" width="20%">
             <img src="https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true" alt="SMAX" width="20%">
         </div>
     </div>
 </div>
 
 ## Multi-Agent Reinforcement Learning in JAX
+
+🎉 **Update: JaxMARL was accepted at NeurIPS 2024 on Datasets and Benchmarks Track. See you in Vacouver!**
 
 JaxMARL combines ease-of-use with GPU-enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplified version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
@@ -50,6 +54,7 @@ For more details, take a look at our [blog post](https://blog.foersterlab.com/ja
 | 🎆 Hanabi | [Paper](https://arxiv.org/abs/1902.00506) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/hanabi) | Fully-cooperative partially-observable multiplayer card game |
 | 👾 SMAX | Novel | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/smax) | Simplified cooperative StarCraft micro-management environment |
 | 🧮 STORM: Spatial-Temporal Representations of Matrix Games | [Paper](https://openreview.net/forum?id=54F8woU8vhq) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/storm) | Matrix games represented as grid world scenarios
+| 🧭 JaxNav | [Paper](https://www.arxiv.org/abs/2408.15099) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/jaxnav) | 2D geometric navigation for differential drive robots
 | 🪙 Coin Game | [Paper](https://arxiv.org/abs/1802.09640) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/coin_game) | Two-player grid world environment which emulates social dilemmas
 | 💡 Switch Riddle | [Paper](https://proceedings.neurips.cc/paper_files/paper/2016/hash/c7635bfd99248a2cdef8249ef7bfbef4-Abstract.html) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/switch_riddle) | Simple cooperative communication game included for debugging
 
@@ -67,10 +72,11 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 | QMIX | [Paper](https://arxiv.org/abs/1803.11485) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 | TransfQMIX | [Paper](https://www.southampton.ac.uk/~eg/AAMAS2023/pdfs/p1679.pdf) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 | SHAQ | [Paper](https://arxiv.org/abs/2105.15013) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
+| PQN-VDN | [Paper](https://arxiv.org/abs/2407.04811) | [Source](https://github.com/mttga/purejaxql) |
 
 <h2 name="install" id="install">Installation 🧗 </h2>
 
-**Environments** - Before installing, ensure you have the correct [JAX version](https://github.com/google/jax#installation) for your hardware accelerator. The JaxMARL environments can be installed directly from PyPi:
+**Environments** - Before installing, ensure you have the correct [JAX installation](https://github.com/google/jax#installation) for your hardware accelerator. We have tested up to JAX version 0.4.25. The JaxMARL environments can be installed directly from PyPi:
 
 ```
 pip install jaxmarl 
@@ -82,11 +88,15 @@ pip install jaxmarl
     ```
     git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
     ```
-2. The requirements for IPPO & MAPPO can be installed with:
+2. Install requirements:
     ``` 
-    pip install -e .
+    pip install -e .[algs]
     export PYTHONPATH=./JaxMARL:$PYTHONPATH
     ```
+3. For the fastest start, we reccoment using our Dockerfile, the usage of which is outlined below.
+
+**Development** - If you would like to run our test suite, install the additonal dependencies with:
+ `pip install -e .[dev]`, after cloning the repository.
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
 
@@ -149,6 +159,7 @@ JAX-native algorithms:
 - [Mava](https://github.com/instadeepai/Mava): JAX implementations of IPPO and MAPPO, two popular MARL algorithms.
 - [PureJaxRL](https://github.com/luchris429/purejaxrl): JAX implementation of PPO, and demonstration of end-to-end JAX-based RL training.
 - [Minimax](https://github.com/facebookresearch/minimax/): JAX implementations of autocurricula baselines for RL.
+- [JaxIRL](https://github.com/FLAIROx/jaxirl?tab=readme-ov-file): JAX implementation of algorithms for inverse reinforcement learning.
 
 JAX-native environments:
 - [Gymnax](https://github.com/RobertTLange/gymnax): Implementations of classic RL tasks including classic control, bsuite and MinAtar.
@@ -156,3 +167,4 @@ JAX-native environments:
 - [Pgx](https://github.com/sotetsuk/pgx): JAX implementations of classic board games, such as Chess, Go and Shogi.
 - [Brax](https://github.com/google/brax): A fully differentiable physics engine written in JAX, features continuous control tasks.
 - [XLand-MiniGrid](https://github.com/corl-team/xland-minigrid): Meta-RL gridworld environments inspired by XLand and MiniGrid.
+- [Craftax](https://github.com/MichaelTMatthews/Craftax): (Crafter + NetHack) in JAX.

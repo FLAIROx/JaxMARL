@@ -44,19 +44,25 @@ class MultiAgentEnv(object):
         key: chex.PRNGKey,
         state: State,
         actions: Dict[str, chex.Array],
+        reset_state: Optional[State] = None,
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
-        """Performs step transitions in the environment."""
+        """Performs step transitions in the environment. Resets the environment if done.
+        To control the reset state, pass `reset_state`. Otherwise, the environment will reset randomly."""
 
         key, key_reset = jax.random.split(key)
         obs_st, states_st, rewards, dones, infos = self.step_env(key, state, actions)
 
-        obs_re, states_re = self.reset(key_reset)
+        if reset_state is None:
+            obs_re, states_re = self.reset(key_reset)
+        else:
+            states_re = reset_state
+            obs_re = self.get_obs(states_re)
 
         # Auto-reset environment based on termination
-        states = jax.tree_map(
+        states = jax.tree.map(
             lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st
         )
-        obs = jax.tree_map(
+        obs = jax.tree.map(
             lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
         )
         return obs, states, rewards, dones, infos
@@ -78,6 +84,11 @@ class MultiAgentEnv(object):
     def action_space(self, agent: str):
         """Action space for a given agent."""
         return self.action_spaces[agent]
+
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
+        """Returns the available actions for each agent."""
+        raise NotImplementedError
 
     @property
     def name(self) -> str:

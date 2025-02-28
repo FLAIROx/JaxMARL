@@ -1,0 +1,36 @@
+# valid for iql, vdn, qmix
+"TOTAL_TIMESTEPS": 1e7
+"NUM_ENVS": 16
+"NUM_STEPS": 128
+"BUFFER_SIZE": 5000
+"BUFFER_BATCH_SIZE": 32
+"HIDDEN_SIZE": 512
+"MIXER_EMBEDDING_DIM": 64
+"MIXER_HYPERNET_HIDDEN_DIM": 256
+"MIXER_INIT_SCALE": 0.001
+"EPS_START": 1.0
+"EPS_FINISH": 0.05
+"EPS_DECAY": 0.1 # percentage of updates
+"MAX_GRAD_NORM": 10
+"TARGET_UPDATE_INTERVAL": 10
+"TAU": 1.
+"NUM_EPOCHS": 8
+"LR": 0.00005
+"LEARNING_STARTS": 10000 # timesteps
+"LR_LINEAR_DECAY": False
+"GAMMA": 0.99
+"REW_SCALE": 10. # scale the reward to the original scale of SMAC
+
+# ENV
+"ENV_NAME": "HeuristicEnemySMAX"
+"MAP_NAME": "3s_vs_5z"
+"ENV_KWARGS":
+  "see_enemy_actions": True
+  "walls_cause_death": True
+  "attack_mode": "closest"
+
+# evaluate
+"TEST_DURING_TRAINING": True
+"TEST_INTERVAL": 0.05 # as a fraction of updates, i.e. log every 5% of training process
+"TEST_NUM_STEPS": 128
+"TEST_NUM_ENVS": 512 # number of episodes to average over, can affect performance

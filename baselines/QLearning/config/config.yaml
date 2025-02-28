@@ -1,11 +1,14 @@
 # experiment params
-"NUM_SEEDS": 2
+"NUM_SEEDS": 1 # number of vmapped seeds
 "SEED": 0
+
+"HYP_TUNE": False # perform hyp tune
 
 # wandb params
 "ENTITY": ""
 "PROJECT": ""
 "WANDB_MODE": "disabled"
+"WANDB_LOG_ALL_SEEDS": False # will log separately the vmapped seeds
 
 # where to save the params (if None, will not save)
-"SAVE_PATH": "baselines/QLearning/checkpoints"
+"SAVE_PATH": "models"

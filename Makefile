@@ -8,17 +8,19 @@ endif
 
 
 # Set flag for docker run command
-BASE_FLAGS=-it --rm -v ${PWD}:/home/workdir --shm-size 20G
+MYUSER=myuser
+BASE_FLAGS=-it --rm -v ${PWD}:/home/$(MYUSER) --shm-size 20G
 RUN_FLAGS=$(GPUS) $(BASE_FLAGS)
 
 DOCKER_IMAGE_NAME = jaxmarl
 IMAGE = $(DOCKER_IMAGE_NAME):latest
 DOCKER_RUN=docker run $(RUN_FLAGS) $(IMAGE)
 USE_CUDA = $(if $(GPUS),true,false)
+ID = $(shell id -u)
 
 # make file commands
 build:
-	DOCKER_BUILDKIT=1 docker build --build-arg USE_CUDA=$(USE_CUDA) --tag $(IMAGE) --progress=plain ${PWD}/.
+	DOCKER_BUILDKIT=1 docker build --build-arg USE_CUDA=$(USE_CUDA) --build-arg MYUSER=$(MYUSER) --build-arg UID=$(ID) --tag $(IMAGE) --progress=plain ${PWD}/.
 
 run:
 	$(DOCKER_RUN) /bin/bash
