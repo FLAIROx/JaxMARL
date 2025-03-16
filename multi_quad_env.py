@@ -49,7 +49,7 @@ class MultiQuadEnv(PipelineEnv):
       **kwargs,
   ):
     # Load the MJX model from the XML file.
-    mj_model = mujoco.MjModel.from_xml_path("two_quad_payload.xml")
+    mj_model = mujoco.MjModel.from_xml_path("mujoco/two_quad_payload.xml")
     # Convert the MuJoCo model to a Brax system.
     sys = mjcf.load_model(mj_model)
     kwargs['n_frames'] = kwargs.get('n_frames', sim_steps_per_action)
