@@ -10,7 +10,7 @@ import jax.numpy as jp
 from brax import envs
 import imageio
 import mujoco  # Used to create an OpenGL context
-import multi_quad_env  # Ensure your custom environment file is in your PYTHONPATH
+import multi_quad_env  
 
 def main():
     # Load the environment by its registered name.
@@ -34,13 +34,13 @@ def main():
         rollout.append(state.pipeline_state)
     
     # Create an OpenGL context (using mujoco.GLContext) with desired resolution.
-    ctx = mujoco.GLContext(1920, 1080)
+    ctx = mujoco.GLContext(1280, 720)
     ctx.make_current()
     
     # Render only every render_every-th frame.
-    frames = env.render(rollout[::render_every], camera="track", width=1920, height=1080)
+    frames = env.render(rollout[::render_every], camera="track", width=1280, height=720)
     
-    # Calculate frames per second: original code used fps=1.0 / (env.dt * render_every).
+    # Calculate frames per second
     fps = 1.0 / (env.dt * render_every)
     video_filename = "rollout_video.mp4"
     
