@@ -49,7 +49,7 @@ def main():
     frames = env.render(rollout[::render_every], camera="track", width=1280, height=720)
     
     # Calculate frames per second based on env.dt and render_every.
-    fps = 1.0 / (env.dt * render_every)
+    fps = float(1.0 / (env.dt * render_every))
     video_filename = "rollout_video.mp4"
     
     # Save frames as video using imageio.
