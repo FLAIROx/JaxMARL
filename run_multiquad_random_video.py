@@ -20,27 +20,35 @@ def main():
     rng = jax.random.PRNGKey(0)
     state = env.reset(rng)
     
+    # JIT compile the step function for efficiency.
+    jit_step = jax.jit(env.step)
+    
     # Simulation parameters.
     n_steps = 2500
     render_every = 2  # Render every 2nd frame (to reduce video length)
     rollout = [state.pipeline_state]
     
+    print("Starting simulation...")
     # Run simulation for n_steps with random actions.
     for i in range(n_steps):
         rng, key = jax.random.split(rng)
         # Sample random action in range [-1, 1] with the appropriate shape.
         action = jax.random.uniform(key, shape=(env.sys.nu,), minval=-1.0, maxval=1.0)
-        state = env.step(state, action)
+        state = jit_step(state, action)
         rollout.append(state.pipeline_state)
+    # Ensure all async computations are finished.
+    state = jax.block_until_ready(state)
+    print("Simulation finished.")
     
     # Create an OpenGL context (using mujoco.GLContext) with desired resolution.
     ctx = mujoco.GLContext(1280, 720)
     ctx.make_current()
     
+    print("Starting rendering...")
     # Render only every render_every-th frame.
     frames = env.render(rollout[::render_every], camera="track", width=1280, height=720)
     
-    # Calculate frames per second
+    # Calculate frames per second based on env.dt and render_every.
     fps = 1.0 / (env.dt * render_every)
     video_filename = "rollout_video.mp4"
     
