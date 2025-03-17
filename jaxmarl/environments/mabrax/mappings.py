@@ -100,7 +100,7 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         "agent_0": [0, (2, 5), (8, 9), (11, 13)],
         "agent_1": [0, 2, (5, 9), (14, 16)],
     },
-    "multiquad": {
+    "multiquad_2x4": {
         "agent_0": [(0, 29)],
         "agent_1": [(30, 53)],
     },
