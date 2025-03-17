@@ -95,16 +95,17 @@ def main():
     sim_steps = 2500
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
-    rollout = [state[0]]
+    rollout = [state[1]]  # store the brax env state
     
     print("Starting simulation with trained policy...")
     for i in range(sim_steps):
         rng, key = jax.random.split(rng)
         actions = policy_fn(train_state.params, env.get_obs(state[1]), key)  
         rng, key = jax.random.split(rng)
-        render_frame, new_state, rewards, dones, info = env.step_env(key, state[1], actions)
-        rollout.append(render_frame)
-        state = (render_frame, new_state)
+        # Unpack but use new_state from env.step_env
+        _, new_state, rewards, dones, info = env.step_env(key, state[1], actions)
+        rollout.append(new_state)
+        state = (None, new_state)
     state = jax.block_until_ready(state)
     print("Simulation finished.")
     
