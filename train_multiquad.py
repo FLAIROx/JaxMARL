@@ -73,55 +73,43 @@ def main():
     # Extract the trained train_state (the first element of runner_state)
     train_state = out["runner_state"][0]
     
-    # Create the multiquad environment without the jaxmarl wrapper
-    from brax import envs
-    env = envs.get_environment("multiquad")
+    # Create the environment for simulation
+    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
-    obs_shape = env.observation_size  
-    act_dim = env.action_size         
-    # If no agent information exists, assume a single agent.
-    if not hasattr(env, "agents"):
-        env.agents = ["agent_1"]
-        env.num_agents = 1
+    # Initialize the ActorCritic network with proper dimensions (use first agent's spaces)
+    obs_shape = env.observation_spaces[env.agents[0]].shape[0]
+    act_dim = env.action_spaces[env.agents[0]].shape[0]
     network = ActorCritic(action_dim=act_dim, activation=config["ACTIVATION"])
-
+    
+    # Define a policy function to map observations to actions using the trained parameters
     def policy_fn(params, obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
         pi, _ = network.apply(params, batched_obs)
         actions = pi.sample(seed=key)
         unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
-        # Squeeze the batch dimension for each agent's action.
+        # Squeeze the extra batch dimension so each agent's action has shape (action_dim,)
         unbatched = {a: jp.squeeze(act, axis=0) for a, act in unbatched.items()}
         return unbatched
-
-    # Simulation loop using policy prediction on the native multiquad env
+    
+    # Simulation: run an episode using the trained policy
+    sim_steps = 2500
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
-    rollout = [state.pipeline_state]
-    jit_step = jax.jit(env.step)
-    n_steps = 2500
+    rollout = [state[0]]
+    
     print("Starting simulation with trained policy...")
-    for i in range(n_steps):
+    for i in range(sim_steps):
         rng, key = jax.random.split(rng)
-        actions_dict = policy_fn(train_state.params, state.obs, key)
-        # Convert two 4-dim actions into one 8-dim action vector.
-        combined_action = jp.concatenate([actions_dict[a] for a in sorted(env.agents)])
-        state = jit_step(state, combined_action)
-        rollout.append(state.pipeline_state)
+        actions = policy_fn(train_state.params, env.get_obs(state[1]), key)  
+        rng, key = jax.random.split(rng)
+        render_frame, new_state, rewards, dones, info = env.step_env(key, state[1], actions)
+        rollout.append(render_frame)
+        state = (render_frame, new_state)
     state = jax.block_until_ready(state)
     print("Simulation finished.")
-
     
-    # Rendering code (creates OpenGL context, renders frames, and saves video)
-    ctx = mujoco.GLContext(1280, 720)
-    ctx.make_current()
-    render_every = 2
-    print("Starting rendering...")
-    frames = env.render(rollout[::render_every], camera="track", width=1280, height=720)
-    fps = float(1.0 / (env.dt * render_every))
-    video_filename = "rollout_video.mp4"
-    imageio.mimsave(video_filename, frames, fps=fps)
-    print(f"Video saved to {video_filename}")
+    # Call the separated video rendering function
+    render_video(rollout, env)
     
 if __name__ == "__main__":
     main()
