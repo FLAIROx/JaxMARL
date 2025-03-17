@@ -86,7 +86,10 @@ def main():
         batched_obs = batchify(obs, env.agents, env.num_agents)
         pi, _ = network.apply(params, batched_obs)
         actions = pi.sample(seed=key)
-        return unbatchify(actions, env.agents, 1, env.num_agents)
+        unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
+        # Squeeze the extra batch dimension so each agent's action has shape (action_dim,)
+        unbatched = {a: jp.squeeze(act, axis=0) for a, act in unbatched.items()}
+        return unbatched
     
     # Simulation: run an episode using the trained policy
     sim_steps = 2500
