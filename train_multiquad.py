@@ -56,6 +56,13 @@ def main():
         "ENTITY": f"quad_marl_{int(time.time())}",
         "WANDB_MODE": "online"
     }
+    wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=["IPPO", "FF"],
+        config=config,
+        mode=config["WANDB_MODE"],
+    )
     
     rng = jax.random.PRNGKey(config["SEED"])
     rng, rng_train = jax.random.split(rng)
