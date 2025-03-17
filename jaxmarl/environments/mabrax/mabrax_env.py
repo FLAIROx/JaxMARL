@@ -132,6 +132,12 @@ class MABraxEnv(MultiAgentEnv):
         """
         return self.map_global_obs_to_agents(state.obs)
 
+    def render(self, state: envs.State, **kwargs):
+        if hasattr(self.env, "render"):
+            return self.env.render(state, **kwargs)
+        else:
+            raise NotImplementedError("This environment does not support rendering.")
+
     def map_agents_to_global_action(
         self, agent_actions: Dict[str, jnp.ndarray]
     ) -> jnp.ndarray:
@@ -197,6 +203,10 @@ class MABraxEnv(MultiAgentEnv):
     @property
     def sys(self):
         return self.env.sys
+
+    @property
+    def dt(self):
+        return self.env.dt
 
 
 class Ant(MABraxEnv):
