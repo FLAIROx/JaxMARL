@@ -77,9 +77,12 @@ def main():
     from brax import envs
     env = envs.get_environment("multiquad")
     
-    # Initialize network and policy function for prediction.
-    obs_shape = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
+    obs_shape = env.observation_size  
+    act_dim = env.action_size         
+    # If no agent information exists, assume a single agent.
+    if not hasattr(env, "agents"):
+        env.agents = ["agent_1"]
+        env.num_agents = 1
     network = ActorCritic(action_dim=act_dim, activation=config["ACTIVATION"])
 
     def policy_fn(params, obs, key):
@@ -100,13 +103,13 @@ def main():
     print("Starting simulation with trained policy...")
     for i in range(n_steps):
         rng, key = jax.random.split(rng)
-        # Use state's obs directly
-        actions = policy_fn(train_state.params, state.obs, key)
-        state = jit_step(state, actions)
+        actions_dict = policy_fn(train_state.params, state.obs, key)
+        # Convert two 4-dim actions into one 8-dim action vector.
+        combined_action = jp.concatenate([actions_dict[a] for a in sorted(env.agents)])
+        state = jit_step(state, combined_action)
         rollout.append(state.pipeline_state)
     state = jax.block_until_ready(state)
     print("Simulation finished.")
-
 
     
     # Rendering code (creates OpenGL context, renders frames, and saves video)
