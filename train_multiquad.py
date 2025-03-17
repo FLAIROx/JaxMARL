@@ -92,7 +92,7 @@ def main():
     sim_steps = 2500
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
-    rollout = [state.pipeline_state]
+    rollout = [state[0]]
     
     print("Starting simulation with trained policy...")
     for i in range(sim_steps):
@@ -100,7 +100,7 @@ def main():
         actions = policy_fn(train_state.params, env.get_obs(state), key)
         rng, key = jax.random.split(rng)
         obs, state, rewards, dones, info = env.step_env(key, state, actions)
-        rollout.append(state.pipeline_state)
+        rollout.append(state[0])
     state = jax.block_until_ready(state)
     print("Simulation finished.")
     
