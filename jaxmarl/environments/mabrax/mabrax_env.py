@@ -3,6 +3,7 @@ import chex
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from jaxmarl.environments import spaces
 from brax import envs
+import multi_quad_env  
 import jax
 import jax.numpy as jnp
 from functools import partial

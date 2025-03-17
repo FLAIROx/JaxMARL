@@ -33,6 +33,10 @@ _agent_action_mapping = {
         "agent_0": jnp.array([0, 1, 2]),
         "agent_1": jnp.array([3, 4, 5]),
     },
+    "multiquad_2x4": {
+        "agent_0": jnp.array([0, 1, 2, 3]),
+        "agent_1": jnp.array([4, 5, 6, 7])
+    },
 }
 
 
@@ -95,6 +99,10 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     "walker2d_2x3": {
         "agent_0": [0, (2, 5), (8, 9), (11, 13)],
         "agent_1": [0, 2, (5, 9), (14, 16)],
+    },
+    "multiquad": {
+        "agent_0": [(0, 29)],
+        "agent_1": [(30, 53)],
     },
 }
 

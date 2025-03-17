@@ -10,7 +10,7 @@ import jax.numpy as jp
 from brax import envs
 import imageio
 import mujoco  # Used to create an OpenGL context
-import multi_quad_env  
+import jaxmarl.environments.mabrax.multi_quad_env as multi_quad_env  
 
 def main():
     # Load the environment by its registered name.
