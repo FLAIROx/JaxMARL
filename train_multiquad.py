@@ -102,8 +102,9 @@ def main():
         rng, key = jax.random.split(rng)
         actions = policy_fn(train_state.params, env.get_obs(state[1]), key)  
         rng, key = jax.random.split(rng)
-        obs, state, rewards, dones, info = env.step_env(key, state, actions)
-        rollout.append(state[0])
+        render_frame, new_state, rewards, dones, info = env.step_env(key, state[1], actions)
+        rollout.append(render_frame)
+        state = (render_frame, new_state)
     state = jax.block_until_ready(state)
     print("Simulation finished.")
     
