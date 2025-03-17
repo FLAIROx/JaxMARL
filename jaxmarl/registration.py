@@ -21,6 +21,7 @@ from .environments import (
     Hopper,
     Walker2d,
     HalfCheetah,
+    MultiQuad,
     InTheGrid,
     InTheGrid_2p,
     InTheMatrix,
@@ -89,6 +90,8 @@ def make(env_id: str, **env_kwargs):
         env = Humanoid(**env_kwargs)
     elif env_id == "walker2d_2x3":
         env = Walker2d(**env_kwargs)
+    elif env_id == "multiquad_2x4":
+        env = MultiQuad(**env_kwargs)
 
     # 5. InTheGrid
     elif env_id == "storm":
