@@ -145,6 +145,7 @@ registered_envs = [
     "hopper_3x1",
     "humanoid_9|8",
     "walker2d_2x3",
+    "multiquad_2x4",
     "storm",
     "storm_2p",
     "storm_np",
