@@ -67,7 +67,7 @@ class Transition(NamedTuple):
 
 def batchify(x: dict, agent_list, num_actors):
     max_dim = max([x[a].shape[-1] for a in agent_list])
-    print('max_dim', max_dim)
+    #print('max_dim', max_dim)
     def pad(z):
         return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + (max_dim - z.shape[-1],))], -1)
 
