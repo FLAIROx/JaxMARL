@@ -53,11 +53,11 @@ def main():
         "SEED": 0,
         "DISABLE_JIT": False,
         "PROJECT": "single_quad_rl",
-        "ENTITY": f"quad_marl_{int(time.time())}",
+        "NAME": f"quad_marl_{int(time.time())}",
         "WANDB_MODE": "online"
     }
     wandb.init(
-        entity=config["ENTITY"],
+        name=config["NAME"],
         project=config["PROJECT"],
         tags=["IPPO", "FF"],
         config=config,
