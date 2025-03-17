@@ -12,6 +12,7 @@ import mujoco  # Used to create an OpenGL context
 from brax import envs
 import jaxmarl
 import time
+import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
@@ -23,8 +24,11 @@ def render_video(rollout, env, render_every=2, width=1280, height=720):
     print("Starting rendering...")
     frames = env.render(rollout[::render_every], camera="track", width=width, height=height)
     fps = float(1.0 / (env.dt * render_every))
-    video_filename = "trained_rollout_video.mp4"
+    # Changed video filename as per previous code
+    video_filename = "trained_policy_video.mp4"
     imageio.mimsave(video_filename, frames, fps=fps)
+    # New wandb logging for the video
+    wandb.log({"trained_policy_video": wandb.Video(video_filename, format="mp4")})
     print(f"Video saved to {video_filename}")
 
 def main():
