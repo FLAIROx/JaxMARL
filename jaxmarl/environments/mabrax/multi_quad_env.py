@@ -189,8 +189,13 @@ class MultiQuadEnv(PipelineEnv):
         quad2_angvel,         # (3,)
         quad2_linear_acc,     # (3,)
         quad2_angular_acc,    # (3,)
-        last_action,          # (nu,)
+        last_action,          # (8,)
     ])
+
+    # team state: 0-5
+    # quad1 state: 6-29
+    # quad2 state: 30-53
+    # last action: 54-61
     return obs
 
   def calc_reward(self, obs, sim_time, collision, out_of_bounds, action,
