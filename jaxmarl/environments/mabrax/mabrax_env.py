@@ -133,12 +133,14 @@ class MABraxEnv(MultiAgentEnv):
         return self.map_global_obs_to_agents(state.obs)
 
     def render(self, state, **kwargs):
-        # Ensure each state in the trajectory has 'q' and 'qd' attributes.
+        # Ensure each state in the trajectory has the attributes required for rendering.
         def convert(s):
-            try:
-                _ = s.q
-            except AttributeError:
-                s = s.replace(q=s.qp.q, qd=s.qp.qd)
+            # If s already has attribute 'q', return as-is.
+            if hasattr(s, "q"):
+                return s
+            # If s has a pipeline_state with attribute 'q', use that.
+            if hasattr(s, "pipeline_state") and hasattr(s.pipeline_state, "q"):
+                return s.pipeline_state
             return s
         traj = state if isinstance(state, (list, tuple)) else [state]
         traj = [convert(s) for s in traj]
