@@ -36,7 +36,7 @@ def main():
     config = {
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {},
-        "TOTAL_TIMESTEPS": 300_000_000,
+        "TOTAL_TIMESTEPS": 200_000_000,
         "NUM_ENVS": 1024,
         "NUM_STEPS": 2048,
         "NUM_MINIBATCHES": 8,
@@ -68,7 +68,7 @@ def main():
     rng, rng_train = jax.random.split(rng)
     
     # Train the policy using IPPO training routine from ippo_ff_mabrax.py
-    train_fn = make_train(config, rng_train)
+    train_fn = jax.jit(make_train(config, rng_train))
     out = train_fn(rng)
     # Extract the trained train_state (the first element of runner_state)
     train_state = out["runner_state"][0]
