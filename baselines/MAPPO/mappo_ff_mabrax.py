@@ -123,7 +123,8 @@ def make_train(config, rng_init):
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
-                actor_state, critic_state, env_state, last_obs, rng = runner_state
+                # Changed unpacking to include update_count
+                actor_state, critic_state, env_state, last_obs, update_count, rng = runner_state
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 global_obs = jnp.concatenate([obs_batch]*len(env.agents), axis=-1)
@@ -153,7 +154,7 @@ def make_train(config, rng_init):
                     global_obs,
                     info,
                 )
-                runner_state = (actor_state, critic_state, env_state, obsv, rng)
+                runner_state = (actor_state, critic_state, env_state, obsv, update_count, rng)
                 return runner_state, transition
 
             runner_state, traj_batch = jax.lax.scan(
