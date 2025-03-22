@@ -200,6 +200,8 @@ def make_train(config, rng_init):
                     traj_batch, advantages, targets = batch_info
 
                     def _loss_fn(params, traj_batch, gae, targets):
+                        # Added: compute predicted value using the critic network.
+                        value = critic_net.apply(critic_state.params, traj_batch.global_obs)
                         # RERUN NETWORK
                         pi = actor_net.apply(params, traj_batch.obs)
                         log_prob = pi.log_prob(traj_batch.action)
