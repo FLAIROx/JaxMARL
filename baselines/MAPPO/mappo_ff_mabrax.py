@@ -21,15 +21,18 @@ from omegaconf import OmegaConf
 class ActorFF(nn.Module):
     action_dim: int
     config: Dict
+    activation: str = None  # added new parameter to accept activation
+
     @nn.compact
     def __call__(self, obs):
-        activation = nn.relu if self.config["ACTIVATION"]=="relu" else nn.tanh
+        act = self.activation if self.activation is not None else self.config["ACTIVATION"]
+        activation_fn = nn.relu if act == "relu" else nn.tanh
         x = nn.Dense(128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(obs)
-        x = activation(x)
+        x = activation_fn(x)
         x = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
-        x = activation(x)
+        x = activation_fn(x)
         x = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
-        x = activation(x)
+        x = activation_fn(x)
         logits = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(x)
         pi = distrax.Categorical(logits=logits)
         return pi
