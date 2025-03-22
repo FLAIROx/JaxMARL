@@ -163,6 +163,7 @@ class MultiQuadEnv(PipelineEnv):
     quad1_rot = jp_R_from_quat(quad1_quat).ravel()
     quad1_linear_acc = data.cacc[self.q1_body_id][3:6]
     quad1_angular_acc = data.cacc[self.q1_body_id][:3]
+    quad1_id = jp.array([1.0, 0.0])
 
     # Quad 2 state.
     quad2_pos = data.xpos[self.q2_body_id]
@@ -173,6 +174,7 @@ class MultiQuadEnv(PipelineEnv):
     quad2_rot = jp_R_from_quat(quad2_quat).ravel()
     quad2_linear_acc = data.cacc[self.q2_body_id][3:6]
     quad2_angular_acc = data.cacc[self.q2_body_id][:3]
+    quad2_id = jp.array([0.0, 1.0])
 
     # Include last action in the observation.
     obs = jp.concatenate([
@@ -192,6 +194,9 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
+        
+        self.quad1_id,        # (2,)  62-63
+        self.quad2_id         # (2,)  64-65
     ])
 
     # team state: 0-5
