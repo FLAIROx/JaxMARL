@@ -175,21 +175,21 @@ class MultiQuadEnv(PipelineEnv):
 
     # Include last action in the observation.
     obs = jp.concatenate([
-        payload_error,        # (3,)
-        payload_linvel,       # (3,)
-        quad1_rel,            # (3,)
-        quad1_rot,            # (9,)
-        quad1_linvel,         # (3,)
-        quad1_angvel,         # (3,)
-        quad1_linear_acc,     # (3,)
-        quad1_angular_acc,    # (3,)
-        quad2_rel,            # (3,)
-        quad2_rot,            # (9,)
-        quad2_linvel,         # (3,)
-        quad2_angvel,         # (3,)
-        quad2_linear_acc,     # (3,)
-        quad2_angular_acc,    # (3,)
-        last_action,          # (8,)
+        payload_error,        # (3,)  0-2
+        payload_linvel,       # (3,)  3-5
+        quad1_rel,            # (3,)  6-8
+        quad1_rot,            # (9,)  9-17
+        quad1_linvel,         # (3,)  18-20
+        quad1_angvel,         # (3,)  21-23
+        quad1_linear_acc,     # (3,)  24-26
+        quad1_angular_acc,    # (3,)  27-29
+        quad2_rel,            # (3,)  30-32
+        quad2_rot,            # (9,)  33-41
+        quad2_linvel,         # (3,)  42-44
+        quad2_angvel,         # (3,)  45-47
+        quad2_linear_acc,     # (3,)  48-50
+        quad2_angular_acc,    # (3,)  51-53
+        last_action,          # (8,)  54-61
     ])
 
     # team state: 0-5
