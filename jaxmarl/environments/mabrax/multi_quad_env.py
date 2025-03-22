@@ -175,6 +175,7 @@ class MultiQuadEnv(PipelineEnv):
 
     # Include last action in the observation.
     obs = jp.concatenate([
+      # ----                  # Shape  Index
         payload_error,        # (3,)  0-2
         payload_linvel,       # (3,)  3-5
         quad1_rel,            # (3,)  6-8
