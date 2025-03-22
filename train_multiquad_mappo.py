@@ -36,7 +36,7 @@ def main():
     config = {
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {},
-        "TOTAL_TIMESTEPS": 200_000_000,
+        "TOTAL_TIMESTEPS": 100_000_000,
         "NUM_ENVS": 1024,
         "NUM_STEPS": 2048,
         "NUM_MINIBATCHES": 8,
@@ -79,12 +79,12 @@ def main():
     # Initialize the ActorCritic network with proper dimensions (use first agent's spaces)
     obs_shape = env.observation_spaces[env.agents[0]].shape[0]
     act_dim = env.action_spaces[env.agents[0]].shape[0]
-    network = ActorCritic(action_dim=act_dim, activation=config["ACTIVATION"])
+    network = ActorCritic(action_dim=act_dim, config=config)
     
     # Define a policy function to map observations to actions using the trained parameters
     def policy_fn(params, obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        pi, _ = network.apply(params, batched_obs)
+        pi = network.apply(params, batched_obs)
         actions = pi.sample(seed=key)
         unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
         # Squeeze the extra batch dimension so each agent's action has shape (action_dim,)
