@@ -14,7 +14,8 @@ import jaxmarl
 import time
 import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
-from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
+from baselines.MAPPO.mappo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
+# from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
 # New function to render and save video
 def render_video(rollout, env, render_every=2, width=1280, height=720):
