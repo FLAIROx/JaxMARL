@@ -21,7 +21,7 @@ from omegaconf import OmegaConf
 class ActorFF(nn.Module):
     action_dim: int
     config: Dict
-    activation: str = None  # added new parameter to accept activation
+    activation: str = None 
 
     @nn.compact
     def __call__(self, obs):
