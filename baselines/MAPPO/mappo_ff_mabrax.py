@@ -195,7 +195,8 @@ def make_train(config, rng_init):
             
             # UPDATE NETWORK
             def _update_epoch(update_state, unused):
-                def _update_minbatch(actor_state, critic_state, batch_info):
+                def _update_minbatch(carry, batch_info):
+                    actor_state, critic_state = carry
                     traj_batch, advantages, targets = batch_info
 
                     def _loss_fn(params, traj_batch, gae, targets):
@@ -250,7 +251,7 @@ def make_train(config, rng_init):
                         "ratio": total_loss[1][3],
                     }
                     
-                    return actor_state, critic_state, loss_info
+                    return (actor_state, critic_state), loss_info
 
                 actor_state, critic_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
@@ -272,8 +273,9 @@ def make_train(config, rng_init):
                     ),
                     shuffled_batch,
                 )
-                actor_state, critic_state, loss_info = jax.lax.scan(
-                    _update_minbatch, actor_state, critic_state, minibatches
+                # Update: Wrap actor_state and critic_state in a tuple for the scan.
+                (actor_state, critic_state), loss_info = jax.lax.scan(
+                    _update_minbatch, (actor_state, critic_state), minibatches
                 )
                 update_state = (actor_state, critic_state, traj_batch, advantages, targets, rng)
                 return update_state, loss_info
