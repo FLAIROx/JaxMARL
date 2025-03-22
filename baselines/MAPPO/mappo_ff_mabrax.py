@@ -162,7 +162,7 @@ def make_train(config, rng_init):
             )
             print('traj_batch', traj_batch)
             # CALCULATE ADVANTAGE
-            actor_state, critic_state, env_state, last_obs, rng = runner_state
+            actor_state, critic_state, env_state, last_obs, update_count, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
             global_obs = jnp.concatenate([last_obs_batch]*len(env.agents), axis=-1)
             last_val = critic_net.apply(critic_state.params, global_obs)
