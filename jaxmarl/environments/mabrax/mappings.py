@@ -101,8 +101,8 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         "agent_1": [0, 2, (5, 9), (14, 16)],
     },
     "multiquad_2x4": {
-        "agent_0": [(62, 63), (0, 5), (6, 29), (54, 57), (30, 32)], # Team state, agent 0's observation, last action agent 0, agent 1 rel pos
-        "agent_1": [(64, 65), (0, 5), (30, 53), (58, 61), (6, 8)], # Team state, agent 1's observation, last action agent 1, agent 0 rel pos
+        "agent_0": [62, (0, 5), (6, 29), (54, 57), (30, 32)], # Team state, agent 0's observation, last action agent 0, agent 1 rel pos
+        "agent_1": [62, (0, 5), (30, 53), (58, 61), (6, 8)], # Team state, agent 1's observation, last action agent 1, agent 0 rel pos
     },
 }
 
