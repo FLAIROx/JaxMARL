@@ -48,6 +48,7 @@ class MultiQuadEnv(PipelineEnv):
       reset_noise_scale: float = 0.1,          # Noise scale for initial state reset.
       **kwargs,
   ):
+    print("Initializing MultiQuadEnv")
     # Load the MJX model from the XML file.
     mj_model = mujoco.MjModel.from_xml_path("mujoco/two_quad_payload.xml")
     # Convert the MuJoCo model to a Brax system.
