@@ -38,7 +38,7 @@ def main():
         "ENV_KWARGS": {},
         "TOTAL_TIMESTEPS": 500_000_000,
         "NUM_ENVS": 1024,
-        "NUM_STEPS": 2048,
+        "NUM_STEPS": 4096,
         "NUM_MINIBATCHES": 8,
         "UPDATE_EPOCHS": 2,
         "ANNEAL_LR": False,
@@ -92,7 +92,7 @@ def main():
         return unbatched
     
     # Simulation: run an episode using the trained policy
-    sim_steps = 2500
+    sim_steps = 4000
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
     rollout = [state[1]]  # store the brax env state
