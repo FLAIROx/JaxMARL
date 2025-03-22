@@ -245,6 +245,7 @@ class MultiQuadEnv(PipelineEnv):
     reward += 10 * safe_distance_reward
     reward += velocity_towards_target
     reward += up_reward
+    reward += 20 * quad_distance
     reward -= 10 * linvel_penalty
     reward -= collision_penalty
     reward -= out_of_bounds_penalty
