@@ -88,7 +88,9 @@ def make_train(config, rng_init):
         frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
         return config["LR"] * frac
 
-    actor_net = ActorFF(env.action_space(env.agents[0]).n, config)
+    action_space = env.action_space(env.agents[0])
+    action_dim = action_space.n if hasattr(action_space, "n") else action_space.shape[0]
+    actor_net = ActorFF(action_dim, config)
     critic_net = CriticFF(config)
     init_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
     actor_params = actor_net.init(rng_init, init_obs)
