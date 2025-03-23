@@ -197,7 +197,7 @@ class MultiQuadEnv(PipelineEnv):
         quad1_id,             # (1,)  62
         quad2_id,             # (1,)  63
         quad1_rel - quad2_rel, # (3,)  64-66
-        jp.linalg.norm(quad1_rel - quad2_rel) # (1,)  67
+        jp.array([jp.linalg.norm(quad1_rel - quad2_rel)]) # (1,)  67
     ])
 
     # team state: 0-5
