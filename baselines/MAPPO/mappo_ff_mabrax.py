@@ -97,7 +97,7 @@ def make_train(config, rng_init):
     critic_net = CriticFF(config)
     init_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
     actor_params = actor_net.init(rng_init, init_obs)
-    global_dim = np.prod(env.observation_space(env.agents[0]).shape) * len(env.agents)
+    global_dim = env.observation_space().shape
     critic_params = critic_net.init(rng_init, jnp.zeros((global_dim,)))
     
     if config["ANNEAL_LR"]:

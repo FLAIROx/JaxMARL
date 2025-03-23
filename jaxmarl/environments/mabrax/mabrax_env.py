@@ -206,6 +206,8 @@ class MABraxEnv(MultiAgentEnv):
             else:
                 # Just agent's own observations
                 agent_obs[agent_name] = global_obs[obs_indices]
+
+            agent_obs["global"] = global_obs
         return agent_obs
 
     @property
