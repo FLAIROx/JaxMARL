@@ -195,7 +195,8 @@ class MultiQuadEnv(PipelineEnv):
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
         quad1_id,             # (1,)  62
-        quad2_id              # (1,)  63
+        quad2_id,             # (1,)  63
+        quad1_rel - quad2_rel # (3,)  64-66
     ])
 
     # team state: 0-5
