@@ -131,14 +131,8 @@ def make_train(config, rng_init):
                 # Compute per-agent observations
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
 
-                # Reshape to [NUM_ENVS, num_agents, obs_dim]
-                obs_reshaped = obs_batch.reshape((config["NUM_ENVS"], env.num_agents, -1))
-                # Concatenate the observations of all agents in one environment along the last dimension.
-                global_obs_env = jnp.concatenate(
-                    [obs_reshaped[:, i, :] for i in range(env.num_agents)],
-                    axis=-1
-                )  # shape: (NUM_ENVS, global_dim)
-                # Replicate global_obs for each agent in that environment to match actor ordering.
+   
+                global_obs_env = last_obs["global"]  # use global observation
                 global_obs = jnp.repeat(global_obs_env, env.num_agents, axis=0)
 
                 # SELECT ACTION
@@ -176,8 +170,8 @@ def make_train(config, rng_init):
             print('traj_batch', traj_batch)
             # CALCULATE ADVANTAGE
             actor_state, critic_state, env_state, last_obs, update_count, rng = runner_state
-            last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            global_obs = jnp.concatenate([last_obs_batch]*len(env.agents), axis=-1)
+            global_obs_env = last_obs["global"]  # use global observation
+            global_obs = jnp.repeat(global_obs_env, env.num_agents, axis=0)
             last_val = critic_net.apply(critic_state.params, global_obs)
 
             def _calculate_gae(traj_batch, last_val):
