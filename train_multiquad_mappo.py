@@ -59,7 +59,7 @@ def main():
     wandb.init(
         name=config["NAME"],
         project=config["PROJECT"],
-        tags=["MAPPO", "FF"], # changed from ["IPPO", "FF"]
+        tags=["MAPPO", "FF"], 
         config=config,
         mode=config["WANDB_MODE"],
     )

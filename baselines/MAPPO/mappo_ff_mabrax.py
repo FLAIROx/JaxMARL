@@ -126,7 +126,6 @@ def make_train(config, rng_init):
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
-                # Changed unpacking to include update_count
                 actor_state, critic_state, env_state, last_obs, update_count, rng = runner_state
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
