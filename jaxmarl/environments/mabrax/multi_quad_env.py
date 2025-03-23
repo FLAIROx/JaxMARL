@@ -260,7 +260,7 @@ class MultiQuadEnv(PipelineEnv):
     reward -= action_energy_penalty
     reward -= ang_vel_penalty
     reward -= 5 * linvel_quad_penalty
-    reward /= 1000.0
+    reward /= 25.0
 
     return reward, None, {}
 
