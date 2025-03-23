@@ -128,8 +128,19 @@ def make_train(config, rng_init):
             def _env_step(runner_state, unused):
                 actor_state, critic_state, env_state, last_obs, update_count, rng = runner_state
 
+                # Compute per-agent observations
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                global_obs = jnp.concatenate([obs_batch]*len(env.agents), axis=-1)
+
+                # Reshape to [NUM_ENVS, num_agents, obs_dim]
+                obs_reshaped = obs_batch.reshape((config["NUM_ENVS"], env.num_agents, -1))
+                # Concatenate the observations of all agents in one environment along the last dimension.
+                global_obs_env = jnp.concatenate(
+                    [obs_reshaped[:, i, :] for i in range(env.num_agents)],
+                    axis=-1
+                )  # shape: (NUM_ENVS, global_dim)
+                # Replicate global_obs for each agent in that environment to match actor ordering.
+                global_obs = jnp.repeat(global_obs_env, env.num_agents, axis=0)
+
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
                 
