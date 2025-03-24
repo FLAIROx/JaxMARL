@@ -211,7 +211,32 @@ class MultiQuadEnv(PipelineEnv):
     quad2_angular_acc = data.cacc[self.q2_body_id][:3]
     quad2_id = jp.array([0.0, 1.0])
 
-    # Include last action in the observation.
+    # local-frame observations for each quad.
+    # For quad1:
+    R1 = jp_R_from_quat(quad1_quat)      # rotation matrix: local -> global
+    R1_T = jp.transpose(R1)              # global -> local
+    local_quad1_rel         = jp.matmul(R1_T, quad1_rel)
+    local_quad1_linvel      = jp.matmul(R1_T, quad1_linvel)
+    local_quad1_angvel      = jp.matmul(R1_T, quad1_angvel)
+    local_quad1_linear_acc  = jp.matmul(R1_T, quad1_linear_acc)
+    local_quad1_angular_acc = jp.matmul(R1_T, quad1_angular_acc)
+    q1_q2_rel = quad2_pos - quad1_pos
+    local_q1_q2_rel = jp.matmul(R1_T, q1_q2_rel)
+    local_q1_payload_error = jp.matmul(R1_T, payload_error)
+    local_q1_payload_linvel = jp.matmul(R1_T, payload_linvel)
+
+    # For quad2:
+    R2 = jp_R_from_quat(quad2_quat)
+    R2_T = jp.transpose(R2)
+    local_quad2_rel         = jp.matmul(R2_T, quad2_rel)
+    local_quad2_linvel      = jp.matmul(R2_T, quad2_linvel)
+    local_quad2_angvel      = jp.matmul(R2_T, quad2_angvel)
+    local_quad2_linear_acc  = jp.matmul(R2_T, quad2_linear_acc)
+    local_quad2_angular_acc = jp.matmul(R2_T, quad2_angular_acc)
+    local_q2_q1_rel = jp.matmul(R2_T, -q1_q2_rel)
+    local_q2_payload_error = jp.matmul(R2_T, payload_error)
+    local_q2_payload_linvel = jp.matmul(R2_T, payload_linvel)
+
     obs = jp.concatenate([
       # ----                  # Shape  Index
         payload_error,        # (3,)  0-2
@@ -229,16 +254,22 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
-        #quad1_id,             # (2,)  62-63
-        #quad2_id,             # (2,)  64-65
-        quad1_rel - quad2_rel, # (3,)  66-68
-        jp.array([jp.linalg.norm(quad1_rel - quad2_rel)]) # (1,)  69
+        local_quad1_rel,      # (3,)  62-64
+        local_quad1_linvel,   # (3,)  65-67
+        local_quad1_angvel,   # (3,)  68-70
+        local_quad1_linear_acc, # (3,) 71-73
+        local_quad1_angular_acc, # (3,) 74-76
+        local_quad2_rel,      # (3,)  77-79
+        local_quad2_linvel,   # (3,)  80-82
+        local_quad2_angvel,   # (3,)  83-85
+        local_quad2_linear_acc, # (3,) 86-88
+        local_quad2_angular_acc, # (3,) 89-91
+        local_q1_q2_rel,      # (3,)  92-94
+        local_q2_q1_rel,      # (3,)  95-97
+        local_q1_payload_error, # (3,) 98-100
+        local_q2_payload_error, # (3,) 101-103
     ])
 
-    # team state: 0-5
-    # quad1 state: 6-29
-    # quad2 state: 30-53
-    # last action: 54-61
     return obs
 
   def calc_reward(self, obs, sim_time, collision, out_of_bounds, action,
