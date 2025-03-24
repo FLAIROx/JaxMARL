@@ -122,10 +122,12 @@ class MultiQuadEnv(PipelineEnv):
         
     quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
     quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
+    quat_q1_corrected = jp.array([quat_q1[1], quat_q1[2], quat_q1[3], quat_q1[0]])
+    quat_q2_corrected = jp.array([quat_q2[1], quat_q2[2], quat_q2[3], quat_q2[0]])
     start_q1 = self.q1_body_id * 7 + 3
     start_q2 = self.q2_body_id * 7 + 3
-    qpos = qpos.at[start_q1:start_q1+4].set(quat_q1)
-    qpos = qpos.at[start_q2:start_q2+4].set(quat_q2)
+    qpos = qpos.at[start_q1:start_q1+4].set(quat_q1_corrected)
+    qpos = qpos.at[start_q2:start_q2+4].set(quat_q2_corrected)
     
     pipeline_state = self.pipeline_init(qpos, qvel)
     # Initialize last action as zeros.
