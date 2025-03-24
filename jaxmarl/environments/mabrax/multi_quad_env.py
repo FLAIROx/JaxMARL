@@ -194,8 +194,8 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
-        quad1_id,             # (2,)  62-63
-        quad2_id,             # (2,)  64-65
+        #quad1_id,             # (2,)  62-63
+        #quad2_id,             # (2,)  64-65
         quad1_rel - quad2_rel, # (3,)  66-68
         jp.array([jp.linalg.norm(quad1_rel - quad2_rel)]) # (1,)  69
     ])
