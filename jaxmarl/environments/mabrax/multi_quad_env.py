@@ -93,6 +93,39 @@ class MultiQuadEnv(PipelineEnv):
         rng1, (self.sys.nq,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
     qvel = jax.random.uniform(
         rng2, (self.sys.nv,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
+        
+    rng, rng_euler = jax.random.split(rng, 2)
+    keys = jax.random.split(rng_euler, 6)
+    angle_range = 30 * jp.pi / 180  # 30 degrees in radians
+    # Quad 1: sample roll, pitch, yaw.
+    roll_q1 = jax.random.uniform(keys[0], minval=-angle_range, maxval=angle_range)
+    pitch_q1 = jax.random.uniform(keys[1], minval=-angle_range, maxval=angle_range)
+    yaw_q1 = jax.random.uniform(keys[2], minval=-jp.pi, maxval=jp.pi)
+    # Quad 2: sample roll, pitch, yaw.
+    roll_q2 = jax.random.uniform(keys[3], minval=-angle_range, maxval=angle_range)
+    pitch_q2 = jax.random.uniform(keys[4], minval=-angle_range, maxval=angle_range)
+    yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
+    
+    def euler_to_quat(roll, pitch, yaw):
+        cr = jp.cos(roll * 0.5)
+        sr = jp.sin(roll * 0.5)
+        cp = jp.cos(pitch * 0.5)
+        sp = jp.sin(pitch * 0.5)
+        cy = jp.cos(yaw * 0.5)
+        sy = jp.sin(yaw * 0.5)
+        return jp.array([
+            cr * cp * cy + sr * sp * sy,
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy
+        ])
+        
+    quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
+    quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
+    start_q1 = self.q1_body_id * 7 + 3
+    start_q2 = self.q2_body_id * 7 + 3
+    qpos = qpos.at[start_q1:start_q1+4].set(quat_q1)
+    qpos = qpos.at[start_q2:start_q2+4].set(quat_q2)
     
     pipeline_state = self.pipeline_init(qpos, qvel)
     # Initialize last action as zeros.
