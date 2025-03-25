@@ -236,6 +236,21 @@ class MultiQuadEnv(PipelineEnv):
     local_q2_q1_rel = jp.matmul(R2_T, -q1_q2_rel)
     local_q2_payload_error = jp.matmul(R2_T, payload_error)
     local_q2_payload_linvel = jp.matmul(R2_T, payload_linvel)
+    
+    # Helper function to convert Cartesian to spherical coordinates.
+    def cartesian_to_spherical(vec):
+        r = jp.linalg.norm(vec) + 1e-6
+        theta = jp.arccos(vec[2] / r)
+        phi = jp.arctan2(vec[1], vec[0])
+        return jp.array([r, theta, phi])
+    
+    # Compute spherical coordinates for the relevant local vectors.
+    sph_local_quad1_rel = cartesian_to_spherical(local_quad1_rel)
+    sph_local_quad2_rel = cartesian_to_spherical(local_quad2_rel)
+    sph_local_q1_payload_error = cartesian_to_spherical(local_q1_payload_error)
+    sph_local_q2_payload_error = cartesian_to_spherical(local_q2_payload_error)
+    sph_local_q1_q2_rel = cartesian_to_spherical(local_q1_q2_rel)
+    sph_local_q2_q1_rel = cartesian_to_spherical(local_q2_q1_rel)
 
     obs = jp.concatenate([
       # ----                  # Shape  Index
@@ -267,7 +282,15 @@ class MultiQuadEnv(PipelineEnv):
         local_q1_q2_rel,      # (3,)  92-94
         local_q2_q1_rel,      # (3,)  95-97
         local_q1_payload_error, # (3,) 98-100
-        local_q2_payload_error, # (3,) 101-103
+        local_q1_payload_linvel, # (3,) 101-103
+        local_q2_payload_error, # (3,) 104-106
+        local_q2_payload_linvel, # (3,) 107-109
+        sph_local_quad1_rel,        # (3,) 110-112
+        sph_local_quad2_rel,        # (3,) 113-115
+        sph_local_q1_payload_error, # (3,) 116-118
+        sph_local_q2_payload_error, # (3,) 119-121
+        sph_local_q1_q2_rel,        # (3,) 122-124
+        sph_local_q2_q1_rel,        # (3,) 125-127
     ])
 
     return obs
