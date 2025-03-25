@@ -105,9 +105,14 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     #     "agent_1": [(0, 5), (30, 53), (58, 61), (6, 8), (18,20)], # Team state, agent 1's observation, last action agent 1, agent 0 rel pos
     # },
     ## local quad mappings
+    # "multiquad_2x4": {
+    #     "agent_0": [(98,103), (9,17), (62,76), (54, 57), (92,94)], # Team state, agent 0's observation, last action agent 0, agent 1 rel pos
+    #     "agent_1": [(104,109), (33, 41), (77, 91),(58,61), (95,97)], # Team state, agent 1's observation, last action agent 1, agent 0 rel pos
+    # },
+    ## spherical local quad mappings
     "multiquad_2x4": {
-        "agent_0": [(98,103), (9,17), (62,76), (54, 57), (92,94)], # Team state, agent 0's observation, last action agent 0, agent 1 rel pos
-        "agent_1": [(104,109), (33, 41), (77, 91),(58,61), (95,97)], # Team state, agent 1's observation, last action agent 1, agent 0 rel pos
+        "agent_0": [(116,118),(101,103), (9,17),(110,112), (65,76), (54, 57), (122,124)], # Team state, agent 0's observation, last action agent 0, agent 1 rel pos
+        "agent_1": [(119,121),(107,109), (33, 41), (113,115), (80, 91),(58,61), (125,127)], # Team state, agent 1's observation, last action agent 1, agent 0 rel pos
     },
 }
 
