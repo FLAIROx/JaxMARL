@@ -213,46 +213,46 @@ class MultiQuadEnv(PipelineEnv):
     quad2_angular_acc = data.cacc[self.q2_body_id][:3]
     quad2_id = jp.array([0.0, 1.0])
 
-    # local-frame observations for each quad.
-    # For quad1:
-    R1 = jp_R_from_quat(quad1_quat)      # rotation matrix: local -> global
-    R1_T = jp.transpose(R1)              # global -> local
-    local_quad1_rel         = jp.matmul(R1_T, quad1_rel)
-    local_quad1_linvel      = jp.matmul(R1_T, quad1_linvel)
-    local_quad1_angvel      = jp.matmul(R1_T, quad1_angvel)
-    local_quad1_linear_acc  = jp.matmul(R1_T, quad1_linear_acc)
-    local_quad1_angular_acc = jp.matmul(R1_T, quad1_angular_acc)
-    q1_q2_rel = quad2_pos - quad1_pos
-    local_q1_q2_rel = jp.matmul(R1_T, q1_q2_rel)
-    local_q1_payload_error = jp.matmul(R1_T, payload_error)
-    local_q1_payload_linvel = jp.matmul(R1_T, payload_linvel)
+    # # local-frame observations for each quad.
+    # # For quad1:
+    # R1 = jp_R_from_quat(quad1_quat)      # rotation matrix: local -> global
+    # R1_T = jp.transpose(R1)              # global -> local
+    # local_quad1_rel         = jp.matmul(R1_T, quad1_rel)
+    # local_quad1_linvel      = jp.matmul(R1_T, quad1_linvel)
+    # local_quad1_angvel      = jp.matmul(R1_T, quad1_angvel)
+    # local_quad1_linear_acc  = jp.matmul(R1_T, quad1_linear_acc)
+    # local_quad1_angular_acc = jp.matmul(R1_T, quad1_angular_acc)
+    # q1_q2_rel = quad2_pos - quad1_pos
+    # local_q1_q2_rel = jp.matmul(R1_T, q1_q2_rel)
+    # local_q1_payload_error = jp.matmul(R1_T, payload_error)
+    # local_q1_payload_linvel = jp.matmul(R1_T, payload_linvel)
 
-    # For quad2:
-    R2 = jp_R_from_quat(quad2_quat)
-    R2_T = jp.transpose(R2)
-    local_quad2_rel         = jp.matmul(R2_T, quad2_rel)
-    local_quad2_linvel      = jp.matmul(R2_T, quad2_linvel)
-    local_quad2_angvel      = jp.matmul(R2_T, quad2_angvel)
-    local_quad2_linear_acc  = jp.matmul(R2_T, quad2_linear_acc)
-    local_quad2_angular_acc = jp.matmul(R2_T, quad2_angular_acc)
-    local_q2_q1_rel = jp.matmul(R2_T, -q1_q2_rel)
-    local_q2_payload_error = jp.matmul(R2_T, payload_error)
-    local_q2_payload_linvel = jp.matmul(R2_T, payload_linvel)
+    # # For quad2:
+    # R2 = jp_R_from_quat(quad2_quat)
+    # R2_T = jp.transpose(R2)
+    # local_quad2_rel         = jp.matmul(R2_T, quad2_rel)
+    # local_quad2_linvel      = jp.matmul(R2_T, quad2_linvel)
+    # local_quad2_angvel      = jp.matmul(R2_T, quad2_angvel)
+    # local_quad2_linear_acc  = jp.matmul(R2_T, quad2_linear_acc)
+    # local_quad2_angular_acc = jp.matmul(R2_T, quad2_angular_acc)
+    # local_q2_q1_rel = jp.matmul(R2_T, -q1_q2_rel)
+    # local_q2_payload_error = jp.matmul(R2_T, payload_error)
+    # local_q2_payload_linvel = jp.matmul(R2_T, payload_linvel)
     
-    # Helper function to convert Cartesian to spherical coordinates.
-    def cartesian_to_spherical(vec):
-        r = jp.linalg.norm(vec) + 1e-6
-        theta = jp.arccos(vec[2] / r)
-        phi = jp.arctan2(vec[1], vec[0])
-        return jp.array([r, theta, phi])
+    # # Helper function to convert Cartesian to spherical coordinates.
+    # def cartesian_to_spherical(vec):
+    #     r = jp.linalg.norm(vec) + 1e-6
+    #     theta = jp.arccos(vec[2] / r)
+    #     phi = jp.arctan2(vec[1], vec[0])
+    #     return jp.array([r, theta, phi])
     
-    # Compute spherical coordinates for the relevant local vectors.
-    sph_local_quad1_rel = cartesian_to_spherical(local_quad1_rel)
-    sph_local_quad2_rel = cartesian_to_spherical(local_quad2_rel)
-    sph_local_q1_payload_error = cartesian_to_spherical(local_q1_payload_error)
-    sph_local_q2_payload_error = cartesian_to_spherical(local_q2_payload_error)
-    sph_local_q1_q2_rel = cartesian_to_spherical(local_q1_q2_rel)
-    sph_local_q2_q1_rel = cartesian_to_spherical(local_q2_q1_rel)
+    # # Compute spherical coordinates for the relevant local vectors.
+    # sph_local_quad1_rel = cartesian_to_spherical(local_quad1_rel)
+    # sph_local_quad2_rel = cartesian_to_spherical(local_quad2_rel)
+    # sph_local_q1_payload_error = cartesian_to_spherical(local_q1_payload_error)
+    # sph_local_q2_payload_error = cartesian_to_spherical(local_q2_payload_error)
+    # sph_local_q1_q2_rel = cartesian_to_spherical(local_q1_q2_rel)
+    # sph_local_q2_q1_rel = cartesian_to_spherical(local_q2_q1_rel)
 
     obs = jp.concatenate([
       # ----                  # Shape  Index
@@ -271,28 +271,28 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
-        local_quad1_rel,      # (3,)  62-64
-        local_quad1_linvel,   # (3,)  65-67
-        local_quad1_angvel,   # (3,)  68-70
-        local_quad1_linear_acc, # (3,) 71-73
-        local_quad1_angular_acc, # (3,) 74-76
-        local_quad2_rel,      # (3,)  77-79
-        local_quad2_linvel,   # (3,)  80-82
-        local_quad2_angvel,   # (3,)  83-85
-        local_quad2_linear_acc, # (3,) 86-88
-        local_quad2_angular_acc, # (3,) 89-91
-        local_q1_q2_rel,      # (3,)  92-94
-        local_q2_q1_rel,      # (3,)  95-97
-        local_q1_payload_error, # (3,) 98-100
-        local_q1_payload_linvel, # (3,) 101-103
-        local_q2_payload_error, # (3,) 104-106
-        local_q2_payload_linvel, # (3,) 107-109
-        sph_local_quad1_rel,        # (3,) 110-112
-        sph_local_quad2_rel,        # (3,) 113-115
-        sph_local_q1_payload_error, # (3,) 116-118
-        sph_local_q2_payload_error, # (3,) 119-121
-        sph_local_q1_q2_rel,        # (3,) 122-124
-        sph_local_q2_q1_rel,        # (3,) 125-127
+        # local_quad1_rel,      # (3,)  62-64
+        # local_quad1_linvel,   # (3,)  65-67
+        # local_quad1_angvel,   # (3,)  68-70
+        # local_quad1_linear_acc, # (3,) 71-73
+        # local_quad1_angular_acc, # (3,) 74-76
+        # local_quad2_rel,      # (3,)  77-79
+        # local_quad2_linvel,   # (3,)  80-82
+        # local_quad2_angvel,   # (3,)  83-85
+        # local_quad2_linear_acc, # (3,) 86-88
+        # local_quad2_angular_acc, # (3,) 89-91
+        # local_q1_q2_rel,      # (3,)  92-94
+        # local_q2_q1_rel,      # (3,)  95-97
+        # local_q1_payload_error, # (3,) 98-100
+        # local_q1_payload_linvel, # (3,) 101-103
+        # local_q2_payload_error, # (3,) 104-106
+        # local_q2_payload_linvel, # (3,) 107-109
+        # sph_local_quad1_rel,        # (3,) 110-112
+        # sph_local_quad2_rel,        # (3,) 113-115
+        # sph_local_q1_payload_error, # (3,) 116-118
+        # sph_local_q2_payload_error, # (3,) 119-121
+        # sph_local_q1_q2_rel,        # (3,) 122-124
+        # sph_local_q2_q1_rel,        # (3,) 125-127
     ])
 
     return obs
