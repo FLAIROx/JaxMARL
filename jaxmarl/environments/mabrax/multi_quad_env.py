@@ -98,14 +98,15 @@ class MultiQuadEnv(PipelineEnv):
         
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
-    angle_range = 30 * jp.pi / 180  # 30 degrees in radians
-    # Quad 1: sample roll, pitch, yaw.
-    roll_q1 = jax.random.uniform(keys[0], minval=-angle_range, maxval=angle_range)
-    pitch_q1 = jax.random.uniform(keys[1], minval=-angle_range, maxval=angle_range)
+    std_dev = 15 * jp.pi / 180  # 15° in radians
+    clip_val = 45 * jp.pi / 180  # 45° in radians
+    # Quad 1: sample roll, pitch using normal distribution; yaw uniformly.
+    roll_q1 = jp.clip(jax.random.normal(keys[0]) * std_dev, -clip_val, clip_val)
+    pitch_q1 = jp.clip(jax.random.normal(keys[1]) * std_dev, -clip_val, clip_val)
     yaw_q1 = jax.random.uniform(keys[2], minval=-jp.pi, maxval=jp.pi)
-    # Quad 2: sample roll, pitch, yaw.
-    roll_q2 = jax.random.uniform(keys[3], minval=-angle_range, maxval=angle_range)
-    pitch_q2 = jax.random.uniform(keys[4], minval=-angle_range, maxval=angle_range)
+    # Quad 2: sample roll, pitch using normal distribution; yaw uniformly.
+    roll_q2 = jp.clip(jax.random.normal(keys[3]) * std_dev, -clip_val, clip_val)
+    pitch_q2 = jp.clip(jax.random.normal(keys[4]) * std_dev, -clip_val, clip_val)
     yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
     
     def euler_to_quat(roll, pitch, yaw):
