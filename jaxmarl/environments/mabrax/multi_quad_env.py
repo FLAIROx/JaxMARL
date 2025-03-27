@@ -98,7 +98,7 @@ class MultiQuadEnv(PipelineEnv):
         
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
-    std_dev = 15 * jp.pi / 180  # 15° in radians
+    std_dev = 10 * jp.pi / 180  # 10° in radians
     clip_val = 60 * jp.pi / 180  # 60° in radians
     # Quad 1: sample roll, pitch using normal distribution; yaw uniformly.
     roll_q1 = jp.clip(jax.random.normal(keys[0]) * std_dev, -clip_val, clip_val)
