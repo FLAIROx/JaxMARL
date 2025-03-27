@@ -27,7 +27,7 @@ def render_video(states, env, width=1280, height=720):
     video_filename = "initial_conditions_video.mp4"
     # Each frame lasts 1 second (fps=1)
     imageio.mimsave(video_filename, frames, fps=1)
-    wandb.log({"initial_conditions_video": wandb.Video(video_filename, format="mp4")})
+    #wandb.log({"initial_conditions_video": wandb.Video(video_filename, format="mp4")})
     print(f"Video saved to {video_filename}")
 
 def main():
