@@ -11,7 +11,7 @@ from brax.io import mjcf
 import jax
 from jax import numpy as jp
 import mujoco
-import numpy as np
+import os
 
 # Helper functions in JAX (converted from numpy/numba)
 def jp_R_from_quat(q: jp.ndarray) -> jp.ndarray:
@@ -50,7 +50,9 @@ class MultiQuadEnv(PipelineEnv):
   ):
     print("Initializing MultiQuadEnv")
     # Load the MJX model from the XML file.
-    mj_model = mujoco.MjModel.from_xml_path("mujoco/two_quad_payload.xml")
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    xml_path = os.path.join(current_dir, "mujoco", "two_quad_payload.xml")
+    mj_model = mujoco.MjModel.from_xml_path(xml_path)
     # Convert the MuJoCo model to a Brax system.
     sys = mjcf.load_model(mj_model)
     kwargs['n_frames'] = kwargs.get('n_frames', sim_steps_per_action)
