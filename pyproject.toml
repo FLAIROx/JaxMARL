@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 include = ['jaxmarl*']
 
 [tool.setuptools.package-data]
-jaxmarl = ["environments/mabrax/mujoco/*"]
+jaxmarl = ["environments/mabrax/mujoco/**/*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "jaxmarl.__version__"}
