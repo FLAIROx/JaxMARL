@@ -54,7 +54,7 @@
         <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" />
         <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
 
-        <site name="goal_marker" pos="0 0 1" size="0.01" type="sphere" rgba="0 1 0 0.7"/>
+        <site name="goal_marker" pos="0 0 1.5" size="0.01" type="sphere" rgba="0 1 0 0.7"/>
 <!-- 
         <site name="q0_start" pos="0 -0.15 1.1" euler="0 0 0" />
 <site name="q1_start" pos="0 0.15 1.1" euler="0 0 0" /> -->
@@ -63,7 +63,7 @@
         
 
         
-            <body name="payload" pos="0.0 0.0 1.0" >
+            <body name="payload" pos="0.0 0.0 1.5" >
             <camera name="track" pos="-1 0 0.5" quat="0.601501 0.371748 -0.371748 -0.601501"
                 mode="trackcom" />
             <joint type="free" actuatorfrclimited="false" damping="0.00001"/>
@@ -75,7 +75,7 @@
 
         <body
             name="q0_container"
-            pos="0 -0.15 1.1"
+            pos="0 -0.15 1.6"
             >        
             
             <joint type="free" actuatorfrclimited="false" />
@@ -142,7 +142,7 @@
 
         <body
             name="q1_container"
-            pos="0 0.15 1.1"
+            pos="0 0.15 1.6"
             >        
             
             <joint type="free" actuatorfrclimited="false" />
