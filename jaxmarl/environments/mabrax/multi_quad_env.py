@@ -78,34 +78,23 @@ class MultiQuadEnv(PipelineEnv):
     self.goal_radius = 0.8  # sphere radius for random goal position
     self.target_position = self.goal_center
 
-    # Cache body IDs for fast lookup.
+    # Cache body IDs for fast lookup using body names.
     self.payload_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "payload")
     self.q1_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q0_container")
     self.q2_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_container")
-    
-    # Cache joint IDs for fast lookup.
-    self.payload_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "payload")
-    self.q1_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q0_container")
-    self.q2_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_container")
 
-    # Cache the starting indices in qpos using the joint qpos addresses.
-    self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
-    self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
-    self.q2_qpos_start = sys.mj_model.jnt_qposadr[self.q2_joint_id]
+    # Cache the starting indices in qpos using the body qpos address.
+    self.payload_qpos_start = sys.mj_model.body_qposadr[self.payload_body_id]
+    self.q1_qpos_start = sys.mj_model.body_qposadr[self.q1_body_id]
+    self.q2_qpos_start = sys.mj_model.body_qposadr[self.q2_body_id]
 
     print("IDs:")
     print("Payload body ID:", self.payload_body_id)
     print("Quad 1 body ID:", self.q1_body_id)
     print("Quad 2 body ID:", self.q2_body_id)
-    print("Payload joint ID:", self.payload_joint_id)
-    print("Quad 1 joint ID:", self.q1_joint_id)
-    print("Quad 2 joint ID:", self.q2_joint_id)
     print("Payload qpos start:", self.payload_qpos_start)
     print("Quad 1 qpos start:", self.q1_qpos_start)
     print("Quad 2 qpos start:", self.q2_qpos_start)
