@@ -174,8 +174,8 @@ class MultiQuadEnv(PipelineEnv):
     payload_start = self.payload_body_id * 7
     quad1_start = self.q1_body_id * 7
     quad2_start = self.q2_body_id * 7
-    qpos = qpos.at[payload_start:payload_start+3].set(payload_pos)
-    qpos = qpos.at[quad1_start:quad1_start+3].set(quad1_pos)
+    qpos = qpos.at[payload_start:payload_start+3].set(quad2_pos)
+    qpos = qpos.at[quad1_start:quad1_start+3].set(quad2_pos)
     qpos = qpos.at[quad2_start:quad2_start+3].set(quad2_pos)
 
     rng, rng_euler = jax.random.split(rng, 2)
