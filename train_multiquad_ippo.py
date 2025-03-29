@@ -18,39 +18,18 @@ import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
-# Modified render_video function to render 4 random environments concurrently
+
 def render_video(rollout, env, render_every=2, width=1280, height=720):
-    import numpy as np
-    import random
-    # Determine batch size from the first state's first key
-    key0 = next(iter(rollout[0]))
-    batch_size = rollout[0][key0].shape[0]
-    # Sample 4 random indices from the batch
-    
-    indices = random.sample(range(batch_size), 4)
-    
     # Create an OpenGL context for rendering
     ctx = mujoco.GLContext(width, height)
     ctx.make_current()
     print("Starting rendering...")
-    composite_frames = []
-    # Render every render_every-th state in the rollout
-    for state in rollout[::render_every]:
-        imgs = []
-        for idx in indices:
-            # Extract single environment state for the given index
-            state_single = {k: v[idx] for k, v in state.items()}
-            # env.render expects a list of states; render and get the resulting image
-            img = env.render([state_single], camera="track", width=width, height=height)[0]
-            imgs.append(img)
-        # Combine the 4 images into a 2x2 grid
-        top_row = np.hstack((imgs[0], imgs[1]))
-        bottom_row = np.hstack((imgs[2], imgs[3]))
-        composite = np.vstack((top_row, bottom_row))
-        composite_frames.append(composite)
+    frames = env.render(rollout[::render_every], camera="track", width=width, height=height)
     fps = float(1.0 / (env.dt * render_every))
+    # Changed video filename as per previous code
     video_filename = "trained_policy_video.mp4"
-    imageio.mimsave(video_filename, composite_frames, fps=fps)
+    imageio.mimsave(video_filename, frames, fps=fps)
+    # New wandb logging for the video
     wandb.log({"trained_policy_video": wandb.Video(video_filename, format="mp4")})
     print(f"Video saved to {video_filename}")
 
@@ -59,7 +38,7 @@ def main():
     config = {
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {},
-        "TOTAL_TIMESTEPS": 100_000_000,
+        "TOTAL_TIMESTEPS": 10_000_000,
         "NUM_ENVS": 1024,
         "NUM_STEPS": 2048,
         "NUM_MINIBATCHES": 8,
