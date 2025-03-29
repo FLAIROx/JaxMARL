@@ -293,12 +293,15 @@ class MultiQuadEnv(PipelineEnv):
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
     # collision = quad_distance < 0.11
  
-    contacts = pipeline_state.contact  
-    
+     # Access contact indices from Brax. Each row in contact.idx holds the pair of body indices in contact.
+    contact_idx = pipeline_state.contact.idx
+    jax.debug.print("Contact indices: {}", contact_idx)
+
+    # Check for any contact where the two bodies are the two quads (order doesn't matter).
     collision = jp.any(
         jp.logical_or(
-            jp.logical_and(contacts.body1 == self.q1_body_id, contacts.body2 == self.q2_body_id),
-            jp.logical_and(contacts.body1 == self.q2_body_id, contacts.body2 == self.q1_body_id)
+            jp.all(contact_idx == jp.array([self.q1_body_id, self.q2_body_id]), axis=-1),
+            jp.all(contact_idx == jp.array([self.q2_body_id, self.q1_body_id]), axis=-1)
         )
     )
 
@@ -306,7 +309,7 @@ class MultiQuadEnv(PipelineEnv):
     # print("Collision:", collision)
     if collision:
       jax.debug.print("Collision detected between quadrotors!")
-      jax.debug.print("Contact body IDs:", contacts.body1, contacts.body2)
+      jax.debug.print("Contact indices: {}", contact_idx)
     
 
 
