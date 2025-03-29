@@ -66,6 +66,12 @@ def main():
         config=config,
         mode=config["WANDB_MODE"],
     )
+
+    # terminate if num_steps*num_envs is too large, because of the GPU memory
+    if config["NUM_STEPS"] * config["NUM_ENVS"] > 2048*2048:
+        raise ValueError("NUM_STEPS * NUM_ENVS is too large. Please reduce them.")
+
+    
     
     rng = jax.random.PRNGKey(config["SEED"])
     rng, rng_train = jax.random.split(rng)
