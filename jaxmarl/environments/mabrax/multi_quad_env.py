@@ -180,7 +180,7 @@ class MultiQuadEnv(PipelineEnv):
     """
     Generate a single valid configuration.
     Oversample candidates and select the first one that meets:
-      - Distance between quads >= 0.12.
+      - Distance between quads >= 0.14.
       - Each quad is at least 0.06 away from the payload.
     """
     candidate_keys = jax.random.split(key, oversample)
@@ -190,7 +190,7 @@ class MultiQuadEnv(PipelineEnv):
     dist_q1_payload = jp.linalg.norm(candidate_quad1 - candidate_payload, axis=1)
     dist_q2_payload = jp.linalg.norm(candidate_quad2 - candidate_payload, axis=1)
     
-    valid_mask = (dist_quads >= 0.12) & (dist_q1_payload >= 0.06) & (dist_q2_payload >= 0.06)
+    valid_mask = (dist_quads >= 0.14) & (dist_q1_payload >= 0.07) & (dist_q2_payload >= 0.07)
     valid_index = jp.argmax(valid_mask)  # returns 0 if none are valid
     
     return candidate_payload[valid_index], candidate_quad1[valid_index], candidate_quad2[valid_index]
@@ -294,11 +294,11 @@ class MultiQuadEnv(PipelineEnv):
     collision = quad_distance < 0.11
     out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(80),
                                   jp.absolute(angle_q2) > jp.radians(80))
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < 0.05)
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q2_body_id][2] < 0.05)
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2])
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q2_body_id][2] < pipeline_state.xpos[self.payload_body_id][2])
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.payload_body_id][2] < 0.05)
+    # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < 0.05)
+    # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q2_body_id][2] < 0.05)
+    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.01)
+    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q2_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.01)
+    # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.payload_body_id][2] < 0.05)
 
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position)
     reward, _, _ = self.calc_reward(
