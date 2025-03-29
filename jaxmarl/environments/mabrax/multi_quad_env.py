@@ -205,7 +205,7 @@ class MultiQuadEnv(PipelineEnv):
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
-    std_dev = 5 * jp.pi / 180   # 5° in radians.
+    std_dev = 10 * jp.pi / 180   # 5° in radians.
     clip_val = 60 * jp.pi / 180  # 60° in radians.
 
     # Quadrotor 1: sample roll and pitch (clipped) and yaw uniformly.
