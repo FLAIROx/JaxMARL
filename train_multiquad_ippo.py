@@ -39,7 +39,7 @@ def main():
     config = {
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {},
-        "TOTAL_TIMESTEPS": 10_000_000,
+        "TOTAL_TIMESTEPS": 500_000_000,
         "NUM_ENVS": 2048,
         "NUM_STEPS": 4096,
         "NUM_MINIBATCHES": 8,
