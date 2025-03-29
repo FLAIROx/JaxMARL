@@ -174,9 +174,9 @@ class MultiQuadEnv(PipelineEnv):
     payload_start = self.payload_body_id * 7
     quad1_start = self.q1_body_id * 7
     quad2_start = self.q2_body_id * 7
-    qpos.at[payload_start:payload_start+3].set(quad2_pos)
-    qpos.at[quad1_start:quad1_start+3].set(quad2_pos)
-    qpos.at[quad2_start:quad2_start+3].set(quad2_pos)
+    qpos = qpos.at[payload_start:payload_start+3].set(payload_pos)
+    qpos = qpos.at[quad1_start:quad1_start+3].set(payload_pos)
+    qpos = qpos.at[quad2_start:quad2_start+3].set(payload_pos)
 
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
@@ -211,8 +211,8 @@ class MultiQuadEnv(PipelineEnv):
     quat_q2_corrected = jp.array([quat_q2[1], quat_q2[2], quat_q2[3], quat_q2[0]])
     start_q1 = self.q1_body_id * 7 + 3
     start_q2 = self.q2_body_id * 7 + 3
-    qpos.at[start_q1:start_q1+4].set(quat_q1_corrected)
-    qpos.at[start_q2:start_q2+4].set(quat_q2_corrected)
+    qpos = qpos.at[start_q1:start_q1+4].set(quat_q1_corrected)
+    qpos = qpos.at[start_q2:start_q2+4].set(quat_q2_corrected)
     
     pipeline_state = self.pipeline_init(qpos, qvel)
     # Initialize last action as zeros.
