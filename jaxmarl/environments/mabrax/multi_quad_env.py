@@ -467,11 +467,14 @@ class MultiQuadEnv(PipelineEnv):
     Computes the reward by combining several factors such as payload tracking, quad safety,
     and energy penalties.
     """
+    # lambda for exponential reward
+    er = lambda x: jp.exp(-2 * jp.abs(x))
+
     # Team observations: payload error and linear velocity.
     team_obs = obs[:6]
     payload_error = team_obs[:3]
     payload_linvel = team_obs[3:6]
-    linvel_reward = jp.exp(-jp.abs(2*payload_linvel))
+    linvel_reward = jp.exp(-2 * jp.abs(jp.linalg.norm(payload_linvel)))
     dis = jp.linalg.norm(payload_error)
     z_error = jp.abs(payload_error[2])
     distance_reward =  jp.exp(-2 * dis)
@@ -491,17 +494,17 @@ class MultiQuadEnv(PipelineEnv):
     # out_of_bounds_penalty = 50.0 * out_of_bounds
 
     # Reward for quad orientations (encouraging them to remain upright).
-    up_reward = 0.5 * jp.exp(-jp.abs(angle_q1)) + 0.5 * jp.exp(-jp.abs(angle_q2))
+    up_reward = 0.5 * jp.exp(-2 * jp.abs(angle_q1)) + 0.5 * jp.exp(-2 * jp.abs(angle_q2))
 
     # Reward for quad velocities.
     # The reward is higher for lower angular velocities.
     # The reward is higher for lower linear velocities. 
     ang_vel_q1 = quad1_obs[15:18]
     ang_vel_q2 = quad2_obs[15:18]
-    ang_vel_reward = 0.5 * jp.exp(-jp.abs(jp.linalg.norm(ang_vel_q1))) + 0.5 * jp.exp(-jp.abs(jp.linalg.norm(ang_vel_q2)))
+    ang_vel_reward = 0.5 * jp.exp(-2 * jp.abs(jp.linalg.norm(ang_vel_q1))) + 0.5 * jp.exp(-2 * jp.abs(jp.linalg.norm(ang_vel_q2)))
     linvel_q1 = quad1_obs[9:12]
     linvel_q2 = quad2_obs[9:12]
-    linvel_quad_reward =  0.5 * jp.exp(-jp.abs(jp.linalg.norm(linvel_q1))) + 0.5 * jp.exp(-jp.abs(jp.linalg.norm(linvel_q2)))
+    linvel_quad_reward =  0.5 * jp.exp(-2* jp.abs(jp.linalg.norm(linvel_q1))) + 0.5 * jp.exp(-2 * jp.abs(jp.linalg.norm(linvel_q2)))
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
     action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
