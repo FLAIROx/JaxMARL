@@ -68,7 +68,7 @@ def main():
     )
 
     # terminate if num_steps*num_envs is too large, because of the GPU memory
-    if config["NUM_STEPS"] * config["NUM_ENVS"] > 4096*2048:
+    if config["NUM_STEPS"] * config["NUM_ENVS"] > 2048*2048:
         raise ValueError("NUM_STEPS * NUM_ENVS is too large. Please reduce them.")
 
     
