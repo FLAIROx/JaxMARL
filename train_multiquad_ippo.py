@@ -5,6 +5,8 @@ This script loads the 'multiquad' environment, runs 2500 simulation steps with r
 renders the rollout (rendering every few frames), and saves the result as a video file.
 """
 
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import jax
 import jax.numpy as jp
 import imageio
