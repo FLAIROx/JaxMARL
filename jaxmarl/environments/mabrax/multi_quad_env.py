@@ -85,6 +85,19 @@ class MultiQuadEnv(PipelineEnv):
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q0_cf2")
     self.q2_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_cf2")
+    
+    # Cache joint IDs for fast lookup.
+    self.payload_joint_id = mujoco.mj_name2id(
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "payload")
+    self.q1_joint_id = mujoco.mj_name2id(
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q0_cf2")
+    self.q2_joint_id = mujoco.mj_name2id(
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_cf2")
+
+    # Cache the starting indices in qpos using the joint qpos addresses.
+    self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
+    self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
+    self.q2_qpos_start = sys.mj_model.jnt_qposadr[self.q2_joint_id]
 
   @staticmethod
   def generate_configuration(key):
@@ -167,15 +180,15 @@ class MultiQuadEnv(PipelineEnv):
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
     qvel = jax.random.uniform(
-        rng2, (self.sys.nv,), 
-        minval=-self._reset_noise_scale, 
+        rng2, (self.sys.nv,),
+        minval=-self._reset_noise_scale,
         maxval=self._reset_noise_scale
     )
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
 
-    # Now generate new orientations (as quaternions) for the two quadrotors.
+    # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
     std_dev = 10 * jp.pi / 180   # 10° in radians.
@@ -197,7 +210,7 @@ class MultiQuadEnv(PipelineEnv):
         sp = jp.sin(pitch * 0.5)
         cy = jp.cos(yaw * 0.5)
         sy = jp.sin(yaw * 0.5)
-        # MJX quaternion: [ x, y, z, w ]
+        # MJX uses [x, y, z, w] ordering.
         return jp.array([
             sr * cp * cy - cr * sp * sy,
             cr * sp * cy + sr * cp * sy,
@@ -207,23 +220,16 @@ class MultiQuadEnv(PipelineEnv):
 
     quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
     quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
-  
-    # Now build the full qpos vector.
+
+    # Build the full qpos vector by updating the base configuration.
     new_qpos = base_qpos
-    # Compute starting indices (each body is assumed to have 7 DOF: 3 for position, 4 for orientation).
-    payload_start = self.payload_body_id * 7
-    quad1_start = self.q1_body_id * 7
-    quad2_start = self.q2_body_id * 7
+    # Use the cached joint qpos addresses.
+    new_qpos = new_qpos.at[self.payload_qpos_start:self.payload_qpos_start+3].set(payload_pos)
+    new_qpos = new_qpos.at[self.q1_qpos_start:self.q1_qpos_start+3].set(quad1_pos)
+    new_qpos = new_qpos.at[self.q2_qpos_start:self.q2_qpos_start+3].set(quad2_pos)
+    new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+7].set(quat_q1)
+    new_qpos = new_qpos.at[self.q2_qpos_start:self.q2_qpos_start+7].set(quat_q2)
 
-    # Update the position (first 3 numbers) for payload and quadrotors.
-    new_qpos = new_qpos.at[payload_start:payload_start+3].set(payload_pos)
-    new_qpos = new_qpos.at[quad1_start:quad1_start+3].set(quad1_pos)
-    new_qpos = new_qpos.at[quad2_start:quad2_start+3].set(quad2_pos)
-    # Update the orientation (quaternion, next 4 numbers) for quadrotors.
-    new_qpos = new_qpos.at[quad1_start+3:quad1_start+7].set(quat_q1)
-    new_qpos = new_qpos.at[quad2_start+3:quad2_start+7].set(quat_q2)
-
-    # Initialize the simulation pipeline state with the newly built qpos and computed qvel.
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
     obs = self._get_obs(pipeline_state, last_action, self.target_position)
