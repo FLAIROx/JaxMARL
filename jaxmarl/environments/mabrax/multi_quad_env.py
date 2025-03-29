@@ -176,7 +176,7 @@ class MultiQuadEnv(PipelineEnv):
     return payload_pos, quad1_pos, quad2_pos
 
   @staticmethod
-  def generate_valid_configuration(key, oversample=3):
+  def generate_valid_configuration(key, oversample=4):
     """
     Generate a single valid configuration.
     Oversample candidates and select the first one that meets:
@@ -207,6 +207,8 @@ class MultiQuadEnv(PipelineEnv):
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
+    norm = jp.linalg.norm(payload_pos)
+    payload_pos = payload_pos / jp.maximum(norm, 1.0)  # Normalize if norm > 1
 
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
