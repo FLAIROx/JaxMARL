@@ -193,11 +193,8 @@ class MultiQuadEnv(PipelineEnv):
     """Resets the environment to an initial state."""
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
-    qvel = jax.random.uniform(
-        rng2, (self.sys.nv,),
-        minval=-self._reset_noise_scale,
-        maxval=self._reset_noise_scale
-    )
+    qvel = 0.1 * jax.random.normal(rng2, (self.sys.nv,))
+    qvel = jp.clip(qvel, a_min=-5.0, a_max=5.0)
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
