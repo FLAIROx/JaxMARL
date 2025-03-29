@@ -207,8 +207,6 @@ class MultiQuadEnv(PipelineEnv):
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
-    norm = jp.linalg.norm(payload_pos)
-    payload_pos = payload_pos / jp.maximum(norm, 1.0)  # Normalize if norm > 1
 
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
@@ -318,6 +316,9 @@ class MultiQuadEnv(PipelineEnv):
     """Constructs the observation vector from simulation data."""
     # Payload state.
     payload_pos = data.xpos[self.payload_body_id]
+    norm = jp.linalg.norm(payload_pos)
+    payload_pos = payload_pos / jp.maximum(norm, 1.0)  # Normalize if norm > 1
+    
     payload_linvel = data.cvel[self.payload_body_id][3:6]
     payload_error = target_position - payload_pos
 
