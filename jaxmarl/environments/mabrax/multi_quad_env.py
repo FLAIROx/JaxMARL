@@ -76,7 +76,7 @@ class MultiQuadEnv(PipelineEnv):
          "linvel_reward_coef": 5.0,
          "ang_vel_reward_coef": 1.0,
          "linvel_quad_reward_coef": 0.5,
-         "collision_penalty_coef": -50.0,
+         "collision_penalty_coef": -10.0,
          "smooth_action_coef": -2.0,
          "action_energy_coef": -1.0,
       }
