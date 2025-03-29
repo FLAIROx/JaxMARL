@@ -224,19 +224,19 @@ class MultiQuadEnv(PipelineEnv):
     yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
 
     def euler_to_quat(roll, pitch, yaw):
-        cr = jp.cos(roll * 0.5)
-        sr = jp.sin(roll * 0.5)
-        cp = jp.cos(pitch * 0.5)
-        sp = jp.sin(pitch * 0.5)
-        cy = jp.cos(yaw * 0.5)
-        sy = jp.sin(yaw * 0.5)
-        # MJX uses [x, y, z, w] order.
-        return jp.array([
-            sr * cp * cy - cr * sp * sy,
-            cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy,
-            cr * cp * cy + sr * sp * sy,
-        ])
+      cr = jp.cos(roll * 0.5)
+      sr = jp.sin(roll * 0.5)
+      cp = jp.cos(pitch * 0.5)
+      sp = jp.sin(pitch * 0.5)
+      cy = jp.cos(yaw * 0.5)
+      sy = jp.sin(yaw * 0.5)
+      # MuJoCo now expects quaternions in (w, x, y, z) order.
+      return jp.array([
+          cr * cp * cy + sr * sp * sy,  # w
+          sr * cp * cy - cr * sp * sy,  # x
+          cr * sp * cy + sr * cp * sy,  # y
+          cr * cp * sy - sr * sp * cy,  # z
+      ])
 
     quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
     quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
