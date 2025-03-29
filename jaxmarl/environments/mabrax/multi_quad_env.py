@@ -251,9 +251,6 @@ class MultiQuadEnv(PipelineEnv):
     # Update quadrotor orientations (starting 3 elements later).
     new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+7].set(quat_q1)
     new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+7].set(quat_q2)
-
-    # print new_qpos
-    jax.debug.print("new_qpos: {}", new_qpos)
     
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
