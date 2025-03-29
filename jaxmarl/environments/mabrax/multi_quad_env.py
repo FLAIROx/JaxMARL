@@ -295,7 +295,6 @@ class MultiQuadEnv(PipelineEnv):
  
     contacts = pipeline_state.contact  
     
-    jax.debug.print("Contacts:", contacts)
     collision = jp.any(
         jp.logical_or(
             jp.logical_and(contacts.body1 == self.q1_body_id, contacts.body2 == self.q2_body_id),
