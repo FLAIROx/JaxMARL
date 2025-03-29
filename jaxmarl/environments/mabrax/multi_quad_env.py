@@ -73,12 +73,12 @@ class MultiQuadEnv(PipelineEnv):
          "safe_distance_coef": 1.0,
          "velocity_reward_coef": 5.0,
          "up_reward_coef": 5.0,
-         "linvel_penalty_coef": -5.0,
+         "linvel_reward_coef": 5.0,
+         "ang_vel_reward_coef": 1.0,
+         "linvel_quad_reward_coef": 0.5,
          "collision_penalty_coef": -50.0,
          "smooth_action_coef": -2.0,
          "action_energy_coef": -1.0,
-         "ang_vel_penalty_coef": -1.0,
-         "linvel_quad_penalty_coef": -0.1
       }
 
     self.reward_divisor = sum(reward_coeffs.values())
@@ -471,11 +471,11 @@ class MultiQuadEnv(PipelineEnv):
     team_obs = obs[:6]
     payload_error = team_obs[:3]
     payload_linvel = team_obs[3:6]
-    linvel_penalty = jp.linalg.norm(payload_linvel)
+    linvel_reward = jp.exp(-jp.abs(2*payload_linvel))
     dis = jp.linalg.norm(payload_error)
     z_error = jp.abs(payload_error[2])
-    distance_reward = 1.5 - dis + jp.exp(-10 * dis)
-    z_distance_reward = 1.5 - z_error + jp.exp(-10 * z_error)
+    distance_reward =  jp.exp(-2 * dis)
+    z_distance_reward =  jp.exp(-2 * z_error)
 
     # Velocity alignment.
     norm_error = jp.maximum(jp.linalg.norm(payload_error), 1e-6)
@@ -489,19 +489,22 @@ class MultiQuadEnv(PipelineEnv):
     safe_distance_reward = jp.clip((quad_distance - 0.15) / (0.20 - 0.15), 0, 1)
     collision_penalty = 1.0 * collision
     # out_of_bounds_penalty = 50.0 * out_of_bounds
-    smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
-    action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
 
     # Reward for quad orientations (encouraging them to remain upright).
-    up_reward = jp.exp(-jp.abs(angle_q1)) + jp.exp(-jp.abs(angle_q2))
+    up_reward = 0.5 * jp.exp(-jp.abs(angle_q1)) + 0.5 * jp.exp(-jp.abs(angle_q2))
 
-    # Penalties for quad angular and linear velocities.
+    # Reward for quad velocities.
+    # The reward is higher for lower angular velocities.
+    # The reward is higher for lower linear velocities. 
     ang_vel_q1 = quad1_obs[15:18]
     ang_vel_q2 = quad2_obs[15:18]
-    ang_vel_penalty = jp.linalg.norm(ang_vel_q1) + jp.linalg.norm(ang_vel_q2)
+    ang_vel_reward = 0.5 * jp.exp(-jp.abs(jp.linalg.norm(ang_vel_q1))) + 0.5 * jp.exp(-jp.abs(jp.linalg.norm(ang_vel_q2)))
     linvel_q1 = quad1_obs[9:12]
     linvel_q2 = quad2_obs[9:12]
-    linvel_quad_penalty = jp.linalg.norm(linvel_q1) + jp.linalg.norm(linvel_q2)
+    linvel_quad_reward =  0.5 * jp.exp(-jp.abs(jp.linalg.norm(linvel_q1))) + 0.5 * jp.exp(-jp.abs(jp.linalg.norm(linvel_q2)))
+
+    smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
+    action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
 
     reward = 0
     reward += self.reward_coeffs["distance_reward_coef"] * distance_reward
@@ -509,12 +512,15 @@ class MultiQuadEnv(PipelineEnv):
     reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
     reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
     reward += self.reward_coeffs["up_reward_coef"] * up_reward
-    reward += self.reward_coeffs["linvel_penalty_coef"] * linvel_penalty
+    reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
+    reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
+    reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
+
     reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
     reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
     reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
-    reward += self.reward_coeffs["ang_vel_penalty_coef"] * ang_vel_penalty
-    reward += self.reward_coeffs["linvel_quad_penalty_coef"] * linvel_quad_penalty
+    
+    # Normalize the reward by the divisor.
     reward /= self.reward_divisor
 
     return reward, None, {}
