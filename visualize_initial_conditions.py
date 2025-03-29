@@ -14,7 +14,7 @@ import jaxmarl
 import wandb
 import time
 
-def render_video(states, env, width=1280, height=720):
+def render_video(states, env, width=640, height=360):  # Changed default size from 1280x720 to 640x360
     # Create an OpenGL context for rendering
     ctx = mujoco.GLContext(width, height)
     ctx.make_current()
@@ -24,11 +24,11 @@ def render_video(states, env, width=1280, height=720):
         # Render a single frame for the given state
         frame = env.render([state], camera="track", width=width, height=height)[0]
         frames.append(frame)
-    video_filename = "initial_conditions_video.mp4"
+    video_filename = "initial_conditions.gif"  # Changed from mp4 to gif
     # Each frame lasts 1 second (fps=1)
     imageio.mimsave(video_filename, frames, fps=1)
     #wandb.log({"initial_conditions_video": wandb.Video(video_filename, format="mp4")})
-    print(f"Video saved to {video_filename}")
+    print(f"GIF saved to {video_filename}")
 
 def main():
     # Minimal configuration for generating initial states
