@@ -189,7 +189,7 @@ class MultiQuadEnv(PipelineEnv):
     # Get new positions for payload and both quadrotors.
     payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
 
-    # Generate new orientations (as quaternions) for the quadrotors.
+    # Generate new Euler angles (in radians) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
     std_dev = 10 * jp.pi / 180   # 10° in radians.
@@ -204,39 +204,19 @@ class MultiQuadEnv(PipelineEnv):
     pitch_q2 = jp.clip(jax.random.normal(keys[4]) * std_dev, -clip_val, clip_val)
     yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
 
-    def euler_to_quat(roll, pitch, yaw):
-        cr = jp.cos(roll * 0.5)
-        sr = jp.sin(roll * 0.5)
-        cp = jp.cos(pitch * 0.5)
-        sp = jp.sin(pitch * 0.5)
-        cy = jp.cos(yaw * 0.5)
-        sy = jp.sin(yaw * 0.5)
-        # MJX uses [x, y, z, w] order.
-        return jp.array([
-            sr * cp * cy - cr * sp * sy,
-            cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy,
-            cr * cp * cy + sr * sp * sy,
-        ])
-
-    quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
-    quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
-
-    # Build the full qpos vector.
+    # Build the full qpos vector by updating the base configuration.
     new_qpos = base_qpos
     # Update payload position.
     new_qpos = new_qpos.at[self.payload_qpos_start:self.payload_qpos_start+3].set(payload_pos)
     # Update quadrotor positions.
     new_qpos = new_qpos.at[self.q1_qpos_start:self.q1_qpos_start+3].set(quad1_pos)
     new_qpos = new_qpos.at[self.q2_qpos_start:self.q2_qpos_start+3].set(quad2_pos)
-    # Update quadrotor orientations (starting 3 elements later).
-    new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+7].set(quat_q1)
-    new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+7].set(quat_q2)
+    # Update quadrotor orientations (using Euler angles; free joint has 3 orientation dofs).
+    new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+6].set(jp.array([roll_q1, pitch_q1, yaw_q1]))
+    new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+6].set(jp.array([roll_q2, pitch_q2, yaw_q2]))
 
-    # print new_qpos
     jax.debug.print("new_qpos: {}", new_qpos)
-    
-    
+
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
     obs = self._get_obs(pipeline_state, last_action, self.target_position)
@@ -244,6 +224,7 @@ class MultiQuadEnv(PipelineEnv):
     done = jp.array(0.0)
     metrics = {'time': pipeline_state.time, 'reward': reward}
     return State(pipeline_state, obs, reward, done, metrics)
+  
   def step(self, state: State, action: jax.Array) -> State:
     """Advances the environment by one control step."""
     # Extract previous action from the observation.
