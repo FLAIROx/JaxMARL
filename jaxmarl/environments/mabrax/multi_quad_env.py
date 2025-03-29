@@ -82,17 +82,17 @@ class MultiQuadEnv(PipelineEnv):
     self.payload_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "payload")
     self.q1_body_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q0_cf2")
+        sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q0_container")
     self.q2_body_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_cf2")
+        sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_container")
     
     # Cache joint IDs for fast lookup.
     self.payload_joint_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "payload")
     self.q1_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q0_cf2")
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q0_container")
     self.q2_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_cf2")
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_container")
 
     # Cache the starting indices in qpos using the joint qpos addresses.
     self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
