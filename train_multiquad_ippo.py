@@ -80,6 +80,8 @@ def main():
         config=config,
         mode=config["WANDB_MODE"],
     )
+    # Merge any sweep overrides into config
+    config = {**config, **wandb.config}
 
     # terminate if num_steps*num_envs is too large, because of the GPU memory
     if config["NUM_STEPS"] * config["NUM_ENVS"] > 2048*2048:
