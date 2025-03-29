@@ -284,7 +284,7 @@ class MultiQuadEnv(PipelineEnv):
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
     collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
 
-    ground_collision = pipeline_state.xpos[self.q1_body_id][2] < 0.03 or pipeline_state.xpos[self.q2_body_id][2] < 0.03 and pipeline_state.time > 1
+    ground_collision = pipeline_state.xpos[self.q1_body_id][2] < 0.03 or pipeline_state.xpos[self.q2_body_id][2] < 0.03 and pipeline_state.time > 0.5
     ground_collision_payload = pipeline_state.xpos[self.payload_body_id][2] < 0.03 and pipeline_state.time > 3
 
     collision = jp.logical_or(collision, ground_collision)
