@@ -165,32 +165,31 @@ class MultiQuadEnv(PipelineEnv):
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
-    qpos = self.sys.qpos0 # Initial position
-    qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
-        
-    # Use the valid configuration generator.
-    payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
-    
-    payload_start = self.payload_body_id * 7
-    quad1_start = self.q1_body_id * 7
-    quad2_start = self.q2_body_id * 7
-    qpos = qpos.at[payload_start:payload_start+3].set(payload_pos)
-    qpos = qpos.at[quad1_start:quad1_start+3].set(payload_pos)
-    qpos = qpos.at[quad2_start:quad2_start+3].set(payload_pos)
+    base_qpos = self.sys.qpos0  # Start with the reference configuration.
+    qvel = jax.random.uniform(
+        rng2, (self.sys.nv,), 
+        minval=-self._reset_noise_scale, 
+        maxval=self._reset_noise_scale
+    )
 
+    # Get new positions for payload and both quadrotors.
+    payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
+
+    # Now generate new orientations (as quaternions) for the two quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
-    std_dev = 10 * jp.pi / 180  # 10° in radians
-    clip_val = 60 * jp.pi / 180  # 60° in radians
-    # Quad 1: sample roll, pitch using normal distribution; yaw uniformly.
+    std_dev = 10 * jp.pi / 180   # 10° in radians.
+    clip_val = 60 * jp.pi / 180  # 60° in radians.
+
+    # Quadrotor 1: sample roll and pitch normally (clipped) and yaw uniformly.
     roll_q1 = jp.clip(jax.random.normal(keys[0]) * std_dev, -clip_val, clip_val)
     pitch_q1 = jp.clip(jax.random.normal(keys[1]) * std_dev, -clip_val, clip_val)
     yaw_q1 = jax.random.uniform(keys[2], minval=-jp.pi, maxval=jp.pi)
-    # Quad 2: sample roll, pitch using normal distribution; yaw uniformly.
+    # Quadrotor 2: similarly.
     roll_q2 = jp.clip(jax.random.normal(keys[3]) * std_dev, -clip_val, clip_val)
     pitch_q2 = jp.clip(jax.random.normal(keys[4]) * std_dev, -clip_val, clip_val)
     yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
-    
+
     def euler_to_quat(roll, pitch, yaw):
         cr = jp.cos(roll * 0.5)
         sr = jp.sin(roll * 0.5)
@@ -198,24 +197,34 @@ class MultiQuadEnv(PipelineEnv):
         sp = jp.sin(pitch * 0.5)
         cy = jp.cos(yaw * 0.5)
         sy = jp.sin(yaw * 0.5)
+        # MJX quaternion: [ x, y, z, w ]
         return jp.array([
-            cr * cp * cy + sr * sp * sy,
             sr * cp * cy - cr * sp * sy,
             cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy
+            cr * cp * sy - sr * sp * cy,
+            cr * cp * cy + sr * sp * sy,
         ])
-        
+
     quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
     quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
-    quat_q1_corrected = jp.array([quat_q1[1], quat_q1[2], quat_q1[3], quat_q1[0]])
-    quat_q2_corrected = jp.array([quat_q2[1], quat_q2[2], quat_q2[3], quat_q2[0]])
-    start_q1 = self.q1_body_id * 7 + 3
-    start_q2 = self.q2_body_id * 7 + 3
-    qpos = qpos.at[start_q1:start_q1+4].set(quat_q1_corrected)
-    qpos = qpos.at[start_q2:start_q2+4].set(quat_q2_corrected)
-    
-    pipeline_state = self.pipeline_init(qpos, qvel)
-    # Initialize last action as zeros.
+  
+    # Now build the full qpos vector.
+    new_qpos = base_qpos
+    # Compute starting indices (each body is assumed to have 7 DOF: 3 for position, 4 for orientation).
+    payload_start = self.payload_body_id * 7
+    quad1_start = self.q1_body_id * 7
+    quad2_start = self.q2_body_id * 7
+
+    # Update the position (first 3 numbers) for payload and quadrotors.
+    new_qpos = new_qpos.at[payload_start:payload_start+3].set(payload_pos)
+    new_qpos = new_qpos.at[quad1_start:quad1_start+3].set(quad1_pos)
+    new_qpos = new_qpos.at[quad2_start:quad2_start+3].set(quad2_pos)
+    # Update the orientation (quaternion, next 4 numbers) for quadrotors.
+    new_qpos = new_qpos.at[quad1_start+3:quad1_start+7].set(quat_q1)
+    new_qpos = new_qpos.at[quad2_start+3:quad2_start+7].set(quat_q2)
+
+    # Initialize the simulation pipeline state with the newly built qpos and computed qvel.
+    pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
     obs = self._get_obs(pipeline_state, last_action, self.target_position)
     reward = jp.array(0.0)
