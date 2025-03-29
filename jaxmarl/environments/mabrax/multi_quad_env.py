@@ -86,16 +86,98 @@ class MultiQuadEnv(PipelineEnv):
     self.q2_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_cf2")
 
-    # (Optionally) Register any additional model components (e.g. goal marker).
+  @staticmethod
+  def generate_configuration(key):
+    """
+    Generate a candidate configuration from random samples.
+    Returns:
+      payload_pos, quad1_pos, quad2_pos -- each a jp.array of shape (3,)
+    """
+    subkeys = jax.random.split(key, 9)
+    min_quad_z = 0.008    # quad on ground
+    min_payload_z = 0.0055  # payload on ground
+
+    # Payload position: x,y uniformly in [-1.5, 1.5] and z in [-1.0, 3.0] then clipped to [0, 3]
+    payload_xy = jax.random.uniform(subkeys[0], (2,), minval=-1.5, maxval=1.5)
+    payload_z = jax.random.uniform(subkeys[1], (), minval=-1.0, maxval=3.0)
+    payload_pos = jp.array([payload_xy[0], payload_xy[1], payload_z])
+
+    # Parameters for Quad positions.
+    mean_r   = 0.3
+    std_r    = 0.1
+    clip_min = 0.05
+    clip_max = 0.3
+    mean_theta  = jp.pi / 7
+    mean_theta2 = -jp.pi / 7
+    std_theta   = jp.pi / 8
+    std_phi     = jp.pi / 3
+
+    # Quad 1.
+    r1     = jp.clip(mean_r + std_r * jax.random.normal(subkeys[2], ()), clip_min, clip_max)
+    theta1 = mean_theta + std_theta * jax.random.normal(subkeys[4], ())
+    # Quad 2.
+    r2     = jp.clip(mean_r + std_r * jax.random.normal(subkeys[3], ()), clip_min, clip_max)
+    theta2 = mean_theta2 + std_theta * jax.random.normal(subkeys[5], ())
+
+    # Common phi offset and individual noise.
+    phi_offset = jax.random.uniform(subkeys[6], (), minval=-jp.pi, maxval=jp.pi)
+    phi1 = std_phi * jax.random.normal(subkeys[7], ()) + phi_offset
+    phi2 = std_phi * jax.random.normal(subkeys[8], ()) + phi_offset
+
+    # Convert spherical to Cartesian for Quad 1.
+    quad1_x = r1 * jp.sin(theta1) * jp.cos(phi1) + payload_pos[0]
+    quad1_y = r1 * jp.sin(theta1) * jp.sin(phi1) + payload_pos[1]
+    quad1_z = jp.clip(r1 * jp.cos(theta1) + payload_pos[2], min_quad_z, 3)
+    quad1_pos = jp.array([quad1_x, quad1_y, quad1_z])
+    
+    # Convert spherical to Cartesian for Quad 2.
+    quad2_x = r2 * jp.sin(theta2) * jp.cos(phi2) + payload_pos[0]
+    quad2_y = r2 * jp.sin(theta2) * jp.sin(phi2) + payload_pos[1]
+    quad2_z = jp.clip(r2 * jp.cos(theta2) + payload_pos[2], min_quad_z, 3)
+    quad2_pos = jp.array([quad2_x, quad2_y, quad2_z])
+
+    # Ensure payload is above ground.
+    payload_pos_z = jp.clip(payload_z, min_payload_z, 3)
+    payload_pos = jp.array([payload_xy[0], payload_xy[1], payload_pos_z])
+    
+    return payload_pos, quad1_pos, quad2_pos
+
+  @staticmethod
+  def generate_valid_configuration(key, oversample=3):
+    """
+    Generate a single valid configuration.
+    Oversample candidates and select the first one that meets:
+      - Distance between quads >= 0.12.
+      - Each quad is at least 0.06 away from the payload.
+    """
+    candidate_keys = jax.random.split(key, oversample)
+    candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(MultiQuadEnv.generate_configuration)(candidate_keys)
+    
+    dist_quads = jp.linalg.norm(candidate_quad1 - candidate_quad2, axis=1)
+    dist_q1_payload = jp.linalg.norm(candidate_quad1 - candidate_payload, axis=1)
+    dist_q2_payload = jp.linalg.norm(candidate_quad2 - candidate_payload, axis=1)
+    
+    valid_mask = (dist_quads >= 0.12) & (dist_q1_payload >= 0.06) & (dist_q2_payload >= 0.06)
+    valid_index = jp.argmax(valid_mask)  # returns 0 if none are valid
+    
+    return candidate_payload[valid_index], candidate_quad1[valid_index], candidate_quad2[valid_index]
 
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
-    rng, rng1, rng2 = jax.random.split(rng, 3)
-    qpos = self.sys.qpos0 + jax.random.uniform(
-        rng1, (self.sys.nq,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
-    qvel = jax.random.uniform(
-        rng2, (self.sys.nv,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
+    rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
+    qpos = self.sys.qpos0 # Initial position
+    qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
         
+    # Use the valid configuration generator.
+    payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
+    
+    payload_start = self.payload_body_id * 7
+    quad1_start = self.q1_body_id * 7
+    quad2_start = self.q2_body_id * 7
+    qpos = qpos.at[payload_start:payload_start+3].set(payload_pos)
+    qpos = qpos.at[quad1_start:quad1_start+3].set(quad1_pos)
+    qpos = qpos.at[quad2_start:quad2_start+3].set(quad2_pos)
+
     rng, rng_euler = jax.random.split(rng, 2)
     keys = jax.random.split(rng_euler, 6)
     std_dev = 10 * jp.pi / 180  # 10° in radians
