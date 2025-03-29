@@ -86,10 +86,10 @@ class MultiQuadEnv(PipelineEnv):
     self.q2_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_container")
 
-    # Cache the starting indices in qpos using the body qpos address.
-    self.payload_qpos_start = sys.mj_model.body_qposadr[self.payload_body_id]
-    self.q1_qpos_start = sys.mj_model.body_qposadr[self.q1_body_id]
-    self.q2_qpos_start = sys.mj_model.body_qposadr[self.q2_body_id]
+    # Cache the starting indices in qpos.
+    self.payload_qpos_start = sys.mj_model.body_dofadr[self.payload_body_id]
+    self.q1_qpos_start = sys.mj_model.body_dofadr[self.q1_body_id]
+    self.q2_qpos_start = sys.mj_model.body_dofadr[self.q2_body_id]
 
     print("IDs:")
     print("Payload body ID:", self.payload_body_id)
