@@ -66,7 +66,7 @@
             <body name="payload" pos="0.0 0.0 1.5" >
             <camera name="track" pos="-1 0 0.5" quat="0.601501 0.371748 -0.371748 -0.601501"
                 mode="trackcom" />
-            <joint type="free" actuatorfrclimited="false" damping="0.00001"/>
+            <joint type="free" name="payload_joint" actuatorfrclimited="false" damping="0.00001"/>
             <geom size="0.01" type="sphere" mass="0.01" rgba="0.8 0.8 0.8 1" />
             <site name="payload_s" pos="0 0 0.01" />
             </body>
@@ -78,7 +78,7 @@
             pos="0 -0.15 1.6"
             >        
             
-            <joint type="free" actuatorfrclimited="false" />
+            <joint type="free" name="q1_joint" actuatorfrclimited="false" />
             
             <site name="q0_attachment" pos="0 0 0" group="5"/>
             <body
@@ -145,7 +145,7 @@
             pos="0 0.15 1.6"
             >        
             
-            <joint type="free" actuatorfrclimited="false" />
+            <joint type="free" name="q1_joint" actuatorfrclimited="false" />
             
             <site name="q1_attachment" pos="0 0 0" group="5"/>
             <body
