@@ -43,7 +43,7 @@ def main():
     
     states = []
     # Generate a batch of 100 initial states
-    for _ in range(100):
+    for _ in range(3):
         rng, key = jax.random.split(rng)
         state = env.reset(key)[1]
         states.append(state)

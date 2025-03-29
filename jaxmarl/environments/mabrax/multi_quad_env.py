@@ -232,8 +232,12 @@ class MultiQuadEnv(PipelineEnv):
     new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+7].set(quat_q1)
     new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+7].set(quat_q2)
 
-
-    print(f"New qpos: {new_qpos.to_list()}")
+    # print new_qpos
+    # to cpu
+    new_qposc = jp.device_put(new_qpos, device=jax.devices()[0])
+    print("new_qposc", new_qposc)
+    
+    
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
     obs = self._get_obs(pipeline_state, last_action, self.target_position)
