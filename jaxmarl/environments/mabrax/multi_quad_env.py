@@ -233,9 +233,7 @@ class MultiQuadEnv(PipelineEnv):
     new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+7].set(quat_q2)
 
     # print new_qpos
-    # to cpu
-    new_qposc = jp.device_put(new_qpos, device=jax.devices()[0])
-    print("new_qposc", new_qposc)
+    jax.debug.print("new_qpos: {}", new_qpos)
     
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
