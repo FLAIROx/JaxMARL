@@ -99,6 +99,18 @@ class MultiQuadEnv(PipelineEnv):
     self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
     self.q2_qpos_start = sys.mj_model.jnt_qposadr[self.q2_joint_id]
 
+    print("IDs:")
+    print("Payload body ID:", self.payload_body_id)
+    print("Quad 1 body ID:", self.q1_body_id)
+    print("Quad 2 body ID:", self.q2_body_id)
+    print("Payload joint ID:", self.payload_joint_id)
+    print("Quad 1 joint ID:", self.q1_joint_id)
+    print("Quad 2 joint ID:", self.q2_joint_id)
+    print("Payload qpos start:", self.payload_qpos_start)
+    print("Quad 1 qpos start:", self.q1_qpos_start)
+    print("Quad 2 qpos start:", self.q2_qpos_start)
+    print("MultiQuadEnv initialized successfully.")
+
   @staticmethod
   def generate_configuration(key):
     """
