@@ -295,7 +295,7 @@ class MultiQuadEnv(PipelineEnv):
  
     contacts = pipeline_state.contact  
     
-    jax.debug.log("Contacts:", contacts)
+    jax.debug.print("Contacts:", contacts)
     collision = jp.any(
         jp.logical_or(
             jp.logical_and(contacts.body1 == self.q1_body_id, contacts.body2 == self.q2_body_id),
@@ -306,8 +306,8 @@ class MultiQuadEnv(PipelineEnv):
     # jax.debug if collision
     # print("Collision:", collision)
     if collision:
-      jax.debug.log("Collision detected between quadrotors!")
-      jax.debug.log("Contact body IDs:", contacts.body1, contacts.body2)
+      jax.debug.print("Collision detected between quadrotors!")
+      jax.debug.print("Contact body IDs:", contacts.body1, contacts.body2)
     
 
 
