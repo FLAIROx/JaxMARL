@@ -64,7 +64,7 @@
 
         
             <body name="payload" pos="0.0 0.0 1.5" >
-            <camera name="track" pos="-0.7 0 0.6" quat="0.601501 0.371748 -0.371748 -0.601501"
+            <camera name="track" pos="-0.7 0 0.5" quat="0.601501 0.371748 -0.371748 -0.601501"
                 mode="trackcom" />
             <joint type="free" name="payload_joint" actuatorfrclimited="false" damping="0.00001"/>
             <geom size="0.01" type="sphere" mass="0.01" rgba="0.8 0.8 0.8 1" />
