@@ -75,7 +75,6 @@ class MultiQuadEnv(PipelineEnv):
     self.max_thrust = 0.11772
     # Define the target goal for the payload.
     self.goal_center = jp.array([0.0, 0.0, 1.0])
-    self.goal_radius = 0.8  # sphere radius for random goal position
     self.target_position = self.goal_center
 
     # Cache body IDs (if still needed)
@@ -176,13 +175,8 @@ class MultiQuadEnv(PipelineEnv):
     return payload_pos, quad1_pos, quad2_pos
 
   @staticmethod
-  def generate_valid_configuration(key, oversample=4):
-    """
-    Generate a single valid configuration.
-    Oversample candidates and select the first one that meets:
-      - Distance between quads >= 0.14.
-      - Each quad is at least 0.06 away from the payload.
-    """
+  def generate_valid_configuration(key, oversample=5):
+
     candidate_keys = jax.random.split(key, oversample)
     candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(MultiQuadEnv.generate_configuration)(candidate_keys)
     
@@ -190,7 +184,7 @@ class MultiQuadEnv(PipelineEnv):
     dist_q1_payload = jp.linalg.norm(candidate_quad1 - candidate_payload, axis=1)
     dist_q2_payload = jp.linalg.norm(candidate_quad2 - candidate_payload, axis=1)
     
-    valid_mask = (dist_quads >= 0.14) & (dist_q1_payload >= 0.07) & (dist_q2_payload >= 0.07)
+    valid_mask = (dist_quads >= 0.16) & (dist_q1_payload >= 0.07) & (dist_q2_payload >= 0.07)
     valid_index = jp.argmax(valid_mask)  # returns 0 if none are valid
     
     return candidate_payload[valid_index], candidate_quad1[valid_index], candidate_quad2[valid_index]
@@ -291,27 +285,8 @@ class MultiQuadEnv(PipelineEnv):
     quad1_pos = pipeline_state.xpos[self.q1_body_id]
     quad2_pos = pipeline_state.xpos[self.q2_body_id]
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
-    # collision = quad_distance < 0.11
+    collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
  
-     # Access contact indices from Brax. Each row in contact.idx holds the pair of body indices in contact.
-    contact_idx = pipeline_state.contact.idx
-    jax.debug.print("Contact indices: {}", contact_idx)
-
-    # Check for any contact where the two bodies are the two quads (order doesn't matter).
-    collision = jp.any(
-        jp.logical_or(
-            jp.all(contact_idx == jp.array([self.q1_body_id, self.q2_body_id]), axis=-1),
-            jp.all(contact_idx == jp.array([self.q2_body_id, self.q1_body_id]), axis=-1)
-        )
-    )
-
-    # jax.debug if collision
-    # print("Collision:", collision)
-    if collision:
-      jax.debug.print("Collision detected between quadrotors!")
-      jax.debug.print("Contact indices: {}", contact_idx)
-    
-
 
     out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(80),
                                   jp.absolute(angle_q2) > jp.radians(80))
@@ -473,7 +448,7 @@ class MultiQuadEnv(PipelineEnv):
     quad1_obs = obs[6:30]
     quad2_obs = obs[30:54]
     quad_distance = jp.linalg.norm(quad1_obs[:3] - quad2_obs[:3])
-    safe_distance_reward = jp.clip((quad_distance - 0.12) / (0.2 - 0.12), 0, 1)
+    safe_distance_reward = jp.clip((quad_distance - 0.15) / (0.25 - 0.15), 0, 1)
     collision_penalty = 10.0 * collision
     out_of_bounds_penalty = 50.0 * out_of_bounds
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
