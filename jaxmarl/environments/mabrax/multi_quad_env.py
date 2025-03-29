@@ -291,7 +291,24 @@ class MultiQuadEnv(PipelineEnv):
     quad1_pos = pipeline_state.xpos[self.q1_body_id]
     quad2_pos = pipeline_state.xpos[self.q2_body_id]
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
-    collision = quad_distance < 0.11
+    # collision = quad_distance < 0.11
+ 
+    contacts = pipeline_state.contact  
+    collision = jp.any(
+        jp.logical_or(
+            jp.logical_and(contacts.body1 == self.q1_body_id, contacts.body2 == self.q2_body_id),
+            jp.logical_and(contacts.body1 == self.q2_body_id, contacts.body2 == self.q1_body_id)
+        )
+    )
+
+    # jax.debug if collision
+    # print("Collision:", collision)
+    if collision:
+      jax.debug.log("Collision detected between quadrotors!")
+      jax.debug.log("Contact body IDs:", contacts.body1, contacts.body2)
+    
+
+
     out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(80),
                                   jp.absolute(angle_q2) > jp.radians(80))
     # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < 0.05)
