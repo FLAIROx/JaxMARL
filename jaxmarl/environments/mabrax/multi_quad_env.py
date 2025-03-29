@@ -441,7 +441,7 @@ class MultiQuadEnv(PipelineEnv):
     linvel_penalty = jp.linalg.norm(payload_linvel)
     dis = jp.linalg.norm(payload_error)
     z_error = jp.abs(payload_error[2])
-    distance_reward = (1 - dis + jp.exp(-10 * dis)) + jp.exp(-10 * z_error) - z_error**2
+    distance_reward = (3 - dis + jp.exp(-10 * dis)) + jp.exp(-10 * z_error) - z_error**2
 
     # Velocity alignment.
     norm_error = jp.maximum(jp.linalg.norm(payload_error), 1e-6)
@@ -470,10 +470,10 @@ class MultiQuadEnv(PipelineEnv):
     linvel_quad_penalty = 0.1 * (jp.linalg.norm(linvel_q1)**2 + jp.linalg.norm(linvel_q2)**2)
 
     reward = 0
-    reward += 2 * distance_reward 
+    reward += 5 * distance_reward 
     reward += safe_distance_reward
     reward += 2 * velocity_towards_target
-    reward += up_reward
+    reward += 5 *up_reward
     #reward += 100 * quad_distance
     reward -= 5 * linvel_penalty
     reward -= collision_penalty
