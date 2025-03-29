@@ -7,6 +7,7 @@ renders the rollout (rendering every few frames), and saves the result as a vide
 
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["MUJOCO_GL"] = "egl"
 import jax
 import jax.numpy as jp
 import imageio
