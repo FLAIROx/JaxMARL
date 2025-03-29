@@ -194,7 +194,7 @@ class MultiQuadEnv(PipelineEnv):
     std_dev = 10 * jp.pi / 180   # 10° in radians.
     clip_val = 60 * jp.pi / 180  # 60° in radians.
 
-    # Quadrotor 1: sample roll and pitch normally (clipped) and yaw uniformly.
+    # Quadrotor 1: sample roll and pitch (clipped) and yaw uniformly.
     roll_q1 = jp.clip(jax.random.normal(keys[0]) * std_dev, -clip_val, clip_val)
     pitch_q1 = jp.clip(jax.random.normal(keys[1]) * std_dev, -clip_val, clip_val)
     yaw_q1 = jax.random.uniform(keys[2], minval=-jp.pi, maxval=jp.pi)
@@ -210,7 +210,7 @@ class MultiQuadEnv(PipelineEnv):
         sp = jp.sin(pitch * 0.5)
         cy = jp.cos(yaw * 0.5)
         sy = jp.sin(yaw * 0.5)
-        # MJX uses [x, y, z, w] ordering.
+        # MJX uses [x, y, z, w] order.
         return jp.array([
             sr * cp * cy - cr * sp * sy,
             cr * sp * cy + sr * cp * sy,
@@ -221,14 +221,16 @@ class MultiQuadEnv(PipelineEnv):
     quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
     quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
 
-    # Build the full qpos vector by updating the base configuration.
+    # Build the full qpos vector.
     new_qpos = base_qpos
-    # Use the cached joint qpos addresses.
+    # Update payload position.
     new_qpos = new_qpos.at[self.payload_qpos_start:self.payload_qpos_start+3].set(payload_pos)
+    # Update quadrotor positions.
     new_qpos = new_qpos.at[self.q1_qpos_start:self.q1_qpos_start+3].set(quad1_pos)
     new_qpos = new_qpos.at[self.q2_qpos_start:self.q2_qpos_start+3].set(quad2_pos)
+    # Update quadrotor orientations (starting 3 elements later).
     new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+7].set(quat_q1)
-    new_qpos = new_qpos.at[self.q2_qpos_start:self.q2_qpos_start+7].set(quat_q2)
+    new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+7].set(quat_q2)
 
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
@@ -237,7 +239,6 @@ class MultiQuadEnv(PipelineEnv):
     done = jp.array(0.0)
     metrics = {'time': pipeline_state.time, 'reward': reward}
     return State(pipeline_state, obs, reward, done, metrics)
-
   def step(self, state: State, action: jax.Array) -> State:
     """Advances the environment by one control step."""
     # Extract previous action from the observation.
