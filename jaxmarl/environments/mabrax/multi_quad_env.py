@@ -284,12 +284,16 @@ class MultiQuadEnv(PipelineEnv):
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
     collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
 
-    ground_collision = pipeline_state.xpos[self.q1_body_id][2] < 0.03 or pipeline_state.xpos[self.q2_body_id][2] < 0.03 and pipeline_state.time > 0.5
-    ground_collision_payload = pipeline_state.xpos[self.payload_body_id][2] < 0.03 and pipeline_state.time > 3
-
+    ground_collision = jp.logical_and(
+      pipeline_state.time > 0.5, # wait for the quads to be in the air
+      jp.logical_and(pipeline_state.xpos[self.q2_body_id][2] < 0.03, pipeline_state.xpos[self.q1_body_id][2] < 0.03)
+    )
+    ground_collision_payload = jp.logical_and(
+        pipeline_state.time > 3, # wait for the payload to be in the air
+        pipeline_state.xpos[self.payload_body_id][2] < 0.03
+    )
     collision = jp.logical_or(collision, ground_collision)
     collision = jp.logical_or(collision, ground_collision_payload)
- 
 
     out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(90),
                                   jp.absolute(angle_q2) > jp.radians(90))
