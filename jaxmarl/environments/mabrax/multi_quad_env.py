@@ -46,6 +46,7 @@ class MultiQuadEnv(PipelineEnv):
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
       max_time: float = 10.0,                  # Maximum simulation time per episode.
       reset_noise_scale: float = 0.1,          # Noise scale for initial state reset.
+      reward_coeffs: dict = None,
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
@@ -65,6 +66,24 @@ class MultiQuadEnv(PipelineEnv):
     self.time_per_action = 1.0 / self.policy_freq
     self.max_time = max_time
     self._reset_noise_scale = reset_noise_scale
+    if reward_coeffs is None:
+      reward_coeffs = {
+         "distance_reward_coef": 10.0,
+         "safe_distance_coef": 1.0,
+         "velocity_reward_coef": 5.0,
+         "up_reward_coef": 5.0,
+         "linvel_penalty_coef": -5.0,
+         "collision_penalty_coef": -50.0,
+         "smooth_action_coef": -2.0,
+         "action_energy_coef": -1.0,
+         "ang_vel_penalty_coef": -1.0,
+         "linvel_quad_penalty_coef": -1.0
+      }
+
+    self.reward_divisor = sum(reward_coeffs.values())
+    self.reward_coeffs = reward_coeffs
+    print("Reward coefficients:", self.reward_coeffs)
+
     self.warmup_time = 1.0
 
     # Set simulation timestep based on policy frequency and steps per action.
@@ -483,19 +502,17 @@ class MultiQuadEnv(PipelineEnv):
     linvel_quad_penalty = jp.linalg.norm(linvel_q1) + jp.linalg.norm(linvel_q2)
 
     reward = 0
-    reward += 10 * distance_reward 
-    reward += safe_distance_reward
-    reward += 5 * velocity_towards_target
-    reward += 5 * up_reward
-    #reward += 100 * quad_distance
-    reward -= 5 * linvel_penalty
-    reward -= 50 * collision_penalty
-    # reward -= out_of_bounds_penalty
-    reward -= 2 * smooth_action_penalty
-    reward -= action_energy_penalty
-    reward -= ang_vel_penalty
-    reward -= linvel_quad_penalty
-    reward /= 25.0
+    reward += self.reward_coeffs["distance_reward_coef"] * distance_reward 
+    reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
+    reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
+    reward += self.reward_coeffs["up_reward_coef"] * up_reward
+    reward += self.reward_coeffs["linvel_penalty_coef"] * linvel_penalty
+    reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
+    reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
+    reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
+    reward += self.reward_coeffs["ang_vel_penalty_coef"] * ang_vel_penalty
+    reward += self.reward_coeffs["linvel_quad_penalty_coef"] * linvel_quad_penalty
+    reward /= self.reward_divisor
 
     return reward, None, {}
 
