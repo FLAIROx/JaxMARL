@@ -14,7 +14,7 @@ import jaxmarl
 import wandb
 import time
 
-def render_video(states, env, width=640, height=360):  # Changed default size from 1280x720 to 640x360
+def render_video(states, env, width=1280, height=720):  
     # Create an OpenGL context for rendering
     ctx = mujoco.GLContext(width, height)
     ctx.make_current()
@@ -43,7 +43,7 @@ def main():
     
     states = []
     # Generate a batch of 100 initial states
-    for _ in range(3):
+    for _ in range(100):
         rng, key = jax.random.split(rng)
         state = env.reset(key)[1]
         states.append(state)
