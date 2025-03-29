@@ -180,6 +180,8 @@ class MultiQuadEnv(PipelineEnv):
     """Resets the environment to an initial state."""
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
+
+    jp.debug.print("base_qpos: {}", base_qpos)
     qvel = jax.random.uniform(
         rng2, (self.sys.nv,),
         minval=-self._reset_noise_scale,
