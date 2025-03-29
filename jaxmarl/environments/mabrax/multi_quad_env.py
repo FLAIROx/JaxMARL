@@ -165,7 +165,7 @@ class MultiQuadEnv(PipelineEnv):
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
-    qpos = self.sys.qpos0.copy() # Initial position
+    qpos = self.sys.qpos0 # Initial position
     qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=-self._reset_noise_scale, maxval=self._reset_noise_scale)
         
     # Use the valid configuration generator.
