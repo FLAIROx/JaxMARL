@@ -90,20 +90,16 @@ class MultiQuadEnv(PipelineEnv):
     self.payload_joint_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "payload_joint")
     self.q1_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_joint")
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q0_joint")
     self.q2_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q2_joint")
+        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_joint")
 
     # Cache the starting indices in qpos from the model.
     self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
     self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
     self.q2_qpos_start = sys.mj_model.jnt_qposadr[self.q2_joint_id]
 
-    # Throw error if any ids are not found in a short way
-    if self.payload_body_id == -1 or self.q1_body_id == -1 or self.q2_body_id == -1:
-      raise ValueError("One or more body IDs not found in the model.")
-    if self.payload_joint_id == -1 or self.q1_joint_id == -1 or self.q2_joint_id == -1:
-      raise ValueError("One or more joint IDs not found in the model.")
+
     
     print("IDs:")
     print("Payload body ID:", self.payload_body_id)
@@ -116,6 +112,12 @@ class MultiQuadEnv(PipelineEnv):
     print("Quad 1 qpos start:", self.q1_qpos_start)
     print("Quad 2 qpos start:", self.q2_qpos_start)
     print("MultiQuadEnv initialized successfully.")
+
+        # Throw error if any ids are not found in a short way
+    if self.payload_body_id == -1 or self.q1_body_id == -1 or self.q2_body_id == -1:
+      raise ValueError("One or more body IDs not found in the model.")
+    if self.payload_joint_id == -1 or self.q1_joint_id == -1 or self.q2_joint_id == -1:
+      raise ValueError("One or more joint IDs not found in the model.")
 
   @staticmethod
   def generate_configuration(key):
