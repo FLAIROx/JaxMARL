@@ -224,10 +224,10 @@ class MultiQuadEnv(PipelineEnv):
     yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
 
     # Set roll and pitch to 0 if the quad's z value is below 0.01.
-    roll_q1 = jp.where(quad1_pos[2] < 0.01, 0.0, roll_q1)
-    pitch_q1 = jp.where(quad1_pos[2] < 0.01, 0.0, pitch_q1)
-    roll_q2 = jp.where(quad2_pos[2] < 0.01, 0.0, roll_q2)
-    pitch_q2 = jp.where(quad2_pos[2] < 0.01, 0.0, pitch_q2)
+    roll_q1 = jp.where(quad1_pos[2] < 0.02, 0.0, roll_q1)
+    pitch_q1 = jp.where(quad1_pos[2] < 0.02, 0.0, pitch_q1)
+    roll_q2 = jp.where(quad2_pos[2] < 0.02, 0.0, roll_q2)
+    pitch_q2 = jp.where(quad2_pos[2] < 0.02, 0.0, pitch_q2)
 
     def euler_to_quat(roll, pitch, yaw):
       cr = jp.cos(roll * 0.5)
