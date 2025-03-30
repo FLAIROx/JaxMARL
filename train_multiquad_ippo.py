@@ -77,7 +77,7 @@ def main():
         "ENV_KWARGS": {"reward_coeffs": default_reward_coeffs},
         "TOTAL_TIMESTEPS": 500_000_000,
         "NUM_ENVS": 2048,
-        "NUM_STEPS": 2048,
+        "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 8,
         "UPDATE_EPOCHS": 2,
         "ANNEAL_LR": False,
