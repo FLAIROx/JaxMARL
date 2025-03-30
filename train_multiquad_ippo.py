@@ -38,7 +38,7 @@ from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unb
 jax.config.update("jax_compilation_cache_dir", cache_dir)
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
-jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
+# jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 
 def render_video(rollout, env, render_every=2, width=1280, height=720):
