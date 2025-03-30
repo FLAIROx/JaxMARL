@@ -10,7 +10,8 @@ sweep_config = {
     },
     "early_terminate": {
         "type": "hyperband",
-        "min_iter": 3  # 3 mins / Minimum iterations before early termination 
+        "min_iter": 3,  # 3 mins / Minimum iterations before early termination 
+        "eta": 2
     },
     "parameters": {
         "LR": {
@@ -22,10 +23,10 @@ sweep_config = {
             "values": [True, False]  # default: False
         },
         "NUM_STEPS": {
-            "values": [64, 128, 256, 512, 1024, 2048, 4096]  # default: 2048
+            "values": [32, 64, 128, 256, 512, 1024]  # default: 128
         },
         "NUM_ENVS": {
-            "values": [64, 128, 256, 512, 1024, 2048, 4096]  # default: 2048
+            "values": [32, 64, 128, 256, 512, 1024, 2048, 4096]  # default: 2048
         },
         "NUM_MINIBATCHES": {
             "values": [4, 8, 16, 32, 64]  # default: 8
@@ -51,7 +52,7 @@ sweep_config = {
         "GAMMA": {
             "distribution": "uniform",
             "min": 0.95,
-            "max": 0.99  # default: 0.99
+            "max": 0.999  # default: 0.99
         },
         "GAE_LAMBDA": {
             "distribution": "uniform",
@@ -76,7 +77,7 @@ sweep_config = {
         "ENV_KWARGS.reward_coeffs.velocity_reward_coef": {
             "distribution": "uniform",
             "min": 0.0,
-            "max": 7.0  # default: 5.0
+            "max": 5.0  # default: 0.0
         },
         "ENV_KWARGS.reward_coeffs.up_reward_coef": {
             "distribution": "uniform",
@@ -91,17 +92,22 @@ sweep_config = {
         "ENV_KWARGS.reward_coeffs.ang_vel_reward_coef": {
             "distribution": "uniform",
             "min": 0.0,
-            "max": 7.0  # default: 1.0
+            "max": 3.0  # default: 0.0
         },
         "ENV_KWARGS.reward_coeffs.linvel_quad_reward_coef": {
             "distribution": "uniform",
             "min": 0.0,
-            "max": 7.0  # default: 0.5
+            "max": 7.0  # default: 5.0
+        },
+        "ENV_KWARGS.reward_coeffs.taut_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 5.0  # default: 1.0
         },
         "ENV_KWARGS.reward_coeffs.collision_penalty_coef": {
             "distribution": "uniform",
-            "min": -100.0,
-            "max": 0.0  # default: -10.0
+            "min": -50.0,
+            "max": 0.0  # default: -20.0
         },
         "ENV_KWARGS.reward_coeffs.smooth_action_coef": {
             "distribution": "uniform",
@@ -110,8 +116,8 @@ sweep_config = {
         },
         "ENV_KWARGS.reward_coeffs.action_energy_coef": {
             "distribution": "uniform",
-            "min": -10.0,
-            "max": -0.0  # default: -1.0
+            "min": -5.0,
+            "max": -0.0  # default: 0.0
         },
         "ACTOR_ARCH": {
             "values": [
