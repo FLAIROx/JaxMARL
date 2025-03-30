@@ -22,8 +22,8 @@ import time
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
     activation: str = "tanh"
-    actor_arch: Sequence[int] = [128, 64, 64]  # default actor architecture
-    critic_arch: Sequence[int] = [128, 128, 128, 128]  # default critic architecture
+    actor_arch: Sequence[int] = None 
+    critic_arch: Sequence[int] = None
 
     @nn.compact
     def __call__(self, x):
@@ -33,7 +33,7 @@ class ActorCritic(nn.Module):
             activation = nn.tanh
         # Build Actor network using provided actor_arch or default
         actor = x
-        for h in self.actor_arch:
+        for h in self.actor_arch or [128, 64, 64]:
             actor = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(actor)
             actor = activation(actor)
         actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(actor)
@@ -42,7 +42,7 @@ class ActorCritic(nn.Module):
         
         # Build Critic network using provided critic_arch or default
         critic = x
-        for h in self.critic_arch:
+        for h in self.critic_arch or [128, 128, 128, 128]:
             critic = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(critic)
             critic = activation(critic)
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic)
