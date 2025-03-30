@@ -279,6 +279,7 @@ def make_train(config, rng_init):
             def callback(metric):
                 wandb.log(metric, step=metric["update_step"])
                 global last_interval_log_time
+                global last_termination_threshhold
                 current_time = time.time()
                 if current_time - last_interval_log_time >= 60:
                     r_lengths = metric.get("returned_episode_lengths", None)
@@ -288,9 +289,18 @@ def make_train(config, rng_init):
                             interval_value = r_lengths.item()
                         else:
                             interval_value = r_lengths[-1]
-                        wandb.log({"episode_length_interval": interval_value, "update_step": metric["update_step"]},
-                                  step=metric["update_step"])
+                        wandb.log({"episode_length_interval": interval_value, "termination_threshold": last_termination_threshhold}, step=metric["update_step"])
+                    
+                        # terminate if the episode if under termination threshold
+                        if interval_value < last_termination_threshhold:
+                            wandb.finish()
+                            raise ValueError("Episode length is below termination threshold. Terminating the run.")
+                        # Update the termination threshold for the next interval
+                        delta = jnp.clip(interval_value - last_termination_threshhold, 0, interval_value * 0.4)
+                        last_termination_threshhold += delta * 0.4
+                    
                     last_interval_log_time = current_time
+                    
 
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
@@ -320,8 +330,8 @@ def make_train(config, rng_init):
 
     return train
 
-last_derivative_log_time = 0
 last_interval_log_time = 0
+last_termination_threshhold = 0
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_mabrax")
 def main(config):
