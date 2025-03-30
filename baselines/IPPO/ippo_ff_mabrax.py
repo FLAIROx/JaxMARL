@@ -283,11 +283,13 @@ def make_train(config, rng_init):
                 if current_time - last_interval_log_time >= 30:
                     r_lengths = metric.get("returned_episode_lengths", None)
                     if r_lengths is not None:
-                        try:
+                        # Check if r_lengths is 0-dimensional and extract its value accordingly.
+                        if hasattr(r_lengths, "ndim") and r_lengths.ndim == 0:
+                            interval_value = r_lengths.item()
+                        else:
                             interval_value = r_lengths[-1]
-                        except TypeError:
-                            interval_value = r_lengths
-                        wandb.log({"episode_length_interval": interval_value, "update_step": metric["update_step"]}, step=metric["update_step"])
+                        wandb.log({"episode_length_interval": interval_value, "update_step": metric["update_step"]},
+                                  step=metric["update_step"])
                     last_interval_log_time = current_time
 
             update_state = (train_state, traj_batch, advantages, targets, rng)
