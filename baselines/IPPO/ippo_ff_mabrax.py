@@ -319,6 +319,7 @@ def make_train(config, rng_init):
     return train
 
 last_derivative_log_time = 0
+last_interval_log_time = 0
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_mabrax")
 def main(config):
