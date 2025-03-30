@@ -15,6 +15,10 @@ os.makedirs(cache_dir, exist_ok=True)
 # Set the XLA cache directory to this folder
 os.environ["XLA_CACHE_DIR"] = cache_dir
 
+# Nvlink version mismatch fix
+# This is a workaround for a known issue with JAX and NVLink on some systems.
+os.environ["TF_USE_NVLINK_FOR_PARALLEL_COMPILATION"] = "0"
+
 
 
 
