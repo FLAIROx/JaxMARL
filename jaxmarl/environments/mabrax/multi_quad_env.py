@@ -76,6 +76,7 @@ class MultiQuadEnv(PipelineEnv):
          "linvel_reward_coef": 5.0,
          "ang_vel_reward_coef": 1.0,
          "linvel_quad_reward_coef": 0.5,
+         "taut_reward_coef": 1.0,
          "collision_penalty_coef": -10.0,
          "smooth_action_coef": -2.0,
          "action_energy_coef": -1.0,
@@ -496,6 +497,12 @@ class MultiQuadEnv(PipelineEnv):
     # Reward for quad orientations (encouraging them to remain upright).
     up_reward = 0.5 * er(angle_q1) + 0.5 * er(angle_q2)
 
+    # taut string reward
+    quad1_dist = jp.linalg.norm(quad1_obs[:3]) # payload to quad1
+    quad2_dist = jp.linalg.norm(quad2_obs[:3]) # payload to quad2
+    taut_reward = quad1_dist + quad2_dist # Maximize the string length
+
+
     # Reward for quad velocities.
     # The reward is higher for lower angular velocities.
     # The reward is higher for lower linear velocities. 
@@ -518,6 +525,7 @@ class MultiQuadEnv(PipelineEnv):
     reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
     reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
+    reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
 
     reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
     reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
