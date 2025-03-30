@@ -28,42 +28,22 @@ class ActorCritic(nn.Module):
             activation = nn.relu
         else:
             activation = nn.tanh
-        actor_mean = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(x)
-        actor_mean = activation(actor_mean)
-        actor_mean = nn.Dense(
-            64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(actor_mean)
-        actor_mean = activation(actor_mean)
-        actor_mean = nn.Dense(
-            64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(actor_mean)
-        actor_mean = activation(actor_mean)
-        actor_mean = nn.Dense(
-            self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
-        )(actor_mean)
+        # Build Actor network using provided actor_arch or default
+        actor = x
+        for h in self.actor_arch or [128, 64, 64]:
+            actor = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(actor)
+            actor = activation(actor)
+        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(actor)
         actor_logtstd = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
         pi = distrax.MultivariateNormalDiag(actor_mean, jnp.exp(actor_logtstd))
-
-        critic = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(x)
-        critic = activation(critic)
-        critic = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(critic)
-        critic = activation(critic)
-        critic = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(critic)
-        critic = activation(critic)
-        critic = nn.Dense(
-            128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(critic)
-        critic = activation(critic)
+        
+        # Build Critic network using provided critic_arch or default
+        critic = x
+        for h in self.critic_arch or [128, 128, 128, 128]:
+            critic = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(critic)
+            critic = activation(critic)
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic)
-
+        
         return pi, jnp.squeeze(critic, axis=-1)
     
 class Transition(NamedTuple):
@@ -104,8 +84,15 @@ def make_train(config, rng_init):
         frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
         return config["LR"] * frac
 
-    # INIT NETWORK
-    network = ActorCritic(env.action_space(env.agents[0]).shape[0], activation=config["ACTIVATION"])
+    # INIT NETWORK 
+    network = ActorCritic(
+        action_dim=env.action_space(env.agents[0]).shape[0],
+        activation=config["ACTIVATION"],
+        actor_arch=config.get("ACTOR_ARCH", [128, 64, 64]),
+        critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
+    )
+    print('Network initialized with architectures:', network.actor_arch, network.critic_arch)
+
     max_dim = jnp.argmax(jnp.array([env.observation_space(a).shape[-1] for a in env.agents]))
     init_x = jnp.zeros(env.observation_space(env.agents[max_dim]).shape)
     network_params = network.init(rng_init, init_x)

@@ -68,6 +68,8 @@ def main():
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
+        "ACTOR_ARCH": [128, 64, 64],
+        "CRITIC_ARCH": [128, 128, 128, 128],
         "DISABLE_JIT": False,
         "PROJECT": "single_quad_rl",
         "NAME": f"quad_marl_{int(time.time())}",
@@ -104,7 +106,13 @@ def main():
     # Initialize the ActorCritic network with proper dimensions (use first agent's spaces)
     obs_shape = env.observation_spaces[env.agents[0]].shape[0]
     act_dim = env.action_spaces[env.agents[0]].shape[0]
-    network = ActorCritic(action_dim=act_dim, activation=config["ACTIVATION"])
+    # Initialize ActorCritic with architectures from config
+    network = ActorCritic(
+        action_dim=act_dim,
+        activation=config["ACTIVATION"],
+        actor_arch=config.get("ACTOR_ARCH", [128, 64, 64]),
+        critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
+    )
     
     # Define a policy function to map observations to actions using the trained parameters
     def policy_fn(params, obs, key):
