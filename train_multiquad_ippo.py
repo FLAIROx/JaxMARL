@@ -8,7 +8,12 @@ renders the rollout (rendering every few frames), and saves the result as a vide
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["MUJOCO_GL"] = "egl"
-os.environ["XLA_CACHE_DIR"] = "/tmp/xla_cache"
+# Create a cache directory relative to the current working directory
+cache_dir = os.path.join(os.getcwd(), "xla_cache")
+os.makedirs(cache_dir, exist_ok=True)
+
+# Set the XLA cache directory to this folder
+os.environ["XLA_CACHE_DIR"] = cache_dir
 
 import jax
 import jax.numpy as jp
