@@ -299,6 +299,7 @@ def make_train(config, rng_init):
                         if interval_value < last_termination_threshhold:
                             wandb.log({"early_termination": True}, step=metric["update_step"])
                             print("Early termination triggered.")
+                            wandb.finish(exit_code=0)
                             raise EarlyTermination("Terminating training.")
                         # Update the termination threshold for the next interval
                         delta = jnp.clip(interval_value - last_termination_threshhold, jnp.clip(interval_value, 100, 300) * 0.05, jnp.clip(interval_value, 100, 300) * 0.4)
