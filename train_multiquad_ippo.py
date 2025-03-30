@@ -106,6 +106,20 @@ def main():
     # Merge any sweep overrides into config
     config = {**config, **wandb.config}
 
+    # update nested keys from wandb.config with dot notation
+    def _update_nested_config(d, key, value):
+        keys = key.split('.')
+        target = d
+        for subkey in keys[:-1]:
+            if subkey not in target or not isinstance(target[subkey], dict):
+                target[subkey] = {}
+            target = target[subkey]
+        target[keys[-1]] = value
+
+    for k, v in wandb.config.items():
+        if '.' in k:
+            _update_nested_config(config, k, v)
+
     # terminate if num_steps*num_envs is too large, because of the GPU memory
     if config["NUM_STEPS"] * config["NUM_ENVS"] > 2048*2048:
         raise ValueError("NUM_STEPS * NUM_ENVS is too large. Please reduce them.")
