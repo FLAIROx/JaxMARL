@@ -20,6 +20,9 @@ from omegaconf import OmegaConf
 import time
 import sys
 
+class EarlyTermination(Exception): 
+    pass
+
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
     activation: str = "tanh"
