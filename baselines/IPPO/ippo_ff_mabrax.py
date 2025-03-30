@@ -280,7 +280,7 @@ def make_train(config, rng_init):
                 wandb.log(metric, step=metric["update_step"])
                 global last_interval_log_time
                 current_time = time.time()
-                if current_time - last_interval_log_time >= 30:
+                if current_time - last_interval_log_time >= 60:
                     r_lengths = metric.get("returned_episode_lengths", None)
                     if r_lengths is not None:
                         # Check if r_lengths is 0-dimensional and extract its value accordingly.
