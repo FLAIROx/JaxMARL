@@ -296,7 +296,7 @@ def make_train(config, rng_init):
                             wandb.finish()
                             raise ValueError("Episode length is below termination threshold. Terminating the run.")
                         # Update the termination threshold for the next interval
-                        delta = jnp.clip(interval_value - last_termination_threshhold, 0, interval_value * 0.4)
+                        delta = jnp.clip(interval_value - last_termination_threshhold, interval_value * 0.05, interval_value * 0.4)
                         last_termination_threshhold += delta * 0.4
                     
                     last_interval_log_time = current_time
