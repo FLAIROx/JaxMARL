@@ -36,8 +36,8 @@ from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unb
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
-jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
-jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+# jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+# jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 # jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 
@@ -145,27 +145,36 @@ def main():
         unbatched = {a: jp.squeeze(act, axis=0) for a, act in unbatched.items()}
         return unbatched
     
-    # Simulation: run an episode using the trained policy
+    # New: Define a jitted rollout function to speed up simulation by compiling the simulation loop.
+    @jax.jit
+    def simulate_rollout(params, env, sim_steps, rng, init_state):
+        # The scan carries (rng, state) and outputs the latest state at each step.
+        def sim_step(carry, _):
+            rng, state = carry
+            rng, key = jax.random.split(rng)
+            actions = policy_fn(params, env.get_obs(state), key)
+            rng, key = jax.random.split(rng)
+            _, new_state, rewards, dones, info = env.step_env(key, state, actions)
+            # Use jax.lax.cond to reset if any agent is done.
+            def reset_fn(rng):
+                rng, reset_key = jax.random.split(rng)
+                return env.reset(reset_key)[1], rng
+            new_state, rng = jax.lax.cond(
+                jp.any(jp.array(list(dones.values()))),
+                reset_fn,
+                lambda rng: (new_state, rng),
+                operand=rng
+            )
+            return (rng, new_state), new_state
+        (rng, final_state), rollout = jax.lax.scan(sim_step, (rng, init_state), None, length=sim_steps)
+        return rollout
+    
+    # Simulation: run an episode using the trained policy using compiled simulation.
     sim_steps = 4000
     rng, rng_sim = jax.random.split(rng)
-    state = env.reset(rng_sim)
-    rollout = [state[1]]
-    
-    print("Starting simulation with trained policy...")
-    for i in range(sim_steps):
-        rng, key = jax.random.split(rng)
-        actions = policy_fn(train_state.params, env.get_obs(state[1]), key)  
-        rng, key = jax.random.split(rng)
-        _, new_state, rewards, dones, info = env.step_env(key, state[1], actions)
-        rollout.append(new_state)
-        # If any episode terminates, reset the environment and log the new state
-        if any(dones.values()):
-            rng, reset_key = jax.random.split(rng)
-            state = env.reset(reset_key)
-            rollout.append(state[1])
-        else:
-            state = (None, new_state)
-    state = jax.block_until_ready(state)
+    init_state = env.reset(rng_sim)[1]  # use agent state
+    rollout = simulate_rollout(train_state.params, env, sim_steps, rng, init_state)
+    rollout = jax.block_until_ready(rollout)
     print("Simulation finished.")
     
     # Call the separated video rendering function
