@@ -10,13 +10,16 @@ sweep_config = {
     },
     "early_terminate": {
         "type": "hyperband",
-        "min_iter": 6  # 3 mins / Minimum iterations before early termination 
+        "min_iter": 3  # 3 mins / Minimum iterations before early termination 
     },
     "parameters": {
         "LR": {
             "distribution": "log_uniform",
             "min": 1e-5,
             "max": 1e-3  # default: 3e-4
+        },
+        "ANNEAL_LR": {
+            "values": [True, False]  # default: False
         },
         "NUM_STEPS": {
             "values": [64, 128, 256, 512, 1024, 2048, 4096]  # default: 2048
@@ -25,7 +28,7 @@ sweep_config = {
             "values": [64, 128, 256, 512, 1024, 2048, 4096]  # default: 2048
         },
         "NUM_MINIBATCHES": {
-            "values": [4, 8, 16, 32]  # default: 8
+            "values": [4, 8, 16, 32, 64]  # default: 8
         },
         "UPDATE_EPOCHS": {
             "values": [1, 2, 3, 4, 8]  # default: 2
@@ -59,58 +62,58 @@ sweep_config = {
             "reward_coeffs": {
                 "distance_reward_coef": {
                     "distribution": "uniform",
-                    "min": 5.0,
-                    "max": 15.0  # default: 10.0
+                    "min": 1.0,
+                    "max": 25.0  # default: 10.0
                 },
                 "z_distance_reward_coef": {
                     "distribution": "uniform",
-                    "min": 5.0,
-                    "max": 15.0  # default: 10.0
+                    "min": 0.0,
+                    "max": 20.0  # default: 10.0
                 },
                 "safe_distance_coef": {
                     "distribution": "uniform",
-                    "min": 0.5,
-                    "max": 2.0  # default: 1.0
+                    "min": 0.0,
+                    "max": 3.0  # default: 1.0
                 },
                 "velocity_reward_coef": {
                     "distribution": "uniform",
-                    "min": 3.0,
+                    "min": 0.0,
                     "max": 7.0  # default: 5.0
                 },
                 "up_reward_coef": {
                     "distribution": "uniform",
-                    "min": 3.0,
+                    "min": 0.0,
                     "max": 7.0  # default: 5.0
                 },
                 "linvel_reward_coef": {
                     "distribution": "uniform",
-                    "min": 3.0,
+                    "min": 0.0,
                     "max": 7.0  # default: 5.0
                 },
                 "ang_vel_reward_coef": {
                     "distribution": "uniform",
-                    "min": 0.5,
-                    "max": 1.5  # default: 1.0
+                    "min": 0.0,
+                    "max": 7.0  # default: 1.0
                 },
                 "linvel_quad_reward_coef": {
                     "distribution": "uniform",
-                    "min": 0.25,
-                    "max": 0.75  # default: 0.5
+                    "min": 0.0,
+                    "max": 7.0  # default: 0.5
                 },
                 "collision_penalty_coef": {
                     "distribution": "uniform",
-                    "min": -15.0,
-                    "max": -5.0  # default: -10.0
+                    "min": -100.0,
+                    "max": 0.0  # default: -10.0
                 },
                 "smooth_action_coef": {
                     "distribution": "uniform",
-                    "min": -3.0,
+                    "min": -10.0,
                     "max": -1.0  # default: -2.0
                 },
                 "action_energy_coef": {
                     "distribution": "uniform",
-                    "min": -2.0,
-                    "max": -0.5  # default: -1.0
+                    "min": -10.0,
+                    "max": -0.0  # default: -1.0
                 }
             }
         },

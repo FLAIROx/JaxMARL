@@ -15,6 +15,13 @@ os.makedirs(cache_dir, exist_ok=True)
 # Set the XLA cache directory to this folder
 os.environ["XLA_CACHE_DIR"] = cache_dir
 
+jax.config.update("jax_compilation_cache_dir", cache_dir)
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
+
+
+
 import jax
 import jax.numpy as jp
 import imageio
