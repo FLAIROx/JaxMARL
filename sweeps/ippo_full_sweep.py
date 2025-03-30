@@ -58,64 +58,60 @@ sweep_config = {
             "min": 0.9,
             "max": 0.99  # default: 0.95
         },
-        "ENV_KWARGS": {
-            "reward_coeffs": {
-                "distance_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 1.0,
-                    "max": 25.0  # default: 10.0
-                },
-                "z_distance_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 20.0  # default: 10.0
-                },
-                "safe_distance_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 3.0  # default: 1.0
-                },
-                "velocity_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 7.0  # default: 5.0
-                },
-                "up_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 7.0  # default: 5.0
-                },
-                "linvel_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 7.0  # default: 5.0
-                },
-                "ang_vel_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 7.0  # default: 1.0
-                },
-                "linvel_quad_reward_coef": {
-                    "distribution": "uniform",
-                    "min": 0.0,
-                    "max": 7.0  # default: 0.5
-                },
-                "collision_penalty_coef": {
-                    "distribution": "uniform",
-                    "min": -100.0,
-                    "max": 0.0  # default: -10.0
-                },
-                "smooth_action_coef": {
-                    "distribution": "uniform",
-                    "min": -10.0,
-                    "max": -1.0  # default: -2.0
-                },
-                "action_energy_coef": {
-                    "distribution": "uniform",
-                    "min": -10.0,
-                    "max": -0.0  # default: -1.0
-                }
-            }
+        "ENV_KWARGS.reward_coeffs.distance_reward_coef": {
+            "distribution": "uniform",
+            "min": 1.0,
+            "max": 25.0  # default: 10.0
+        },
+        "ENV_KWARGS.reward_coeffs.z_distance_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 20.0  # default: 10.0
+        },
+        "ENV_KWARGS.reward_coeffs.safe_distance_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 3.0  # default: 1.0
+        },
+        "ENV_KWARGS.reward_coeffs.velocity_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 7.0  # default: 5.0
+        },
+        "ENV_KWARGS.reward_coeffs.up_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 7.0  # default: 5.0
+        },
+        "ENV_KWARGS.reward_coeffs.linvel_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 7.0  # default: 5.0
+        },
+        "ENV_KWARGS.reward_coeffs.ang_vel_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 7.0  # default: 1.0
+        },
+        "ENV_KWARGS.reward_coeffs.linvel_quad_reward_coef": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 7.0  # default: 0.5
+        },
+        "ENV_KWARGS.reward_coeffs.collision_penalty_coef": {
+            "distribution": "uniform",
+            "min": -100.0,
+            "max": 0.0  # default: -10.0
+        },
+        "ENV_KWARGS.reward_coeffs.smooth_action_coef": {
+            "distribution": "uniform",
+            "min": -10.0,
+            "max": -1.0  # default: -2.0
+        },
+        "ENV_KWARGS.reward_coeffs.action_energy_coef": {
+            "distribution": "uniform",
+            "min": -10.0,
+            "max": -0.0  # default: -1.0
         },
         "ACTOR_ARCH": {
             "values": [
