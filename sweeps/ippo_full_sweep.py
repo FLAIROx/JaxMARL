@@ -14,7 +14,7 @@ sweep_config = {
     },
     "parameters": {
         "LR": {
-            "distribution": "log_uniform",
+            "distribution": "log_uniform_values", 
             "min": 1e-5,
             "max": 1e-3  # default: 3e-4
         },
