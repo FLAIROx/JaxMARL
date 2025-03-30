@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import hydra
 from omegaconf import OmegaConf
 import time
+import sys
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -291,10 +292,11 @@ def make_train(config, rng_init):
                             interval_value = r_lengths[-1]
                         wandb.log({"episode_length_interval": interval_value, "termination_threshold": last_termination_threshhold}, step=metric["update_step"])
                     
-                        # terminate if the episode if under termination threshold
+                        # Trigger early termination via a custom exception
                         if interval_value < last_termination_threshhold:
-                            wandb.finish()
-                            raise ValueError("Episode length is below termination threshold. Terminating the run.")
+                            wandb.log({"early_termination": True}, step=metric["update_step"])
+                            print("Early termination triggered.")
+                            raise EarlyTermination("Terminating training.")
                         # Update the termination threshold for the next interval
                         delta = jnp.clip(interval_value - last_termination_threshhold, interval_value * 0.05, interval_value * 0.4)
                         last_termination_threshhold += delta * 0.4
@@ -323,9 +325,13 @@ def make_train(config, rng_init):
 
         rng, _rng = jax.random.split(rng)
         runner_state = (train_state, env_state, obsv, 0, _rng)
-        runner_state, metric = jax.lax.scan(
-            _update_step, runner_state, None, config["NUM_UPDATES"]
-        )
+        try:
+            runner_state, metric = jax.lax.scan(
+                _update_step, runner_state, None, config["NUM_UPDATES"]
+            )
+        except EarlyTermination:
+            # Early termination: return current state instead of raising an error.
+            return {"runner_state": runner_state, "metrics": {}}
         return {"runner_state": runner_state, "metrics": metric}
 
     return train
