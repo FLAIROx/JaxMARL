@@ -15,10 +15,6 @@ os.makedirs(cache_dir, exist_ok=True)
 # Set the XLA cache directory to this folder
 os.environ["XLA_CACHE_DIR"] = cache_dir
 
-jax.config.update("jax_compilation_cache_dir", cache_dir)
-jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
-jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
-jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 
 
@@ -32,6 +28,12 @@ import time
 import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
+
+# Set JAX cache
+jax.config.update("jax_compilation_cache_dir", cache_dir)
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 
 def render_video(rollout, env, render_every=2, width=1280, height=720):
