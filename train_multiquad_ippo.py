@@ -161,7 +161,7 @@ def main():
         return unbatched
     
    # Simulation: run an episode using the trained policy
-    sim_steps = 4000
+    sim_steps = 7500
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
     rollout = [state[1]]
