@@ -536,16 +536,17 @@ class MultiQuadEnv(PipelineEnv):
     stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
-    stability_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
+
     #penalties
-    stability_reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
-    stability_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
-    stability_reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
+    safety_reward = self.reward_coeffs["collision_penalty_coef"] * collision_penalty
+    safety_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
+    safety_reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
+    safety_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
 
   
     # Combine all rewards and penalties.
     stability_weight = 1.0 / (1.0 + sim_time)
-    reward = tracking_reward * (stability_weight * stability_reward)
+    reward = tracking_reward * (stability_weight * stability_reward + safety_reward)
     
     # Normalize the reward by the divisor.
     reward /= self.reward_divisor
