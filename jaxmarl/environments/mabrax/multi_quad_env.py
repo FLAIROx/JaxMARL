@@ -476,17 +476,17 @@ class MultiQuadEnv(PipelineEnv):
     payload_error = team_obs[:3]
     payload_linvel = team_obs[3:6]
     linvel_reward = er(jp.linalg.norm(payload_linvel))
+
+
     dis = jp.linalg.norm(payload_error)
     z_error = jp.abs(payload_error[2])
     distance_reward =  er(dis)
     z_distance_reward =  er(z_error)
 
     # Velocity alignment.
-    norm_error = jp.maximum(jp.linalg.norm(payload_error), 1e-6)
-    norm_linvel = jp.maximum(jp.linalg.norm(payload_linvel), 1e-6)
-    velocity_towards_target = jp.dot(payload_error, payload_linvel) / (norm_error * norm_linvel)
-    #tanh cap velocity_towards_target
-    velocity_towards_target = jp.tanh(velocity_towards_target)
+    velocity_towards_target = jp.dot(payload_error, payload_linvel)
+    velocity_towards_target = er(1 - velocity_towards_target)
+ 
 
     # Safety and smoothness penalties.
     quad1_obs = obs[6:30]
