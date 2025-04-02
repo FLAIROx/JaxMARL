@@ -18,9 +18,6 @@ sweep_config = {
             "min": 1e-5,
             "max": 1e-3  # default: 3e-4
         },
-        "ANNEAL_LR": {
-            "values": [True, False]  # default: False
-        },
         "NUM_STEPS": {
             "values": [32, 64, 128, 256, 512, 1024]  # default: 128
         },
