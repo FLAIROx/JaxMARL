@@ -487,7 +487,7 @@ class MultiQuadEnv(PipelineEnv):
     velocity_towards_target = jp.dot(payload_error, payload_linvel)
     velocity_towards_target = er(1 - velocity_towards_target) * (1 - er(dis, 50))
     # Near the target, we want to encourage the quad to have low velocity.
-    velocity_towards_target += 3 * linvel_reward * er(dis, 20) 
+    velocity_towards_target += 3 * linvel_reward * er(dis, 25) 
 
 
     # Safety and smoothness penalties.
