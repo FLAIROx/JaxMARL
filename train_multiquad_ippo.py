@@ -67,7 +67,7 @@ def main():
         "ang_vel_reward_coef": 0.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 1.0,
-        "collision_penalty_coef": -10.0,
+        "collision_penalty_coef": -8.0,
         "smooth_action_coef": -1.0,
         "action_energy_coef": 0.0,
     }
