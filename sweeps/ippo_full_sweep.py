@@ -22,7 +22,7 @@ sweep_config = {
             "values": [32, 64, 128, 256, 512, 1024]  # default: 128
         },
         "NUM_ENVS": {
-            "values": [128, 256, 512, 1024, 2048, 4096, 8192]  # default: 2048
+            "values": [128, 256, 512, 1024, 2048, 4096, 8192, 16384 ]  # default: 2048
         },
         "NUM_MINIBATCHES": {
             "values": [4, 8, 16, 32, 64, 128, 256, 512]  # default: 8
