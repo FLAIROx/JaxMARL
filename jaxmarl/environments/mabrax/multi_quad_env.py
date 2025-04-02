@@ -484,11 +484,7 @@ class MultiQuadEnv(PipelineEnv):
     distance_reward =  er(dis)
     z_distance_reward =  er(z_error)
 
-    # Velocity alignment.
-    velocity_towards_target = jp.dot(payload_error, payload_linvel)
-    velocity_towards_target = er(1 - velocity_towards_target) * (1 - er(dis, 50))
-    # Near the target, we want to encourage the quad to have low velocity.
-    velocity_towards_target += 3 * linvel_reward * er(dis, 25) 
+    
 
 
     # Safety and smoothness penalties.
@@ -517,6 +513,14 @@ class MultiQuadEnv(PipelineEnv):
     linvel_q1 = quad1_obs[9:12]
     linvel_q2 = quad2_obs[9:12]
     linvel_quad_reward =  0.5 * er(jp.linalg.norm(linvel_q1)) + 0.5 * er(jp.linalg.norm(linvel_q2)) 
+
+    # Velocity alignment.
+    velocity_towards_target = jp.dot(payload_error, payload_linvel)
+    velocity_towards_target = er(1 - velocity_towards_target) * (1 - er(dis, 50))
+    # Near the target, we want to encourage the quad to have low velocity.
+    velocity_towards_target += 3 * (linvel_reward + linvel_quad_reward) * er(dis, 25)
+
+
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
     action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
