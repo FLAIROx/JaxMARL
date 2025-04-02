@@ -481,8 +481,8 @@ class MultiQuadEnv(PipelineEnv):
 
     dis = jp.linalg.norm(payload_error)
     z_error = jp.abs(payload_error[2])
-    distance_reward =  er(dis)
-    z_distance_reward =  er(z_error)
+    distance_reward =  er(dis, 2 + sim_time)
+    z_distance_reward =  er(z_error, 2 + sim_time)
 
     
 
