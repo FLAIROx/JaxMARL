@@ -78,7 +78,7 @@ def main():
         "TOTAL_TIMESTEPS": 1_000_000_000,
         "NUM_ENVS": 2048,
         "NUM_STEPS": 128,
-        "NUM_MINIBATCHES": 8,
+        "NUM_MINIBATCHES": 32,
         "UPDATE_EPOCHS": 2,
         "ANNEAL_LR": False,
         "LR": 3e-4,
