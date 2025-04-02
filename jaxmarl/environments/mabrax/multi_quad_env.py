@@ -516,20 +516,26 @@ class MultiQuadEnv(PipelineEnv):
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
     action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
 
-    reward = 0
-    reward += self.reward_coeffs["distance_reward_coef"] * distance_reward
-    reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
-    reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
-    reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
-    reward += self.reward_coeffs["up_reward_coef"] * up_reward
-    reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
-    reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
-    reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-    reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
 
-    reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
-    reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
-    reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
+    tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
+    tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
+    tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
+
+
+    stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
+    stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
+    stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
+    stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
+    stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
+    stability_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
+    #penalties
+    stability_reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
+    stability_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
+    stability_reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
+
+  
+    # Combine all rewards and penalties.
+    reward = tracking_reward * stability_reward
     
     # Normalize the reward by the divisor.
     reward /= self.reward_divisor
