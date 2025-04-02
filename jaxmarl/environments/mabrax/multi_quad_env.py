@@ -546,7 +546,7 @@ class MultiQuadEnv(PipelineEnv):
   
     # Combine all rewards and penalties.
     stability_weight = 1.0 / (1.0 + sim_time)
-    reward = tracking_reward * (stability_weight * stability_reward + safety_reward)
+    reward = (1 - stability_weight) * tracking_reward + stability_weight * stability_reward + safety_reward
     
     # Normalize the reward by the divisor.
     reward /= self.reward_divisor
