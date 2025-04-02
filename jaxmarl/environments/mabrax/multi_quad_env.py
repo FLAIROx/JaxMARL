@@ -519,7 +519,6 @@ class MultiQuadEnv(PipelineEnv):
 
     tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
     tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
-    tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
 
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
@@ -528,6 +527,7 @@ class MultiQuadEnv(PipelineEnv):
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
     stability_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
+    stability_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
     #penalties
     stability_reward += self.reward_coeffs["collision_penalty_coef"] * collision_penalty
     stability_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
