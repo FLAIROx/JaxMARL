@@ -309,9 +309,10 @@ class MultiQuadEnv(PipelineEnv):
       pipeline_state.time > 0.5, # wait for the quads to be in the air
       jp.logical_and(pipeline_state.xpos[self.q2_body_id][2] < 0.03, pipeline_state.xpos[self.q1_body_id][2] < 0.03)
     )
+
     ground_collision_payload = jp.logical_and(
-        pipeline_state.time > 3, # wait for the payload to be in the air
-        pipeline_state.xpos[self.payload_body_id][2] < 0.03
+      jp.logical_or(pipeline_state.time > 1.5, pipeline_state.cvel[self.payload_body_id][2] < -0.1),
+      pipeline_state.xpos[self.payload_body_id][2] < 0.03
     )
     collision = jp.logical_or(collision, ground_collision)
     collision = jp.logical_or(collision, ground_collision_payload)
