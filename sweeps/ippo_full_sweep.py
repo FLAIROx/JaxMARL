@@ -11,7 +11,6 @@ sweep_config = {
     "early_terminate": {
         "type": "hyperband",
         "min_iter": 3,  # 3 mins / Minimum iterations before early termination 
-        "eta": 2
     },
     "parameters": {
         "LR": {
@@ -26,121 +25,30 @@ sweep_config = {
             "values": [32, 64, 128, 256, 512, 1024]  # default: 128
         },
         "NUM_ENVS": {
-            "values": [32, 64, 128, 256, 512, 1024, 2048, 4096]  # default: 2048
+            "values": [128, 256, 512, 1024, 2048, 4096, 8192]  # default: 2048
         },
         "NUM_MINIBATCHES": {
-            "values": [4, 8, 16, 32, 64]  # default: 8
+            "values": [4, 8, 16, 32, 64, 128, 256, 512]  # default: 8
         },
         "UPDATE_EPOCHS": {
-            "values": [1, 2, 3, 4, 8]  # default: 2
-        },
-        "CLIP_EPS": {
-            "distribution": "uniform",
-            "min": 0.1,
-            "max": 0.3  # default: 0.2
-        },
-        "VF_COEF": {
-            "distribution": "uniform",
-            "min": 0.25,
-            "max": 0.75  # default: 0.5
-        },
-        "ENT_COEF": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 0.05  # default: 0.01
-        },
-        "GAMMA": {
-            "distribution": "uniform",
-            "min": 0.95,
-            "max": 0.999  # default: 0.99
-        },
-        "GAE_LAMBDA": {
-            "distribution": "uniform",
-            "min": 0.9,
-            "max": 0.99  # default: 0.95
-        },
-        "ENV_KWARGS.reward_coeffs.distance_reward_coef": {
-            "distribution": "uniform",
-            "min": 1.0,
-            "max": 25.0  # default: 10.0
-        },
-        "ENV_KWARGS.reward_coeffs.z_distance_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 20.0  # default: 10.0
-        },
-        "ENV_KWARGS.reward_coeffs.safe_distance_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 3.0  # default: 1.0
-        },
-        "ENV_KWARGS.reward_coeffs.velocity_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 5.0  # default: 0.0
-        },
-        "ENV_KWARGS.reward_coeffs.up_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 7.0  # default: 5.0
-        },
-        "ENV_KWARGS.reward_coeffs.linvel_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 7.0  # default: 5.0
-        },
-        "ENV_KWARGS.reward_coeffs.ang_vel_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 3.0  # default: 0.0
-        },
-        "ENV_KWARGS.reward_coeffs.linvel_quad_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 7.0  # default: 5.0
-        },
-        "ENV_KWARGS.reward_coeffs.taut_reward_coef": {
-            "distribution": "uniform",
-            "min": 0.0,
-            "max": 5.0  # default: 1.0
-        },
-        "ENV_KWARGS.reward_coeffs.collision_penalty_coef": {
-            "distribution": "uniform",
-            "min": -50.0,
-            "max": 0.0  # default: -20.0
-        },
-        "ENV_KWARGS.reward_coeffs.smooth_action_coef": {
-            "distribution": "uniform",
-            "min": -10.0,
-            "max": -1.0  # default: -2.0
-        },
-        "ENV_KWARGS.reward_coeffs.action_energy_coef": {
-            "distribution": "uniform",
-            "min": -5.0,
-            "max": -0.0  # default: 0.0
+            "values": [1, 2, 3, 4, 8, 16]  # default: 2
         },
         "ACTOR_ARCH": {
             "values": [
-                [128, 64, 64],         # default architecture
-                [256, 128, 64],        # wider first layer
-                [128, 128, 64],        # equal width in first two layers
-                [256, 128, 128],       # deeper in last layers
-                [64, 64, 64],          # lighter alternative
-                [128, 64],             # shallower: only 2 layers
-                [128, 128, 64, 64],     # deeper: 4 layers
-                [256, 256, 128, 64]     # deeper with wider early layers
+                [64, 64]
+                [64, 64, 64], 
+                [64, 64, 64, 64],     
+                [128, 64, 64],         
+                [128, 128, 128],      
+                [256, 128, 128], 
+                [256, 256, 256],     
             ]
         },
         "CRITIC_ARCH": {
             "values": [
-                [128, 128, 128, 128],    # default architecture
-                [256, 256, 256, 256],    # deeper and wider alternative
-                [128, 128, 128],         # shallower: 3 layers
-                [256, 256, 128, 128],     # mixed architecture
-                [512, 256, 256, 128],     # larger capacity alternative
-                [128, 128],              # very shallow: only 2 layers
-                [128, 128, 128, 128, 128],# deeper: 5 layers
-                [256, 256, 256, 256, 256] # even deeper: 5 layers, wider overall
+                [128, 128, 128, 128],   
+                [256, 256, 256, 256],   
+                [128, 128, 128, 128, 128],
             ]
         }
     }
