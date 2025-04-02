@@ -67,7 +67,7 @@ def main():
         "ang_vel_reward_coef": 0.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 1.0,
-        "collision_penalty_coef": -5.0,
+        "collision_penalty_coef": -10.0,
         "smooth_action_coef": -1.0,
         "action_energy_coef": 0.0,
     }
@@ -90,7 +90,7 @@ def main():
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
-        "ACTOR_ARCH": [128, 128, 64, 64],
+        "ACTOR_ARCH": [64, 64, 64],
         "CRITIC_ARCH": [128, 128, 128, 128],
         "DISABLE_JIT": False,
         "PROJECT": "single_quad_rl",
