@@ -469,7 +469,7 @@ class MultiQuadEnv(PipelineEnv):
     and energy penalties.
     """
     # lambda for exponential reward
-    er = lambda x: jp.exp(-2 * jp.abs(x))
+    er = lambda x, s=2: jp.exp(-s * jp.abs(x))
 
     # Team observations: payload error and linear velocity.
     team_obs = obs[:6]
@@ -486,7 +486,9 @@ class MultiQuadEnv(PipelineEnv):
     # Velocity alignment.
     velocity_towards_target = jp.dot(payload_error, payload_linvel)
     velocity_towards_target = er(1 - velocity_towards_target)
- 
+    # Near the target, we want to encourage the quad to have low velocity.
+    velocity_towards_target += 3 * linvel_reward * er(dis, 20) 
+
 
     # Safety and smoothness penalties.
     quad1_obs = obs[6:30]
