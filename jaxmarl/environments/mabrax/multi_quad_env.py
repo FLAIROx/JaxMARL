@@ -44,7 +44,7 @@ class MultiQuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      max_time: float = 10.0,                  # Maximum simulation time per episode.
+      max_time: float = 20.0,                  # Maximum simulation time per episode.
       reset_noise_scale: float = 0.1,          # Noise scale for initial state reset.
       reward_coeffs: dict = None,
       **kwargs,
@@ -311,7 +311,7 @@ class MultiQuadEnv(PipelineEnv):
     )
 
     ground_collision_payload = jp.logical_and(
-      jp.logical_or(pipeline_state.time > 1.5, pipeline_state.cvel[self.payload_body_id][2] < -0.1),
+      jp.logical_or(pipeline_state.time > 2.5, pipeline_state.cvel[self.payload_body_id][2] < -0.1),
       pipeline_state.xpos[self.payload_body_id][2] < 0.03
     )
     collision = jp.logical_or(collision, ground_collision)
@@ -329,7 +329,7 @@ class MultiQuadEnv(PipelineEnv):
     payload_pos = pipeline_state.xpos[self.payload_body_id]
     payload_error = self.target_position - payload_pos
     payload_error_norm = jp.linalg.norm(payload_error)
-    max_time_to_target = 8.0
+    max_time_to_target = 10.0
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
     max_payload_error = 4 * (1 - time_progress) + 0.05 # allow for 5cm error at the target
     out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
@@ -528,6 +528,7 @@ class MultiQuadEnv(PipelineEnv):
 
     tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
     tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
+    stability_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
 
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
@@ -535,10 +536,11 @@ class MultiQuadEnv(PipelineEnv):
     stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
-    stability_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
+    
 
     #penalties
     safety_reward = self.reward_coeffs["collision_penalty_coef"] * collision_penalty
+    safety_reward += self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
     safety_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
     safety_reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
     safety_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
