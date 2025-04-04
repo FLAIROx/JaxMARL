@@ -491,7 +491,7 @@ class MultiQuadEnv(PipelineEnv):
     quad1_obs = obs[6:30]
     quad2_obs = obs[30:54]
     quad_distance = jp.linalg.norm(quad1_obs[:3] - quad2_obs[:3])
-    safe_distance_reward = jp.clip((quad_distance - 0.15) / (0.20 - 0.15), 0, 1)
+    safe_distance_reward = jp.clip((quad_distance - 0.15) / (0.17 - 0.15), 0, 1)
     collision_penalty = 1.0 * collision
     # out_of_bounds_penalty = 50.0 * out_of_bounds
 
