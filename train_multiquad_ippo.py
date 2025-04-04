@@ -60,7 +60,7 @@ def main():
     default_reward_coeffs = {
         "distance_reward_coef": 1.0,
         "z_distance_reward_coef": 0.0,
-        "velocity_reward_coef": 0.0,
+        "velocity_reward_coef": 1.0,
         "safe_distance_coef": 1.0,
         "up_reward_coef": 1.0,
         "linvel_reward_coef": 0.0,

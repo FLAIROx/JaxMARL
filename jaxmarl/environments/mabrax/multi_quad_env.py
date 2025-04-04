@@ -515,10 +515,16 @@ class MultiQuadEnv(PipelineEnv):
     linvel_quad_reward =  0.5 * er(jp.linalg.norm(linvel_q1)) + 0.5 * er(jp.linalg.norm(linvel_q2)) 
 
     # Velocity alignment.
-    velocity_towards_target = jp.dot(payload_error, payload_linvel)
-    velocity_towards_target = er(1 - velocity_towards_target) * (1 - er(dis, 50))
-    # Near the target, we want to encourage the quad to have low velocity.
-    velocity_towards_target += 3 * (linvel_reward + linvel_quad_reward) * er(dis, 25)
+    target_dir  = payload_error / dis
+    vel = jp.linalg.norm(payload_linvel)
+    vel_dir = payload_linvel / vel
+
+  
+    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), 20)
+
+    vel_error = er(vel, 1/(dis+1e-3))
+
+    velocity_towards_target = (aligned_vel + 2 * vel_error) / 3
 
 
 
