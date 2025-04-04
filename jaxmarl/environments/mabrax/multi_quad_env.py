@@ -519,7 +519,7 @@ class MultiQuadEnv(PipelineEnv):
     vel = jp.linalg.norm(payload_linvel)
     vel_dir = payload_linvel / vel
 
-    aligned_vel = er(1 - jp.dot(vel_dir, target_dir)) # dotprod = 1  => vel is perfectly aligned
+    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), 10) # dotprod = 1  => vel is perfectly aligned
 
    
     vel_cap = 5.0 - 0.05 * vel**4 # cap the v
