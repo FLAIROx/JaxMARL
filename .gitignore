@@ -17,3 +17,4 @@ outputs/
 models/
 
 !jaxmarl/environments/mabrax/randomization.ipynb
+!jaxmarl/environments/mabrax/vel_reward.ipynb

@@ -519,23 +519,28 @@ class MultiQuadEnv(PipelineEnv):
     vel = jp.linalg.norm(payload_linvel)
     vel_dir = payload_linvel / vel
 
-  
-    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), 20)
+    aligned_vel = er(1 - jp.dot(vel_dir, target_dir)) # dotprod = 1  => vel is perfectly aligned
 
-    vel_error = er(vel, 1/(dis+1e-3))
-
-    velocity_towards_target = (aligned_vel + 2 * vel_error) / 3
-
+   
+    vel_cap = 5.0 - 0.05 * vel**4 # cap the v
+    zero_at_target = 30.0 * dis * jp.exp(-50.0 * dis * jp.abs(vel))
+    no_zero_while_error = jp.exp(-(2.0 / (20.0 * dis + 0.1)) * jp.abs(vel))
+    target_reward = no_zero_while_error * (vel_cap - zero_at_target)
+    
+    target_reward = jp.exp(0.5 * target_reward)
+    target_reward *= jp.exp(-2.0 * jp.abs(dis))
+    target_reward *= aligned_vel
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
     action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
 
 
-    tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
-    tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
-    tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
-
+    # tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
+    # tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
+    # tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
+    # tracking_reward += self.reward_coeffs.get("target_reward_coef", 1.0) * target_reward
+    tracking_reward = target_reward
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
