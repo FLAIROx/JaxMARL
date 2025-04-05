@@ -102,15 +102,14 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     },
     "multiquad_2x4": {
         "agent_0": [
-            (62, 64),
-            (3, 5),
+            62,
+            (0, 5),
          (6, 29),
          (54, 57),
          (30, 32),
          (42,44)], 
         "agent_1": [
-            (62, 64),
-            (3, 5),
+            (0, 5),
          (30, 53),
          (58, 61),
          (6, 8),
@@ -119,6 +118,7 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     # local quad mappings
     "multiquad_2x4_local": {
         "agent_0": [
+            62,
             (98,103),
          (9,17),
          (62,76),
