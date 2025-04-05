@@ -153,7 +153,7 @@ class MultiQuadEnv(PipelineEnv):
   
     # mask: if True use uniform sample, if False use normal sample.
     mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.5
-    normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.3
+    normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.1
     
     # Choose payload position based on mask.
     payload_pos = jp.where(mask, uniform_payload_pos, normal_payload_pos)
