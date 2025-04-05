@@ -450,7 +450,7 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
-        norm, # (3,)  62-64
+        jp.array([norm]),     # (3,)  62-64
         # local_quad1_rel,      # (3,)  62-64
         # local_quad1_linvel,   # (3,)  65-67
         # local_quad1_angvel,   # (3,)  68-70
