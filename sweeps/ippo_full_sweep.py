@@ -10,7 +10,9 @@ sweep_config = {
     },
     "early_terminate": {
         "type": "hyperband",
-        "min_iter": 3,  # 3 mins / Minimum iterations before early termination 
+        "min_iter": 3,  # 3 mins / Minimum iterations before early termination
+        "eta": 2,
+        "strict": True,
     },
     "parameters": {
         "LR": {
@@ -19,17 +21,17 @@ sweep_config = {
             "max": 1e-3  # default: 3e-4
         },
         "NUM_STEPS": {
-            "values": [32, 64, 128, 256, 512, 1024]  # default: 128
+            "values": [16, 32, 64, 128, 256, 512, 1024, 2048]  # default: 128
         },
         "NUM_ENVS": {
-            "values": [128, 256, 512, 1024, 2048, 4096, 8192, 16384 ]  # default: 2048
+            "values": [128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]  # default: 2048
         },
         "NUM_MINIBATCHES": {
-            "values": [4, 8, 16, 32, 64, 128, 256, 512]  # default: 8
+            "values": [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]  # default: 8
         },
         "UPDATE_EPOCHS": {
             "min": 1,
-            "max": 16,
+            "max": 32,
             "distribution": "int_uniform" 
         },
         "ACTOR_ARCH": {
@@ -46,6 +48,14 @@ sweep_config = {
         },
         "CRITIC_ARCH": {
             "values": [
+                [64, 64],
+                [64, 64, 64], 
+                [64, 64, 64, 64],
+                [128, 128],
+                [128, 128, 64, 64],   
+                [128, 128, 128],      
+                [256, 128, 128], 
+                [256, 256, 256],
                 [128, 128, 128, 128],
                 [256, 256, 128, 128],
                 [256, 256, 256, 256],   
