@@ -537,16 +537,15 @@ class MultiQuadEnv(PipelineEnv):
 
     aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
 
-   
-    vel_cap = 1.0 - 0.05 * vel**4 # cap the v
-    zero_at_target = 30.0 * dis * jp.exp(-50.0 * dis * jp.abs(vel))
-    no_zero_while_error = jp.exp(-(2.0 / (20.0 * dis + 0.1)) * jp.abs(vel))
+  
+
+    vel_cap = 3.45 - 0.115 * vel**4
+    zero_at_target = 14.7 * dis * jp.exp(-33.1 * dis * jp.abs(vel))
+    no_zero_while_error = jp.exp(- (1.6 / (26.0 * dis + 0.3)) * jp.abs(vel))
     target_reward = no_zero_while_error * (vel_cap - zero_at_target)
-    
-    target_reward = jp.exp(0.5 * target_reward)
+    target_reward = jp.exp(0.4 * target_reward)
     target_reward *= aligned_vel
-    target_reward *= jp.exp(-2.0 * jp.abs(dis))
-    
+    target_reward *= jp.exp(-1.4 * jp.abs(dis))
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
