@@ -360,6 +360,13 @@ class MultiQuadEnv(PipelineEnv):
     
     payload_linvel = data.cvel[self.payload_body_id][3:6]
     payload_error = target_position - payload_pos
+    # Convert payload_error from Cartesian to spherical global coordinates.
+    def cartesian_to_spherical(vec):
+        r = jp.linalg.norm(vec)
+        theta = jp.arccos(vec[2] / (r + 1e-6))
+        phi = jp.arctan2(vec[1], vec[0])
+        return jp.array([r, theta, phi])
+    payload_error_sph = cartesian_to_spherical(payload_error)
 
     # Quad 1 state.
     quad1_pos = data.xpos[self.q1_body_id]
@@ -441,6 +448,7 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
+        payload_error_sph, # (3,)  62-64
         # local_quad1_rel,      # (3,)  62-64
         # local_quad1_linvel,   # (3,)  65-67
         # local_quad1_angvel,   # (3,)  68-70
