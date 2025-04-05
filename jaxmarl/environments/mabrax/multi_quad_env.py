@@ -140,20 +140,22 @@ class MultiQuadEnv(PipelineEnv):
       raise ValueError("One or more joint IDs not found in the model.")
 
   @staticmethod
-  def generate_configuration(key):
-    """
-    Generate a candidate configuration from random samples.
-    Returns:
-      payload_pos, quad1_pos, quad2_pos -- each a jp.array of shape (3,)
-    """
-    subkeys = jax.random.split(key, 9)
-    min_quad_z = 0.008    # quad on ground
-    min_payload_z = 0.0055  # payload on ground
+  def generate_configuration(key, target_position):
+    subkeys = jax.random.split(key, 11)
+    min_quad_z = 0.008 # quad on ground
+    min_payload_z = 0.0055 # payload on ground
 
-    # Payload position: x,y uniformly in [-1.5, 1.5] and z in [-1.0, 3.0] then clipped to [0, 3]
     payload_xy = jax.random.uniform(subkeys[0], (2,), minval=-1.5, maxval=1.5)
     payload_z = jax.random.uniform(subkeys[1], (), minval=-1.0, maxval=3.0)
-    payload_pos = jp.array([payload_xy[0], payload_xy[1], payload_z])
+    uniform_payload_pos = jp.array([payload_xy[0], payload_xy[1], payload_z])
+    
+  
+    # mask: if True use uniform sample, if False use normal sample.
+    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.5
+    normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.3
+    
+    # Choose payload position based on mask.
+    payload_pos = jp.where(mask, uniform_payload_pos, normal_payload_pos)
 
     # Parameters for Quad positions.
     mean_r   = 0.3
@@ -196,10 +198,10 @@ class MultiQuadEnv(PipelineEnv):
     return payload_pos, quad1_pos, quad2_pos
 
   @staticmethod
-  def generate_valid_configuration(key, oversample=5):
+  def generate_valid_configuration(key, target_position, oversample=5):
 
     candidate_keys = jax.random.split(key, oversample)
-    candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(MultiQuadEnv.generate_configuration)(candidate_keys)
+    candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(MultiQuadEnv.generate_configuration)(candidate_keys, target_position)
     
     dist_quads = jp.linalg.norm(candidate_quad1 - candidate_quad2, axis=1)
     dist_q1_payload = jp.linalg.norm(candidate_quad1 - candidate_payload, axis=1)
@@ -218,7 +220,7 @@ class MultiQuadEnv(PipelineEnv):
     qvel = jp.clip(qvel, a_min=-5.0, a_max=5.0)
 
     # Get new positions for payload and both quadrotors.
-    payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config)
+    payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config, self.target_position)
 
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
