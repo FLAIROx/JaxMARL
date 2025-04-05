@@ -303,7 +303,7 @@ def make_train(config, rng_init):
                             raise EarlyTermination("Terminating training.")
                         # Update the termination threshold for the next interval
                         delta = jnp.clip(interval_value - last_termination_threshhold, 10, 20)
-                        last_termination_threshhold += delta * 0.4 * (1.1 - np.clip(interval_value/600,0,1))
+                        last_termination_threshhold += delta * 0.2 * (1.1 - np.clip(interval_value/600,0,1))
                     
                     last_interval_log_time = current_time
                     
