@@ -199,10 +199,11 @@ class MultiQuadEnv(PipelineEnv):
 
   @staticmethod
   def generate_valid_configuration(key, target_position, oversample=5):
-
     candidate_keys = jax.random.split(key, oversample)
-    candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(MultiQuadEnv.generate_configuration)(candidate_keys, target_position)
-    
+    # Use in_axes=(0, None) to broadcast target_position.
+    candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(
+        MultiQuadEnv.generate_configuration, in_axes=(0, None)
+    )(candidate_keys, target_position)
     dist_quads = jp.linalg.norm(candidate_quad1 - candidate_quad2, axis=1)
     dist_q1_payload = jp.linalg.norm(candidate_quad1 - candidate_payload, axis=1)
     dist_q2_payload = jp.linalg.norm(candidate_quad2 - candidate_payload, axis=1)
