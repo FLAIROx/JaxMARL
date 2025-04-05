@@ -343,7 +343,9 @@ class MultiQuadEnv(PipelineEnv):
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
         angle_q1, angle_q2, prev_last_action, self.target_position, pipeline_state
     )
-    done = jp.logical_or(jp.logical_or(out_of_bounds, collision),
+    # done = jp.logical_or(jp.logical_or(out_of_bounds, collision),
+    #                      pipeline_state.time > self.max_time)
+    done = jp.logical_or(collision,
                          pipeline_state.time > self.max_time)
     done = done * 1.0
 
