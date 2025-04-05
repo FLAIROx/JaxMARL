@@ -68,18 +68,19 @@ class MultiQuadEnv(PipelineEnv):
     self._reset_noise_scale = reset_noise_scale
     if reward_coeffs is None:
       reward_coeffs = {
-         "distance_reward_coef": 10.0,
-         "z_distance_reward_coef": 10.0,
+         "distance_reward_coef": 0.0,
+         "z_distance_reward_coef": 0.0,
+         "velocity_reward_coef": 0.0,
          "safe_distance_coef": 1.0,
-         "velocity_reward_coef": 5.0,
-         "up_reward_coef": 5.0,
-         "linvel_reward_coef": 5.0,
-         "ang_vel_reward_coef": 1.0,
-         "linvel_quad_reward_coef": 0.5,
+         "up_reward_coef": 1.0,
+         "linvel_reward_coef": 0.0,
+         "ang_vel_reward_coef": 0.0,
+         "linvel_quad_reward_coef": 1.0,
          "taut_reward_coef": 1.0,
-         "collision_penalty_coef": -10.0,
-         "smooth_action_coef": -2.0,
-         "action_energy_coef": -1.0,
+         "collision_penalty_coef": -1.0,
+         "out_of_bounds_penalty_coef": -1.0,
+         "smooth_action_coef": -1.0,
+         "action_energy_coef": 0.0,
       }
 
     self.reward_divisor = sum(reward_coeffs.values())
@@ -192,8 +193,7 @@ class MultiQuadEnv(PipelineEnv):
     quad2_pos = jp.array([quad2_x, quad2_y, quad2_z])
 
     # Ensure payload is above ground.
-    payload_pos_z = jp.clip(payload_z, min_payload_z, 3)
-    payload_pos = jp.array([payload_xy[0], payload_xy[1], payload_pos_z])
+    payload_pos = payload_pos.at[2].set(jp.clip(payload_pos[2], min_payload_z, 3))
     
     return payload_pos, quad1_pos, quad2_pos
 
@@ -354,12 +354,12 @@ class MultiQuadEnv(PipelineEnv):
   def _get_obs(self, data: base.State, last_action: jp.ndarray, target_position: jp.ndarray) -> jp.ndarray:
     """Constructs the observation vector from simulation data."""
     # Payload state.
-    payload_pos = data.xpos[self.payload_body_id]
-    norm = jp.linalg.norm(payload_pos)
-    payload_pos = payload_pos / jp.maximum(norm, 1.0)  # Normalize if norm > 1
-    
+    payload_pos = data.xpos[self.payload_body_id]    
     payload_linvel = data.cvel[self.payload_body_id][3:6]
     payload_error = target_position - payload_pos
+    distance = jp.linalg.norm(payload_error)
+    payload_error = payload_error / jp.maximum(distance, 1.0)  # Normalize if distance > 1
+
     # Convert payload_error from Cartesian to spherical global coordinates.
     def cartesian_to_spherical(vec):
         r = jp.linalg.norm(vec)
@@ -450,7 +450,6 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
-        jp.array([norm]),     # (3,)  62-64
         # local_quad1_rel,      # (3,)  62-64
         # local_quad1_linvel,   # (3,)  65-67
         # local_quad1_angvel,   # (3,)  68-70
@@ -502,7 +501,7 @@ class MultiQuadEnv(PipelineEnv):
 
 
     # Safety and smoothness penalties.
-    quad1_obs = obs[6:30]
+    quad1_obs = obs[6:29]
     quad2_obs = obs[30:54]
     quad_distance = jp.linalg.norm(quad1_obs[:3] - quad2_obs[:3])
     safe_distance_reward = jp.clip((quad_distance - 0.15) / (0.17 - 0.15), 0, 1)
