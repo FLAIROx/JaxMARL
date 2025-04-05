@@ -80,7 +80,7 @@ def main():
         "NUM_ENVS": 8162,
         "NUM_STEPS": 512,
         "NUM_MINIBATCHES": 512,
-        "UPDATE_EPOCHS": 4,
+        "UPDATE_EPOCHS": 16,
         "ANNEAL_LR": False,
         "LR":  4e-4,
         "ACTIVATION": "tanh",
