@@ -390,6 +390,8 @@ class MultiQuadEnv(PipelineEnv):
     quad2_angular_acc = data.cacc[self.q2_body_id][:3]
     quad2_id = jp.array([0.0, 1.0])
 
+
+
     # # local-frame observations for each quad.
     # # For quad1:
     # R1 = jp_R_from_quat(quad1_quat)      # rotation matrix: local -> global
@@ -448,7 +450,7 @@ class MultiQuadEnv(PipelineEnv):
         quad2_linear_acc,     # (3,)  48-50
         quad2_angular_acc,    # (3,)  51-53
         last_action,          # (8,)  54-61
-        #payload_error_sph, # (3,)  62-64
+        norm, # (3,)  62-64
         # local_quad1_rel,      # (3,)  62-64
         # local_quad1_linvel,   # (3,)  65-67
         # local_quad1_angvel,   # (3,)  68-70
