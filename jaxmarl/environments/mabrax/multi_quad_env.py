@@ -95,7 +95,7 @@ class MultiQuadEnv(PipelineEnv):
     # Maximum thrust from the original environment.
     self.max_thrust = 0.11772
     # Define the target goal for the payload.
-    self.goal_center = jp.array([0.0, 0.0, 1.0])
+    self.goal_center = jp.array([0.0, 0.0, 1.5])
     self.target_position = self.goal_center
 
     # Cache body IDs (if still needed)
