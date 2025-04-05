@@ -525,7 +525,7 @@ class MultiQuadEnv(PipelineEnv):
     vel_dir = jp.where(jp.abs(vel) > 1e-6, payload_linvel / vel, jp.zeros_like(payload_linvel))
   
 
-    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), 2 * dis) # dotprod = 1  => vel is perfectly aligned
+    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
 
    
     vel_cap = 1.0 - 0.05 * vel**4 # cap the v
@@ -534,7 +534,7 @@ class MultiQuadEnv(PipelineEnv):
     target_reward = no_zero_while_error * (vel_cap - zero_at_target)
     
     target_reward = jp.exp(0.5 * target_reward)
-    #target_reward += aligned_vel
+    target_reward *= aligned_vel
     target_reward *= jp.exp(-2.0 * jp.abs(dis))
     
 
