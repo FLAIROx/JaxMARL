@@ -519,9 +519,11 @@ class MultiQuadEnv(PipelineEnv):
     linvel_quad_reward =  0.5 * er(jp.linalg.norm(linvel_q1)) + 0.5 * er(jp.linalg.norm(linvel_q2)) 
 
     # Velocity alignment.
-    target_dir  = payload_error / dis
+    target_dir  = payload_error / (dis + 1e-6)
     vel = jp.linalg.norm(payload_linvel)
-    vel_dir = payload_linvel / vel
+    # Avoid division by zero. 
+    vel_dir = jp.where(jp.abs(vel) > 1e-6, payload_linvel / vel, jp.zeros_like(payload_linvel))
+  
 
     aligned_vel = er(1 - jp.dot(vel_dir, target_dir), 2 * dis) # dotprod = 1  => vel is perfectly aligned
 
