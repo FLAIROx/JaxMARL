@@ -534,8 +534,9 @@ class MultiQuadEnv(PipelineEnv):
     target_reward = no_zero_while_error * (vel_cap - zero_at_target)
     
     target_reward = jp.exp(0.5 * target_reward)
+    target_reward += aligned_vel
     target_reward *= jp.exp(-2.0 * jp.abs(dis))
-    target_reward *= aligned_vel
+    
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
