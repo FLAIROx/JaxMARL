@@ -551,8 +551,7 @@ class MultiQuadEnv(PipelineEnv):
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
     action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
-    # Encourage low variance of actions.
-    action_std_penalty += jp.std(action) / self.max_thrust
+    action_energy_penalty += jp.std(action) / self.max_thrust # Encourage low variance of actions.
 
 
 
