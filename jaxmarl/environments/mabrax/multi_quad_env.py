@@ -540,8 +540,8 @@ class MultiQuadEnv(PipelineEnv):
   
 
     vel_cap = 3.45 - 0.115 * vel**4
-    zero_at_target = 14.7 * dis * jp.exp(-33.1 * dis * jp.abs(vel))
-    no_zero_while_error = jp.exp(- (1.6 / (26.0 * dis + 0.3)) * jp.abs(vel))
+    zero_at_target = 14.7 * dis * jp.exp(-10.5 * dis * jp.abs(vel))
+    no_zero_while_error = jp.exp(- (0.5 / (26.0 * dis + 0.3)) * jp.abs(vel))
     target_reward = no_zero_while_error * (vel_cap - zero_at_target)
     target_reward = jp.exp(0.4 * target_reward)
     target_reward *= aligned_vel
