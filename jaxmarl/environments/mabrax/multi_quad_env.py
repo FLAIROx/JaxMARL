@@ -516,7 +516,7 @@ class MultiQuadEnv(PipelineEnv):
     quad2_dist = jp.linalg.norm(quad2_obs[:3]) # payload to quad2
     taut_reward = quad1_dist + quad2_dist # Maximize the string length
     # maximize the z distance between the payload and the quadrotors
-    taut_reward += quad1_obs[2] + quad2_obs[2] 
+    #taut_reward += quad1_obs[2] + quad2_obs[2] 
 
 
     # Reward for quad velocities.
@@ -551,6 +551,9 @@ class MultiQuadEnv(PipelineEnv):
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
     action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
+    # Encourage low variance of actions.
+    action_std_penalty += jp.std(action) / self.max_thrust
+
 
 
     # tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
