@@ -515,6 +515,8 @@ class MultiQuadEnv(PipelineEnv):
     quad1_dist = jp.linalg.norm(quad1_obs[:3]) # payload to quad1
     quad2_dist = jp.linalg.norm(quad2_obs[:3]) # payload to quad2
     taut_reward = quad1_dist + quad2_dist # Maximize the string length
+    # maximize the z distance between the payload and the quadrotors
+    taut_reward += quad1_obs[2] + quad2_obs[2] 
 
 
     # Reward for quad velocities.
