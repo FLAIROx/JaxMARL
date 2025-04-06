@@ -58,12 +58,12 @@ def render_video(rollout, env, render_every=2, width=1280, height=720):
 def main():
     # Default reward coefficients
     default_reward_coeffs = {
-        "distance_reward_coef": 0.0,
+        "distance_reward_coef": 1.0,
         "z_distance_reward_coef": 0.0,
-        "velocity_reward_coef": 0.0,
+        "velocity_reward_coef": 1.0,
         "safe_distance_coef": 1.0,
         "up_reward_coef": 1.0,
-        "linvel_reward_coef": 0.0,
+        "linvel_reward_coef": 1.0,
         "ang_vel_reward_coef": 0.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 1.0,

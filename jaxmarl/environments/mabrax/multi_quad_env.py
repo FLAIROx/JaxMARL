@@ -538,7 +538,7 @@ class MultiQuadEnv(PipelineEnv):
   
 
     aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
-
+    velocity_towards_target = aligned_vel
   
 
     vel_cap = 3.45 - 0.115 * vel**4
@@ -555,11 +555,11 @@ class MultiQuadEnv(PipelineEnv):
 
 
 
-    # tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
-    # tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
-    # tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
+    tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
+    #tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
+    tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
     # tracking_reward += self.reward_coeffs.get("target_reward_coef", 1.0) * target_reward
-    tracking_reward = target_reward
+    #tracking_reward = target_reward
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
