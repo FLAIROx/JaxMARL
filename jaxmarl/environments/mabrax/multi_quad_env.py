@@ -44,7 +44,7 @@ class MultiQuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      episode_length: int = 3000,                  # Maximum simulation time per episode.
+      episode_length: int = 3072,                  # Maximum simulation time per episode.
       reset_noise_scale: float = 0.1,          # Noise scale for initial state reset.
       reward_coeffs: dict = None,
       **kwargs,
@@ -343,9 +343,10 @@ class MultiQuadEnv(PipelineEnv):
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
         angle_q1, angle_q2, prev_last_action, self.target_position, pipeline_state
     )
-    # done = jp.logical_or(jp.logical_or(out_of_bounds, collision),
-    #                      pipeline_state.time > self.max_time)
-    done = pipeline_state.time > self.max_time
+    
+    done = jp.logical_or(jp.logical_or(out_of_bounds, collision),
+                         pipeline_state.time > self.max_time*1.2) # this should never happen, because episode ends first
+   
     
     done = done * 1.0
 
