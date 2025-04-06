@@ -44,7 +44,7 @@ class MultiQuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      max_time: float = 20.0,                  # Maximum simulation time per episode.
+      episode_length: int = 3000,                  # Maximum simulation time per episode.
       reset_noise_scale: float = 0.1,          # Noise scale for initial state reset.
       reward_coeffs: dict = None,
       **kwargs,
@@ -64,7 +64,7 @@ class MultiQuadEnv(PipelineEnv):
     self.policy_freq = policy_freq
     self.sim_steps_per_action = sim_steps_per_action
     self.time_per_action = 1.0 / self.policy_freq
-    self.max_time = max_time
+    self.max_time = episode_length * self.time_per_action
     self._reset_noise_scale = reset_noise_scale
     if reward_coeffs is None:
       reward_coeffs = {
@@ -332,7 +332,7 @@ class MultiQuadEnv(PipelineEnv):
     payload_pos = pipeline_state.xpos[self.payload_body_id]
     payload_error = self.target_position - payload_pos
     payload_error_norm = jp.linalg.norm(payload_error)
-    max_time_to_target = 10.0
+    max_time_to_target = self.max_time * 0.75
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
     max_payload_error = 4 * (1 - time_progress) + 0.05 # allow for 5cm error at the target
     out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
