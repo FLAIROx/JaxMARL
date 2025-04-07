@@ -316,7 +316,7 @@ class MultiQuadEnv(PipelineEnv):
     )
 
     ground_collision_payload = jp.logical_and(
-      jp.logical_or(pipeline_state.time > 4, pipeline_state.cvel[self.payload_body_id][2] < -0.1),
+      jp.logical_or(pipeline_state.time > 3, pipeline_state.cvel[self.payload_body_id][2] < -3.0),
       pipeline_state.xpos[self.payload_body_id][2] < 0.03
     )
 
