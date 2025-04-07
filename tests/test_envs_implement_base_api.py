@@ -1,4 +1,5 @@
-"""Test the environments to ensure they implement the base API correctly.
+"""
+Test the environments to ensure they implement the base API correctly.
 STORM is not included as its observation space does not follow the base API.
 """
 
@@ -24,10 +25,10 @@ envs_to_test = [
     "MPE_simple_push_v3",
     "MPE_simple_adversary_v3",
     "MPE_simple_reference_v3",
-    # "MPE_simple_facmac_v1",
-    # "MPE_simple_facmac_3a_v1",
-    # "MPE_simple_facmac_6a_v1",
-    # "MPE_simple_facmac_9a_v1",
+    "MPE_simple_facmac_v1",
+    "MPE_simple_facmac_3a_v1",
+    "MPE_simple_facmac_6a_v1",
+    "MPE_simple_facmac_9a_v1",
     "switch_riddle",
     "SMAX",
     "HeuristicEnemySMAX",
@@ -41,6 +42,7 @@ envs_to_test = [
     # "storm_np",
     "hanabi",
     "overcooked",
+    "overcooked_v2",
     "coin_game",
     "jaxnav",
 ]
