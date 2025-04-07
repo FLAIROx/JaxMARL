@@ -908,6 +908,29 @@ class InTheGrid_2p(MultiAgentEnv):
         self.num_inner_steps = num_inner_steps
         self.num_outer_steps = num_outer_steps
 
+        _shape = (
+            (OBS_SIZE, OBS_SIZE, len(Items) - 1 + 4)
+            if self.cnn
+            else (OBS_SIZE**2 * (len(Items) - 1 + 4),)
+        )
+        self.observation_spaces = {
+            a: {
+                "observation": spaces.Box(
+                low=0, high=1, shape=_shape, dtype=jnp.uint8
+                ),
+                "inventory": spaces.Box(
+                    low=0,
+                    high=NUM_COINS,
+                    shape=NUM_COIN_TYPES + 4,
+                    dtype=jnp.uint8,
+                ),
+            } for a in self.agents
+        }
+
+        self.action_spaces = {
+            a: spaces.Discrete(len(Actions)) for a in self.agents
+        }
+
     @property
     def name(self) -> str:
         """Environment name."""
@@ -918,31 +941,13 @@ class InTheGrid_2p(MultiAgentEnv):
         """Number of actions possible in environment."""
         return len(Actions)
 
-    def action_space(
-        self, agent_id: Union[int, None] = None
-    ) -> spaces.Discrete:
+    def action_space(self, agent: str) -> spaces.Discrete:
         """Action space of the environment."""
-        return spaces.Discrete(len(Actions))
+        return self.action_spaces[agent]
 
-    def observation_space(self) -> spaces.Dict:
+    def observation_space(self, agent:str) -> spaces.Dict:
         """Observation space of the environment."""
-        _shape = (
-            (OBS_SIZE, OBS_SIZE, len(Items) - 1 + 4)
-            if self.cnn
-            else (OBS_SIZE**2 * (len(Items) - 1 + 4),)
-        )
-
-        return {
-            "observation": spaces.Box(
-                low=0, high=1, shape=_shape, dtype=jnp.uint8
-            ),
-            "inventory": spaces.Box(
-                low=0,
-                high=NUM_COINS,
-                shape=NUM_COIN_TYPES + 4,
-                dtype=jnp.uint8,
-            ),
-        }
+        return self.observation_spaces[agent]
 
     def state_space(self) -> spaces.Dict:
         """State space of the environment."""
