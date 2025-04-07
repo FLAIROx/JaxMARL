@@ -60,6 +60,8 @@ class MultiQuadEnv(PipelineEnv):
     kwargs['backend'] = 'mjx'
     super().__init__(sys, **kwargs)
 
+    self.cable_length = 0.3
+
     # Save environment parameters.
     self.policy_freq = policy_freq
     self.sim_steps_per_action = sim_steps_per_action
@@ -308,16 +310,17 @@ class MultiQuadEnv(PipelineEnv):
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
     collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
 
-    ground_collision = jp.logical_and(
+    ground_collision_quad = jp.logical_and(
       pipeline_state.time > 0.5, # wait for the quads to be in the air
       jp.logical_and(pipeline_state.xpos[self.q2_body_id][2] < 0.03, pipeline_state.xpos[self.q1_body_id][2] < 0.03)
     )
 
     ground_collision_payload = jp.logical_and(
-      jp.logical_or(pipeline_state.time > 2.5, pipeline_state.cvel[self.payload_body_id][2] < -0.1),
+      jp.logical_or(pipeline_state.time > 4, pipeline_state.cvel[self.payload_body_id][2] < -0.1),
       pipeline_state.xpos[self.payload_body_id][2] < 0.03
     )
-    collision = jp.logical_or(collision, ground_collision)
+
+    collision = jp.logical_or(collision, ground_collision_quad)
     collision = jp.logical_or(collision, ground_collision_payload)
 
     out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(90),
@@ -518,7 +521,7 @@ class MultiQuadEnv(PipelineEnv):
     quad2_dist = jp.linalg.norm(quad2_obs[:3]) # payload to quad2
     taut_reward = quad1_dist + quad2_dist # Maximize the string length
     taut_reward += quad1_obs[2] + quad2_obs[2] # Maximize the height of the quads
-
+    taut_reward /= self.cable_length
 
     # Reward for quad velocities.
     # The reward is higher for lower angular velocities.
