@@ -308,20 +308,15 @@ class MultiQuadEnv(PipelineEnv):
     quad1_pos = pipeline_state.xpos[self.q1_body_id]
     quad2_pos = pipeline_state.xpos[self.q2_body_id]
     quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
-    collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
+    
+    quad_collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
 
-    ground_collision_quad = jp.logical_and(
-      pipeline_state.time > 0.5, # wait for the quads to be in the air
-      jp.logical_and(pipeline_state.xpos[self.q2_body_id][2] < 0.03, pipeline_state.xpos[self.q1_body_id][2] < 0.03)
-    )
+    ground_collision_quad = jp.logical_and(pipeline_state.xpos[self.q2_body_id][2] < 0.03, pipeline_state.xpos[self.q1_body_id][2] < 0.03)
+    ground_collision_payload = pipeline_state.xpos[self.payload_body_id][2] < 0.03
+    
+    ground_collision = jp.logical_and(ground_collision_quad, ground_collision_payload)
 
-    ground_collision_payload = jp.logical_and(
-      jp.logical_or(pipeline_state.time > 3, pipeline_state.cvel[self.payload_body_id][2] < -3.0),
-      pipeline_state.xpos[self.payload_body_id][2] < 0.03
-    )
-
-    collision = jp.logical_or(collision, ground_collision_quad)
-    collision = jp.logical_or(collision, ground_collision_payload)
+    collision = jp.logical_or(quad_collision, ground_collision)
 
     out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(90),
                                   jp.absolute(angle_q2) > jp.radians(90))
@@ -346,6 +341,17 @@ class MultiQuadEnv(PipelineEnv):
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
         angle_q1, angle_q2, prev_last_action, self.target_position, pipeline_state
     )
+
+    # dont terminate ground collision on ground start
+    ground_collision = jp.logical_and(
+      ground_collision,
+      jp.logical_or(
+        pipeline_state.time > 3,
+        pipeline_state.cvel[self.payload_body_id][2] < -3.0,
+      )
+    )
+
+    collision = jp.logical_or(quad_collision, ground_collision)
     
     done = jp.logical_or(jp.logical_or(out_of_bounds, collision),
                          pipeline_state.time > self.max_time*1.2) # this should never happen, because episode ends first
