@@ -534,10 +534,10 @@ class MultiQuadEnv(PipelineEnv):
     # The reward is higher for lower linear velocities. 
     ang_vel_q1 = quad1_obs[15:18]
     ang_vel_q2 = quad2_obs[15:18]
-    ang_vel_reward = (0.5 + 3 * er(dis, 30)) * (er(jp.linalg.norm(ang_vel_q1)) + er(jp.linalg.norm(ang_vel_q2)))
+    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * (er(jp.linalg.norm(ang_vel_q1)) + er(jp.linalg.norm(ang_vel_q2)))
     linvel_q1 = quad1_obs[9:12]
     linvel_q2 = quad2_obs[9:12]
-    linvel_quad_reward =  (0.5 + 6 * er(dis, 30)) * (er(jp.linalg.norm(linvel_q1)) + er(jp.linalg.norm(linvel_q2)) )
+    linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1)) + er(jp.linalg.norm(linvel_q2)) )
 
     # Velocity alignment.
     target_dir  = payload_error / (dis + 1e-6)
