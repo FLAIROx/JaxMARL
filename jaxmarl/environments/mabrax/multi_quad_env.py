@@ -347,9 +347,11 @@ class MultiQuadEnv(PipelineEnv):
 
 
 
-    # Generate a noise_key using pipeline_state fields.
-    seed = int(pipeline_state.time * 1e6) + int(jp.sum(pipeline_state.xpos) * 1e3) + int(jp.sum(pipeline_state.cvel) * 1e3)
-    noise_key = jax.random.PRNGKey(seed)
+    # Generate a dynamic noise_key using pipeline_state fields.
+    noise_key = jax.random.PRNGKey(0)
+    noise_key = jax.random.fold_in(noise_key, jp.int32(pipeline_state.time * 1e6))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.xpos) * 1e3))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.cvel) * 1e3))
     
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
