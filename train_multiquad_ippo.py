@@ -76,7 +76,7 @@ def main():
     config = {
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {"reward_coeffs": default_reward_coeffs},
-        "TOTAL_TIMESTEPS": 1_500_000_000,
+        "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 4096,
         "NUM_STEPS": 512,
         "NUM_MINIBATCHES": 256,
