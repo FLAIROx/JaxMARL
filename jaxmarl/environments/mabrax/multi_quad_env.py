@@ -45,8 +45,8 @@ class MultiQuadEnv(PipelineEnv):
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
       episode_length: int = 3072,                  # Maximum simulation time per episode.
-      reset_noise_scale: float = 0.1,          # Noise scale for initial state reset.
       reward_coeffs: dict = None,
+      obs_noise: float = 0.0,           # Parameter for observation noise
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
@@ -67,7 +67,7 @@ class MultiQuadEnv(PipelineEnv):
     self.sim_steps_per_action = sim_steps_per_action
     self.time_per_action = 1.0 / self.policy_freq
     self.max_time = episode_length * self.time_per_action
-    self._reset_noise_scale = reset_noise_scale
+    self.obs_noise = obs_noise    
     if reward_coeffs is None:
       reward_coeffs = {
          "distance_reward_coef": 0.0,
@@ -134,6 +134,7 @@ class MultiQuadEnv(PipelineEnv):
     print("Payload qpos start:", self.payload_qpos_start)
     print("Quad 1 qpos start:", self.q1_qpos_start)
     print("Quad 2 qpos start:", self.q2_qpos_start)
+    print("Noise_level:", self.obs_noise)
     print("MultiQuadEnv initialized successfully.")
 
         # Throw error if any ids are not found in a short way
@@ -278,7 +279,8 @@ class MultiQuadEnv(PipelineEnv):
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
-    obs = self._get_obs(pipeline_state, last_action, self.target_position)
+    rng, noise_key = jax.random.split(rng)       # new: split for observation noise
+    obs = self._get_obs(pipeline_state, last_action, self.target_position, noise_key)
     reward = jp.array(0.0)
     done = jp.array(0.0)
     metrics = {'time': pipeline_state.time, 'reward': reward}
@@ -336,7 +338,8 @@ class MultiQuadEnv(PipelineEnv):
     out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
 
 
-    obs = self._get_obs(pipeline_state, prev_last_action, self.target_position)
+    rng, noise_key = jax.random.split(rng)       # new: split for observation noise
+    obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
         angle_q1, angle_q2, prev_last_action, self.target_position, pipeline_state
@@ -362,7 +365,7 @@ class MultiQuadEnv(PipelineEnv):
     metrics = {'time': pipeline_state.time, 'reward': reward}
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward, done=done, metrics=metrics)
 
-  def _get_obs(self, data: base.State, last_action: jp.ndarray, target_position: jp.ndarray) -> jp.ndarray:
+  def _get_obs(self, data: base.State, last_action: jp.ndarray, target_position: jp.ndarray, noise_key) -> jp.ndarray:
     """Constructs the observation vector from simulation data."""
     # Payload state.
     payload_pos = data.xpos[self.payload_body_id]    
@@ -485,6 +488,28 @@ class MultiQuadEnv(PipelineEnv):
         # sph_local_q2_q1_rel,        # (3,) 125-127
     ])
 
+    # Lookup for noise scale factors (each multiplied with self.obs_noise):
+    noise_lookup = jp.concatenate([
+        jp.ones(3) * 0.01,  # indices 0-2: payload_error noise scale
+        jp.ones(3) * 0.02,  # indices 3-5: payload_linvel noise scale
+        jp.ones(3) * 0.03,  # indices 6-8: quad1_rel noise scale
+        jp.ones(9) * 0.005, # indices 9-17: quad1_rot noise scale
+        jp.ones(3) * 0.02,  # indices 18-20: quad1_linvel noise scale
+        jp.ones(3) * 0.02,  # indices 21-23: quad1_angvel noise scale
+        jp.ones(3) * 0.03,  # indices 24-26: quad1_linear_acc noise scale
+        jp.ones(3) * 0.03,  # indices 27-29: quad1_angular_acc noise scale
+        jp.ones(3) * 0.03,  # indices 30-32: quad2_rel noise scale
+        jp.ones(9) * 0.005, # indices 33-41: quad2_rot noise scale
+        jp.ones(3) * 0.02,  # indices 42-44: quad2_linvel noise scale
+        jp.ones(3) * 0.02,  # indices 45-47: quad2_angvel noise scale
+        jp.ones(3) * 0.03,  # indices 48-50: quad2_linear_acc noise scale
+        jp.ones(3) * 0.03,  # indices 51-53: quad2_angular_acc noise scale
+        jp.ones(8) * 0.0,   # indices 54-61: last_action noise scale
+    ])
+
+    if self.obs_noise != 0.0:
+        noise = self.obs_noise * noise_lookup * jax.random.normal(noise_key, shape=obs.shape)
+        obs = obs + noise
     return obs
 
   def calc_reward(self, obs, sim_time, collision, out_of_bounds, action,

@@ -75,7 +75,10 @@ def main():
     # Build configuration for IPPO training on multiquad_2x4
     config = {
         "ENV_NAME": "multiquad_2x4",
-        "ENV_KWARGS": {"reward_coeffs": default_reward_coeffs},
+        "ENV_KWARGS": {
+            "reward_coeffs": default_reward_coeffs,
+            "obs_noise": 1.0        
+        },
         "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 4096,
         "NUM_STEPS": 512,
