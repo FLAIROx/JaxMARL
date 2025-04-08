@@ -287,8 +287,17 @@ class MultiQuadEnv(PipelineEnv):
     return State(pipeline_state, obs, reward, done, metrics)
 
   
-  def step(self, state: State, action: jax.Array, rng: jax.Array) -> State:
-    """Advances the environment by one control step."""
+  def step(self, state: State, action: jax.Array, key: jax.Array) -> State:
+    """Advances the environment by one control step.
+    
+    Args:
+        state: The current state.
+        action: The action to apply.
+        key: The PRNG key passed from the wrapper.
+    
+    Returns:
+        The next state.
+    """
     # Extract previous action from the observation.
     prev_last_action = state.obs[-(self.sys.nu+1):-1]
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
@@ -338,7 +347,7 @@ class MultiQuadEnv(PipelineEnv):
     out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
 
 
-    rng, noise_key = jax.random.split(rng)  
+    key, noise_key = jax.random.split(key)  
 
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
