@@ -47,6 +47,7 @@ class MultiQuadEnv(PipelineEnv):
       episode_length: int = 3072,                  # Maximum simulation time per episode.
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
+      act_noise: float = 0.0,         # Parameter for actuator noise
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
@@ -68,6 +69,7 @@ class MultiQuadEnv(PipelineEnv):
     self.time_per_action = 1.0 / self.policy_freq
     self.max_time = episode_length * self.time_per_action
     self.obs_noise = obs_noise    
+    self.act_noise = act_noise 
     if reward_coeffs is None:
       reward_coeffs = {
          "distance_reward_coef": 0.0,
@@ -306,6 +308,17 @@ class MultiQuadEnv(PipelineEnv):
     data0 = state.pipeline_state
     pipeline_state = self.pipeline_step(data0, action_scaled)
 
+    # Generate a dynamic noise_key using pipeline_state fields.
+    noise_key = jax.random.PRNGKey(0)
+    noise_key = jax.random.fold_in(noise_key, jp.int32(pipeline_state.time * 1e6))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.xpos) * 1e3))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.cvel) * 1e3))
+
+    # Add actuator noise.
+    if self.act_noise:
+        noise = jax.random.normal(noise_key, shape=action_scaled.shape)
+        action_scaled = action_scaled + self.act_noise * self.max_thrust * noise
+
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
     q2_orientation = pipeline_state.xquat[self.q2_body_id]
@@ -347,12 +360,6 @@ class MultiQuadEnv(PipelineEnv):
 
 
 
-    # Generate a dynamic noise_key using pipeline_state fields.
-    noise_key = jax.random.PRNGKey(0)
-    noise_key = jax.random.fold_in(noise_key, jp.int32(pipeline_state.time * 1e6))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.xpos) * 1e3))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.cvel) * 1e3))
-    
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,

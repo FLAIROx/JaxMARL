@@ -77,7 +77,8 @@ def main():
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {
             "reward_coeffs": default_reward_coeffs,
-            "obs_noise": 1.0        
+            "obs_noise": 1.0,
+            "act_noise": 0.1,
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 4096,
