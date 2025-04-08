@@ -287,7 +287,7 @@ class MultiQuadEnv(PipelineEnv):
     return State(pipeline_state, obs, reward, done, metrics)
 
   
-  def step(self, state: State, action: jax.Array) -> State:
+  def step(self, state: State, action: jax.Array, rng: jax.Array) -> State:
     """Advances the environment by one control step."""
     # Extract previous action from the observation.
     prev_last_action = state.obs[-(self.sys.nu+1):-1]
@@ -338,7 +338,8 @@ class MultiQuadEnv(PipelineEnv):
     out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
 
 
-    rng, noise_key = jax.random.split(rng)       # new: split for observation noise
+    rng, noise_key = jax.random.split(rng)  
+
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
