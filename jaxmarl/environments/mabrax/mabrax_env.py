@@ -107,7 +107,7 @@ class MABraxEnv(MultiAgentEnv):
         Dict[str, chex.Array], envs.State, Dict[str, float], Dict[str, bool], Dict
     ]:
         global_action = self.map_agents_to_global_action(actions)
-        next_state = self.env.step(state, global_action, key)
+        next_state = self.env.step(state, global_action)
         observations = self.get_obs(next_state)
         rewards = {agent: next_state.reward for agent in self.agents}
         rewards["__all__"] = next_state.reward
