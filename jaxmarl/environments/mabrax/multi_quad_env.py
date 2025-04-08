@@ -511,20 +511,20 @@ class MultiQuadEnv(PipelineEnv):
 
     # Lookup for noise scale factors (each multiplied with self.obs_noise):
     noise_lookup = jp.concatenate([
-        jp.ones(3) * 0.01,  # indices 0-2: payload_error noise scale
-        jp.ones(3) * 0.02,  # indices 3-5: payload_linvel noise scale
-        jp.ones(3) * 0.03,  # indices 6-8: quad1_rel noise scale
+        jp.ones(3) * 0.005,  # indices 0-2: payload_error noise scale
+        jp.ones(3) * 0.05,  # indices 3-5: payload_linvel noise scale
+        jp.ones(3) * 0.02,  # indices 6-8: quad1_rel noise scale
         jp.ones(9) * 0.005, # indices 9-17: quad1_rot noise scale
-        jp.ones(3) * 0.02,  # indices 18-20: quad1_linvel noise scale
-        jp.ones(3) * 0.02,  # indices 21-23: quad1_angvel noise scale
-        jp.ones(3) * 0.03,  # indices 24-26: quad1_linear_acc noise scale
-        jp.ones(3) * 0.03,  # indices 27-29: quad1_angular_acc noise scale
-        jp.ones(3) * 0.03,  # indices 30-32: quad2_rel noise scale
+        jp.ones(3) * 0.05,  # indices 18-20: quad1_linvel noise scale
+        jp.ones(3) * 0.08,  # indices 21-23: quad1_angvel noise scale
+        jp.ones(3) * 0.05,  # indices 24-26: quad1_linear_acc noise scale
+        jp.ones(3) * 0.05,  # indices 27-29: quad1_angular_acc noise scale
+        jp.ones(3) * 0.02,  # indices 30-32: quad2_rel noise scale
         jp.ones(9) * 0.005, # indices 33-41: quad2_rot noise scale
-        jp.ones(3) * 0.02,  # indices 42-44: quad2_linvel noise scale
-        jp.ones(3) * 0.02,  # indices 45-47: quad2_angvel noise scale
-        jp.ones(3) * 0.03,  # indices 48-50: quad2_linear_acc noise scale
-        jp.ones(3) * 0.03,  # indices 51-53: quad2_angular_acc noise scale
+        jp.ones(3) * 0.05,  # indices 42-44: quad2_linvel noise scale
+        jp.ones(3) * 0.08,  # indices 45-47: quad2_angvel noise scale
+        jp.ones(3) * 0.05,  # indices 48-50: quad2_linear_acc noise scale
+        jp.ones(3) * 0.05,  # indices 51-53: quad2_angular_acc noise scale
         jp.ones(8) * 0.0,   # indices 54-61: last_action noise scale
     ])
 
