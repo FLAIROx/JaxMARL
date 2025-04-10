@@ -31,10 +31,7 @@ import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
-from jax.experimental import jax2tf
-import tensorflow as tf
-import tf2onnx
-import onnx
+from jax2onnx import save_onnx
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
@@ -193,15 +190,10 @@ def main():
     render_video(rollout, env)
     
     def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
-        def jax_forward(x):
+        def jax_callable(x):
             return module.apply(params, x, method=method)
-        @tf.autograph.experimental.do_not_convert
-        def tf_forward_fn(x):
-            out = jax2tf.convert(jax_forward, with_gradient=False)(x)
-            return tf.identity(out)
-        tf_func = tf.function(tf_forward_fn, input_signature=[tf.TensorSpec(tuple(input_shape), tf.float32)])
-        onnx_model, _ = tf2onnx.convert.from_function(tf_func, input_signature=tf_func.input_signature, opset=13)
-        onnx.save_model(onnx_model, onnx_filename)
+        # Use a hardcoded batch size = 1 for export
+        save_onnx(jax_callable, [(1, input_shape[1])], onnx_filename)
         print(f"Exported ONNX model: {onnx_filename}")
         return onnx_filename
 
