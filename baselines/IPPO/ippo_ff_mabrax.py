@@ -53,33 +53,14 @@ class ActorCritic(nn.Module):
         
         return pi, jnp.squeeze(critic, axis=-1)
     
-    # Compute actor mean for export.
-    @nn.compact
     def actor_forward(self, x):
-        if self.activation == "relu":
-            activation = nn.relu
-        else:
-            activation = nn.tanh
-        actor = x
-        for h in self.actor_arch or [128, 64, 64]:
-            actor = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(actor)
-            actor = activation(actor)
-        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(actor)
-        return actor_mean
+        pi, _ = self.__call__(x)
+        return pi.mean()
     
-    # Compute critic output for export.
-    @nn.compact
+
     def critic_forward(self, x):
-        if self.activation == "relu":
-            activation = nn.relu
-        else:
-            activation = nn.tanh
-        critic = x
-        for h in self.critic_arch or [128, 128, 128, 128]:
-            critic = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(critic)
-            critic = activation(critic)
-        critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic)
-        return jnp.squeeze(critic, axis=-1)
+        _, critic = self.__call__(x)
+        return critic
 
 class Transition(NamedTuple):
     done: jnp.ndarray
