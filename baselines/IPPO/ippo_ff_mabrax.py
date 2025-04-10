@@ -52,15 +52,6 @@ class ActorCritic(nn.Module):
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic)
         
         return pi, jnp.squeeze(critic, axis=-1)
-    
-    def actor_forward(self, x):
-        pi, _ = self.__call__(x)
-        return pi.mean()
-    
-
-    def critic_forward(self, x):
-        _, critic = self.__call__(x)
-        return critic
 
 class Transition(NamedTuple):
     done: jnp.ndarray
