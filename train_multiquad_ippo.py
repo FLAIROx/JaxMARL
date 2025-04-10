@@ -199,9 +199,9 @@ def main():
         def tf_forward_fn(x):
             out = jax2tf.convert(jax_forward, with_gradient=False)(x)
             return tf.identity(out)
-        
         tf_func = tf.function(tf_forward_fn, input_signature=[tf.TensorSpec(tuple(input_shape), tf.float32)])
-        onnx_model, _ = tf2onnx.convert.from_function(tf_func, input_signature=tf_func.input_signature, opset=13)
+        concrete_func = tf_func.get_concrete_function()  
+        onnx_model, _ = tf2onnx.convert.from_function(concrete_func, input_signature=tf_func.input_signature, opset=13)
         onnx.save_model(onnx_model, onnx_filename)
         print(f"Exported ONNX model: {onnx_filename}")
         return onnx_filename
