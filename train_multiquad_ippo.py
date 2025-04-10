@@ -20,9 +20,6 @@ os.environ["XLA_CACHE_DIR"] = cache_dir
 # os.environ["TF_USE_NVLINK_FOR_PARALLEL_COMPILATION"] = "0"
 # os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
 
-
-
-
 import jax
 import jax.numpy as jp
 import imageio
@@ -33,6 +30,11 @@ import time
 import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
+
+from jax.experimental import jax2tf
+import tensorflow as tf
+import tf2onnx
+import onnx
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
@@ -158,11 +160,9 @@ def main():
     # Define a policy function to map observations to actions using the trained parameters
     def policy_fn(params, obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        pi, _ = network.apply(params, batched_obs)
-        actions = pi.sample(seed=key)
-        unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
-        # Squeeze the extra batch dimension so each agent's action has shape (action_dim,)
-        unbatched = {a: jp.squeeze(act, axis=0) for a, act in unbatched.items()}
+        actor_mean = network.actor_module.apply(params, batched_obs)
+        unbatched = unbatchify(actor_mean, env.agents, 1, env.num_agents)
+        unbatched = {a: jp.squeeze(val, axis=0) for a, val in unbatched.items()}
         return unbatched
     
    # Simulation: run an episode using the trained policy
@@ -191,6 +191,51 @@ def main():
     
     # Call the separated video rendering function
     render_video(rollout, env)
+    
+    # NEW: ONNX export functionality.
+    def export_to_onnx(module, params, input_shape, onnx_filename):
+        def jax_forward(x):
+            return module.apply(params, x)
+        tf_func = tf.function(
+            lambda x: jax2tf.convert(jax_forward, with_gradient=False)(x),
+            input_signature=[tf.TensorSpec(input_shape, tf.float32)]
+        )
+        concrete_func = tf_func.get_concrete_function()
+        onnx_model, _ = tf2onnx.convert.from_function(
+            concrete_func, input_signature=tf_func.input_signature, opset=13
+        )
+        onnx.save_model(onnx_model, onnx_filename)
+        print(f"Exported ONNX model: {onnx_filename}")
+        return onnx_filename
+
+    # Define input shape for export (batch dimension dynamic).
+    input_shape = [None, obs_shape]
+    # Extract submodule parameters.
+    actor_params = train_state.params["actor_module"]
+    critic_params = train_state.params["critic_module"]
+    
+    # Export actor (outputs only the raw actor-mean) and critic separately.
+    actor_onnx = export_to_onnx(
+        module=network.actor_module,
+        params=actor_params,
+        input_shape=input_shape,
+        onnx_filename="actor_policy.onnx"
+    )
+    critic_onnx = export_to_onnx(
+        module=network.critic_module,
+        params=critic_params,
+        input_shape=input_shape,
+        onnx_filename="critic_value.onnx"
+    )
+    
+    # Log the ONNX models as wandb artifacts.
+    actor_artifact = wandb.Artifact("actor_policy", type="model")
+    actor_artifact.add_file(actor_onnx)
+    critic_artifact = wandb.Artifact("critic_value", type="model")
+    critic_artifact.add_file(critic_onnx)
+    wandb.log_artifact(actor_artifact)
+    wandb.log_artifact(critic_artifact)
+    print("ONNX models have been exported and logged to wandb.")
     
 if __name__ == "__main__":
     main()

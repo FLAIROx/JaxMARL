@@ -23,35 +23,54 @@ import sys
 class EarlyTermination(Exception): 
     pass
 
-class ActorCritic(nn.Module):
-    action_dim: Sequence[int]
+class ActorModule(nn.Module):
+    action_dim: int
     activation: str = "tanh"
-    actor_arch: Sequence[int] = None 
+    actor_arch: Sequence[int] = None
+
+    @nn.compact
+    def __call__(self, x):
+        act_fn = nn.relu if self.activation == "relu" else nn.tanh
+        a = x
+        for h in self.actor_arch or [128, 64, 64]:
+            a = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(a)
+            a = act_fn(a)
+        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(a)
+        return actor_mean
+
+class CriticModule(nn.Module):
+    activation: str = "tanh"
     critic_arch: Sequence[int] = None
 
     @nn.compact
     def __call__(self, x):
-        if self.activation == "relu":
-            activation = nn.relu
-        else:
-            activation = nn.tanh
-        # Build Actor network using provided actor_arch or default
-        actor = x
-        for h in self.actor_arch or [128, 64, 64]:
-            actor = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(actor)
-            actor = activation(actor)
-        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(actor)
-        actor_logtstd = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
-        pi = distrax.MultivariateNormalDiag(actor_mean, jnp.exp(actor_logtstd))
-        
-        # Build Critic network using provided critic_arch or default
-        critic = x
+        act_fn = nn.relu if self.activation == "relu" else nn.tanh
+        c = x
         for h in self.critic_arch or [128, 128, 128, 128]:
-            critic = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(critic)
-            critic = activation(critic)
-        critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic)
-        
-        return pi, jnp.squeeze(critic, axis=-1)
+            c = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(c)
+            c = act_fn(c)
+        c = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(c)
+        return jnp.squeeze(c, axis=-1)
+
+class ActorCritic(nn.Module):
+    action_dim: int
+    activation: str = "tanh"
+    actor_arch: Sequence[int] = None
+    critic_arch: Sequence[int] = None
+
+    def setup(self):
+        self.actor_module = ActorModule(action_dim=self.action_dim,
+                                        activation=self.activation,
+                                        actor_arch=self.actor_arch)
+        self.critic_module = CriticModule(activation=self.activation,
+                                          critic_arch=self.critic_arch)
+        self.log_std = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
+
+    def __call__(self, x):
+        actor_mean = self.actor_module(x)
+        pi = distrax.MultivariateNormalDiag(actor_mean, jnp.exp(self.log_std))
+        critic = self.critic_module(x)
+        return pi, critic
 
 class Transition(NamedTuple):
     done: jnp.ndarray
