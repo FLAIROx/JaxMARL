@@ -155,7 +155,8 @@ def main():
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
     try:
-        from jax2onnx import save_onnx
+        from jax2onnx import save_onnx, register_primitive
+        register_primitive(jax.lax.abs_p, onnx_op="Abs")
         # Create dummy input shape list (assuming input shape is 1D with length obs_shape)
         dummy_input_shape = [('B', obs_shape)]
         def full_model_fn(x):
