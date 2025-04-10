@@ -154,6 +154,28 @@ def main():
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64]),
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
+    try:
+        from jax2onnx import save_onnx
+        # Create dummy input shape list (assuming input shape is 1D with length obs_shape)
+        dummy_input_shape = [('B', obs_shape)]
+        def full_model_fn(x):
+            pi, value = network.apply(train_state.params, x)
+            return pi.mean, value
+        def actor_model_fn(x):
+            pi, _ = network.apply(train_state.params, x)
+            return pi.mean
+
+        save_onnx(full_model_fn, dummy_input_shape, "full_model.onnx")
+        save_onnx(actor_model_fn, dummy_input_shape, "actor_model.onnx")
+        artifact_full = wandb.Artifact("full_model_onnx", type="model")
+        artifact_full.add_file("full_model.onnx")
+        wandb.log_artifact(artifact_full)
+        artifact_actor = wandb.Artifact("actor_model_onnx", type="model")
+        artifact_actor.add_file("actor_model.onnx")
+        wandb.log_artifact(artifact_actor)
+        print("ONNX models exported successfully.")
+    except ImportError:
+        print("jax2onnx package not available, skipping ONNX export.")
     
     # Define a policy function to map observations to actions using the trained parameters
     def policy_fn(params, obs, key):
