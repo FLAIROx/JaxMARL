@@ -210,20 +210,20 @@ def main():
     # Define input shape for export (use a static batch size)
     input_shape = [1, obs_shape]
 
-    # Extract the parameters from the train_state
-    params = train_state.params["params"]
+    # Use the full parameter tree from train_state
+    full_params = train_state.params
 
     # Export actor and critic using the full parameters with their specific methods.
     actor_onnx = export_to_onnx(
         module=network,
-        params=params,
+        params=full_params,
         input_shape=input_shape,
         onnx_filename="actor_policy.onnx",
         method=ActorCritic.actor_forward
     )
     critic_onnx = export_to_onnx(
         module=network,
-        params=params,
+        params=full_params,
         input_shape=input_shape,
         onnx_filename="critic_value.onnx",
         method=ActorCritic.critic_forward
