@@ -456,10 +456,11 @@ def main():
     print("ONNX models have been exported and logged to wandb.")
     
     # ---- Call eval_results ----
-    # Define dummy evaluation helper functions. Update these as needed.
-    jit_reset = lambda rng: type("State", (), {"pipeline_state": env.reset(rng)[1]})()
+    def dummy_jit_reset(rng):
+        s = env.reset(rng)
+        return type("State", (), {"pipeline_state": s[1], "obs": env.get_obs(s[1])})()
+    jit_reset = dummy_jit_reset
     jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
-    # Note: 'key' must be provided properly in a real scenario.
     jit_step = lambda s, ctrl: type("State", (), {"pipeline_state": env.step_env(jax.random.PRNGKey(0), s, ctrl)[1]})()
     eval_results(env, jit_reset, jit_inference_fn, jit_step)
     
