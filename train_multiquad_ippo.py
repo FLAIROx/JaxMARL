@@ -209,8 +209,8 @@ def main():
         print(f"Exported ONNX model: {onnx_filename}")
         return onnx_filename
 
-    # Define input shape for export (batch dimension dynamic).
-    input_shape = [None, obs_shape]
+    # Define input shape for export (use a static batch size)
+    input_shape = [1, obs_shape]
 
     # Extract submodule parameters.
     actor_params = train_state.params["params"]["actor_module"]  
