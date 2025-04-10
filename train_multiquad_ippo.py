@@ -160,13 +160,13 @@ def main():
     # Define a policy function to map observations to actions using the trained parameters
     def policy_fn(params, obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        actor_mean = network.actor_module.apply(params, batched_obs)
+        actor_mean = network.apply(params, batched_obs, method=ActorCritic.actor_forward)
         unbatched = unbatchify(actor_mean, env.agents, 1, env.num_agents)
         unbatched = {a: jp.squeeze(val, axis=0) for a, val in unbatched.items()}
         return unbatched
     
    # Simulation: run an episode using the trained policy
-    sim_steps = 20000
+    sim_steps = 10000
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
     rollout = [state[1]]
@@ -193,8 +193,10 @@ def main():
     render_video(rollout, env)
     
     # NEW: ONNX export functionality.
-    def export_to_onnx(module, params, input_shape, onnx_filename):
+    def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
         def jax_forward(x):
+            if method is not None:
+                return module.apply(params, x, method=method)
             return module.apply(params, x)
         tf_func = tf.function(
             lambda x: jax2tf.convert(jax_forward, with_gradient=False)(x),
@@ -214,18 +216,20 @@ def main():
     actor_params = train_state.params["actor_module"]
     critic_params = train_state.params["critic_module"]
     
-    # Export actor (outputs only the raw actor-mean) and critic separately.
+    # Export actor and critic separately using the new methods.
     actor_onnx = export_to_onnx(
-        module=network.actor_module,
+        module=network,
         params=actor_params,
         input_shape=input_shape,
-        onnx_filename="actor_policy.onnx"
+        onnx_filename="actor_policy.onnx",
+        method=ActorCritic.actor_forward
     )
     critic_onnx = export_to_onnx(
-        module=network.critic_module,
+        module=network,
         params=critic_params,
         input_shape=input_shape,
-        onnx_filename="critic_value.onnx"
+        onnx_filename="critic_value.onnx",
+        method=ActorCritic.critic_forward
     )
     
     # Log the ONNX models as wandb artifacts.

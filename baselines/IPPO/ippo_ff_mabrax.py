@@ -72,6 +72,14 @@ class ActorCritic(nn.Module):
         critic = self.critic_module(x)
         return pi, critic
 
+    def actor_forward(self, x):
+        # Returns actor output only
+        return self.actor_module(x)
+
+    def critic_forward(self, x):
+        # Returns critic value only
+        return self.critic_module(x)
+
 class Transition(NamedTuple):
     done: jnp.ndarray
     action: jnp.ndarray
