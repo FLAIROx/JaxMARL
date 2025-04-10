@@ -461,7 +461,12 @@ def main():
         return type("State", (), {"pipeline_state": s[1], "obs": env.get_obs(s[1])})()
     jit_reset = dummy_jit_reset
     jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
-    jit_step = lambda s, ctrl: type("State", (), {"pipeline_state": env.step_env(jax.random.PRNGKey(0), s, ctrl)[1]})()
+    def dummy_jit_step(s, ctrl):
+        result = env.step_env(jax.random.PRNGKey(0), s.pipeline_state, ctrl)
+        new_state = result[1]
+        new_obs = env.get_obs(new_state)
+        return type("State", (), {"pipeline_state": new_state, "obs": new_obs})()
+    jit_step = dummy_jit_step
     eval_results(env, jit_reset, jit_inference_fn, jit_step)
     
 if __name__ == "__main__":
