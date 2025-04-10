@@ -54,6 +54,233 @@ def render_video(rollout, env, render_every=2, width=1280, height=720):
     wandb.log({"trained_policy_video": wandb.Video(video_filename, format="mp4")})
     print(f"Video saved to {video_filename}")
 
+
+def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import io
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+    from PIL import Image
+    import matplotlib.ticker as mticker
+    from matplotlib.colors import LinearSegmentedColormap
+
+    # --------------------
+    # Simulation
+    # --------------------
+    n_steps = 2500
+    render_every = 2
+    rng = jax.random.PRNGKey(0)
+    state = jit_reset(rng)
+    rollout = [state.pipeline_state]
+    quad_actions_list = []
+    for i in range(n_steps):
+        act_rng, rng = jax.random.split(rng)
+        ctrl, _ = jit_inference_fn(state.obs, act_rng)
+        state = jit_step(state, ctrl)
+        rollout.append(state.pipeline_state)
+        quad_actions_list.append(np.array(ctrl))
+    # Skipping video rendering since it is handled separately.
+    
+    # Histogram plot over quad actions.
+    quad_actions_flat = np.concatenate(quad_actions_list).flatten()
+    plt.figure()
+    plt.hist(quad_actions_flat, bins=50)
+    plt.xlabel('Action Value')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Quad Actions')
+    plt.savefig('quad_actions_histogram.png')
+    print("Plot saved: quad_actions_histogram.png")
+    wandb.log({"quad_actions_histogram": wandb.Image('quad_actions_histogram.png')})
+    plt.close()
+
+    # --------------------
+    # 3D Trajectory Plot for Payload
+    # --------------------
+    payload_id = eval_env.payload_body_id
+    payload_positions = [np.array(s.xpos[payload_id]) for s in rollout]
+    payload_positions = np.stack(payload_positions)
+    
+    fig = plt.figure(figsize=(5, 5))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(payload_positions[:,0], payload_positions[:,1], payload_positions[:,2],
+            label='Payload Trajectory', lw=2)
+    goal = np.array(eval_env.target_position)
+    ax.scatter(goal[0], goal[1], goal[2], color='red', s=50, label='Goal Position')
+    start_pos = payload_positions[0]
+    ax.scatter(start_pos[0], start_pos[1], start_pos[2], color='green', s=50, label='Start Position')
+    
+    quad1_positions = np.stack([np.array(s.xpos[eval_env.q1_body_id]) for s in rollout])
+    quad2_positions = np.stack([np.array(s.xpos[eval_env.q2_body_id]) for s in rollout])
+    
+    ax.plot(quad1_positions[:,0], quad1_positions[:,1], quad1_positions[:,2],
+            ls='--', color='blue', lw=2, alpha=0.5, label='Quad1 Trajectory')
+    ax.plot(quad2_positions[:,0], quad2_positions[:,1], quad2_positions[:,2],
+            ls='--', color='magenta', lw=2, alpha=0.5, label='Quad2 Trajectory')
+    
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.legend()
+    ax.set_title('Payload Trajectory')
+    ax.xaxis.set_major_locator(mticker.MaxNLocator(5))
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
+    ax.zaxis.set_major_locator(mticker.MaxNLocator(5))
+    ax.set_zlim(0, 1.5)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300)
+    print("Plot saved: 3D payload trajectory plot")
+    buf.seek(0)
+    img = Image.open(buf)
+    wandb.log({"payload_trajectory": wandb.Image(img)})
+    plt.close(fig)
+    
+    # --------------------
+    # Top-Down (XY) Trajectory Plot for Payload
+    # --------------------
+    fig_topdown = plt.figure(figsize=(5, 5))
+    plt.plot(payload_positions[:,0], payload_positions[:,1],
+             label='Payload XY Trajectory', lw=2)
+    plt.plot(quad1_positions[:,0], quad1_positions[:,1],
+             ls='--', color='blue', lw=2, alpha=0.7, label='Quad1 XY Trajectory')
+    plt.plot(quad2_positions[:,0], quad2_positions[:,1],
+             ls='--', color='magenta', lw=2, alpha=0.7, label='Quad2 XY Trajectory')
+    plt.scatter(goal[0], goal[1], color='red', s=50, label='Goal Position')
+    plt.scatter(start_pos[0], start_pos[1], color='green', s=50, label='Start Position')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Payload Trajectory (Top Down)')
+    plt.legend()
+    buf_top = io.BytesIO()
+    plt.savefig(buf_top, format='png', dpi=300)
+    print("Plot saved: Top-down payload trajectory plot")
+    buf_top.seek(0)
+    img_top = Image.open(buf_top)
+    wandb.log({"payload_trajectory_topdown": wandb.Image(img_top)})
+    plt.close(fig_topdown)
+    
+    # --------------------
+    # Payload Position Error Over Time Plot
+    # --------------------
+    times_sim = np.array([s.time for s in rollout])
+    payload_errors = np.array([np.linalg.norm(np.array(s.xpos[payload_id]) - np.array(eval_env.target_position))
+                               for s in rollout])
+    fig2 = plt.figure()
+    plt.plot(times_sim, payload_errors, linestyle='-', color='orange', label='Payload Error')
+    plt.xlabel('Simulation Time (s)')
+    plt.ylabel('Payload Position Error')
+    plt.title('Payload Position Error Over Time')
+    plt.legend()
+    buf2 = io.BytesIO()
+    plt.savefig(buf2, format='png', dpi=300)
+    print("Plot saved: Payload error over time plot")
+    buf2.seek(0)
+    img2 = Image.open(buf2)
+    wandb.log({"payload_error_over_time": wandb.Image(img2)})
+    plt.close(fig2)
+    
+    # --------------------
+    # Batched Rollout over 100 Envs and Top-Down XY Plot for Final Positions 
+    # --------------------
+    num_envs = 100
+    n_steps = 2500
+    batched_rngs = jax.random.split(jax.random.PRNGKey(1234), num_envs)
+    batched_states = jax.vmap(jit_reset)(batched_rngs)
+    
+    start_positions = np.array(jax.vmap(lambda s: s.pipeline_state.xpos[eval_env.payload_body_id])(batched_states))
+    
+    batched_errors = []
+    timeline = []
+    rng_main = jax.random.PRNGKey(5678)
+    for step in range(n_steps):
+        rng_main, rng_step = jax.random.split(rng_main)
+        act_rngs = jax.random.split(rng_step, num_envs)
+        ctrls, _ = jax.vmap(jit_inference_fn)(batched_states.obs, act_rngs)
+        batched_states = jax.vmap(jit_step)(batched_states, ctrls)
+        errors = jax.vmap(lambda s: jax.numpy.linalg.norm(s.pipeline_state.xpos[eval_env.payload_body_id] - eval_env.target_position))(batched_states)
+        batched_errors.append(np.array(errors))
+        times_env = jax.vmap(lambda s: s.pipeline_state.time)(batched_states)
+        timeline.append(np.array(times_env[0]))
+    
+    final_payload_positions = np.array(jax.vmap(lambda s: s.pipeline_state.xpos[eval_env.payload_body_id])(batched_states))[:, :2]
+    final_quad1_positions = np.array(jax.vmap(lambda s: s.pipeline_state.xpos[eval_env.q1_body_id])(batched_states))[:, :2]
+    final_quad2_positions = np.array(jax.vmap(lambda s: s.pipeline_state.xpos[eval_env.q2_body_id])(batched_states))[:, :2]
+    
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.scatter(start_positions[:, 0], start_positions[:, 1],
+               color='black', s=10, label='Start Payload')
+    ax.scatter(goal[0], goal[1], color='red', s=70, marker='*', label='Goal Position')
+    new_cmap = LinearSegmentedColormap.from_list('custom_cmap', [(0, (1,1,1,0)), (1, (0,0,1,1))], N=256)
+    x_low, x_high = -0.3, 0.3
+    y_low, y_high = -0.3, 0.3
+    inliers_mask = ((final_payload_positions[:, 0] >= x_low) &
+                    (final_payload_positions[:, 0] <= x_high) &
+                    (final_payload_positions[:, 1] >= y_low) &
+                    (final_payload_positions[:, 1] <= y_high))
+    inliers = final_payload_positions[inliers_mask]
+    outliers = final_payload_positions[~inliers_mask]
+    xbins = np.linspace(x_low, x_high, 30)
+    ybins = np.linspace(y_low, y_high, 30)
+    H, xedges, yedges = np.histogram2d(inliers[:, 0], inliers[:, 1], bins=[xbins, ybins], density=True)
+    Xc = (xedges[:-1] + xedges[1:]) / 2
+    Yc = (yedges[:-1] + yedges[1:]) / 2
+    X, Y = np.meshgrid(Xc, Yc)
+    cont = ax.contourf(X, Y, H.T, levels=10, cmap=new_cmap, alpha=0.7, vmin=0)
+    cbar = fig.colorbar(cont, ax=ax)
+    cbar.set_label('Density')
+    if outliers.size > 0:
+        ax.scatter(outliers[:, 0], outliers[:, 1], color='cyan', marker='x', s=20, label='Outliers')
+    ax.set_xlim(x_low, x_high)
+    ax.set_ylim(y_low, y_high)
+    ax.scatter(final_quad1_positions[:, 0], final_quad1_positions[:, 1],
+               color='blue', marker='s', s=15, alpha=0.3, label='Quad1 Final')
+    ax.scatter(final_quad2_positions[:, 0], final_quad2_positions[:, 1],
+               color='magenta', marker='s', s=15, alpha=0.3, label='Quad2 Final')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_title('Top-Down XY Plot for Final Positions (Batched Rollout)')
+    ax.legend()
+    buf_final = io.BytesIO()
+    plt.savefig(buf_final, format='png', dpi=300)
+    buf_final.seek(0)
+    img_final = Image.open(buf_final)
+    wandb.log({"batched_rollout_topdown": wandb.Image(img_final)})
+    print("Plot saved and logged: batched_rollout_topdown")
+    plt.close(fig)
+    
+    # --------------------
+    # Batched Payload Error Over Time Plot using percentiles
+    # --------------------
+    timeline = np.array(timeline)
+    batched_errors = np.array(batched_errors)
+    p0 = np.percentile(batched_errors, 0, axis=1)
+    p25 = np.percentile(batched_errors, 25, axis=1)
+    p50 = np.percentile(batched_errors, 50, axis=1)
+    p75 = np.percentile(batched_errors, 75, axis=1)
+    p90 = np.percentile(batched_errors, 90, axis=1)
+    p98 = np.percentile(batched_errors, 98, axis=1)
+    p100 = np.percentile(batched_errors, 100, axis=1)
+    
+    fig3 = plt.figure(figsize=(8, 5))
+    ax3 = fig3.add_subplot(111)
+    ax3.plot(timeline, p0, color='black', linestyle='--', label='0th Percentile')
+    ax3.plot(timeline, p25, color='blue', linestyle='-.', label='25th Percentile')
+    ax3.plot(timeline, p50, color='blue', linewidth=2, label='50th Percentile')
+    ax3.plot(timeline, p75, color='blue', linestyle='-.', label='75th Percentile')
+    ax3.plot(timeline, p90, color='black', linestyle='--', label='90th Percentile')
+    ax3.plot(timeline, p98, color='red', linestyle='-', label='98th Percentile')
+    ax3.plot(timeline, p100, color='red', linestyle='-', label='100th Percentile')
+    ax3.set_xlabel('Simulation Time (s)')
+    ax3.set_ylabel('Payload Position Error')
+    ax3.set_title('Batched Rollout Payload Position Error Over Time')
+    ax3.legend()
+    ax3.grid(True)
+    plt.savefig('batched_payload_error_over_time.png', dpi=300)
+    print("Plot saved: Batched Payload Error Over Time")
+    wandb.log({"batched_payload_error_over_time": wandb.Image('batched_payload_error_over_time.png')})
+    plt.close(fig3)
+
+
 def main():
     # Default reward coefficients
     default_reward_coeffs = {
@@ -227,6 +454,14 @@ def main():
     wandb.log_artifact(actor_artifact)
     wandb.log_artifact(critic_artifact)
     print("ONNX models have been exported and logged to wandb.")
+    
+    # ---- Call eval_results ----
+    # Define dummy evaluation helper functions. Update these as needed.
+    jit_reset = lambda rng: type("State", (), {"pipeline_state": env.reset(rng)[1]})()
+    jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
+    # Note: 'key' must be provided properly in a real scenario.
+    jit_step = lambda s, ctrl: type("State", (), {"pipeline_state": env.step_env(jax.random.PRNGKey(0), s, ctrl)[1]})()
+    eval_results(env, jit_reset, jit_inference_fn, jit_step)
     
 if __name__ == "__main__":
     main()
