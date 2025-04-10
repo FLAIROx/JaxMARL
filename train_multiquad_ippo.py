@@ -195,13 +195,11 @@ def main():
     def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
         def jax_forward(x):
             return module.apply(params, x, method=method)
-        tf_func = tf.function(
-            lambda x: jax2tf.convert(jax_forward, with_gradient=False)(x),
-            input_signature=[tf.TensorSpec(input_shape, tf.float32)]
-        )
-        onnx_model, _ = tf2onnx.convert.from_function(
-            tf_func, input_signature=tf_func.input_signature, opset=13
-        )
+        @tf.autograph.experimental.do_not_convert
+        def tf_forward_fn(x):
+            return jax2tf.convert(jax_forward, with_gradient=False)(x)
+        tf_func = tf.function(tf_forward_fn, input_signature=[tf.TensorSpec(input_shape, tf.float32)])
+        onnx_model, _ = tf2onnx.convert.from_function(tf_func, input_signature=tf_func.input_signature, opset=13)
         onnx.save_model(onnx_model, onnx_filename)
         print(f"Exported ONNX model: {onnx_filename}")
         return onnx_filename
