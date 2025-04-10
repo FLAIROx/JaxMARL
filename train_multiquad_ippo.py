@@ -193,10 +193,14 @@ def main():
     render_video(rollout, env)
     
     def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
+        # Use the submodule's apply if either actor_forward or critic_forward is specified.
         def jax_forward(x):
-            if method is not None:
+            if method == ActorCritic.actor_forward:
+                return module.actor_module.apply(params, x)
+            elif method == ActorCritic.critic_forward:
+                return module.critic_module.apply(params, x)
+            else:
                 return module.apply(params, x, method=method)
-            return module.apply(params, x)
         tf_func = tf.function(
             lambda x: jax2tf.convert(jax_forward, with_gradient=False)(x),
             input_signature=[tf.TensorSpec(input_shape, tf.float32)]
