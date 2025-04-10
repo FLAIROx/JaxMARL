@@ -211,11 +211,10 @@ def main():
 
     # Define input shape for export (batch dimension dynamic).
     input_shape = [None, obs_shape]
-    print(train_state.params)
 
     # Extract submodule parameters.
-    actor_params = train_state.params["actor_module"]
-    critic_params = train_state.params["critic_module"]
+    actor_params = train_state.params["params"]["actor_module"]  
+    critic_params = train_state.params["params"]["critic_module"]  
     
     # Export actor and critic separately using the new methods.
     actor_onnx = export_to_onnx(
