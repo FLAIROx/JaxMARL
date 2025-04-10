@@ -192,7 +192,6 @@ def main():
     # Call the separated video rendering function
     render_video(rollout, env)
     
-    # NEW: ONNX export functionality.
     def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
         def jax_forward(x):
             if method is not None:
@@ -212,6 +211,8 @@ def main():
 
     # Define input shape for export (batch dimension dynamic).
     input_shape = [None, obs_shape]
+    print(train_state.params)
+
     # Extract submodule parameters.
     actor_params = train_state.params["actor_module"]
     critic_params = train_state.params["critic_module"]
