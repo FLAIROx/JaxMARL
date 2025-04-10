@@ -54,6 +54,7 @@ class ActorCritic(nn.Module):
         return pi, jnp.squeeze(critic, axis=-1)
     
     # Compute actor mean for export.
+    @nn.compact
     def actor_forward(self, x):
         if self.activation == "relu":
             activation = nn.relu
@@ -67,6 +68,7 @@ class ActorCritic(nn.Module):
         return actor_mean
     
     # Compute critic output for export.
+    @nn.compact
     def critic_forward(self, x):
         if self.activation == "relu":
             activation = nn.relu
