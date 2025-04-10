@@ -193,14 +193,8 @@ def main():
     render_video(rollout, env)
     
     def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
-        # Use the submodule's apply if either actor_forward or critic_forward is specified.
         def jax_forward(x):
-            if method == ActorCritic.actor_forward:
-                return module.actor_module.apply(params, x)
-            elif method == ActorCritic.critic_forward:
-                return module.critic_module.apply(params, x)
-            else:
-                return module.apply(params, x, method=method)
+            return module.apply(params, x, method=method)
         tf_func = tf.function(
             lambda x: jax2tf.convert(jax_forward, with_gradient=False)(x),
             input_signature=[tf.TensorSpec(input_shape, tf.float32)]
@@ -216,21 +210,20 @@ def main():
     # Define input shape for export (use a static batch size)
     input_shape = [1, obs_shape]
 
-    # Extract submodule parameters.
-    actor_params = train_state.params["params"]["actor_module"]  
-    critic_params = train_state.params["params"]["critic_module"]  
-    
-    # Export actor and critic separately using the new methods.
+    # Extract the parameters from the train_state
+    params = train_state.params["params"]
+
+    # Export actor and critic using the full parameters with their specific methods.
     actor_onnx = export_to_onnx(
         module=network,
-        params=actor_params,
+        params=params,
         input_shape=input_shape,
         onnx_filename="actor_policy.onnx",
         method=ActorCritic.actor_forward
     )
     critic_onnx = export_to_onnx(
         module=network,
-        params=critic_params,
+        params=params,
         input_shape=input_shape,
         onnx_filename="critic_value.onnx",
         method=ActorCritic.critic_forward
