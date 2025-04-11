@@ -223,7 +223,7 @@ def main():
             "obs_noise": 0.0,
             "act_noise": 0.05,
         },
-        "TOTAL_TIMESTEPS": 3_000_000_000,
+        "TOTAL_TIMESTEPS": 10_000_000,#3_000_000_000,
         "NUM_ENVS": 4096,
         "NUM_STEPS": 512,
         "NUM_MINIBATCHES": 256,
