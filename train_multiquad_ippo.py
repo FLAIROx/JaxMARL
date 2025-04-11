@@ -102,7 +102,9 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     batched_rngs = jax.random.split(jax.random.PRNGKey(1234), num_envs)
     batched_states = jax.vmap(jit_reset)(batched_rngs)
     
-    start_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3])(batched_states))
+    target_position = np.array([0.0, 0.0, 1.5])
+    
+    start_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3])(batched_states))
     
     batched_errors = []
     timeline = []
@@ -118,11 +120,13 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
         timeline.append(np.array(times_env[0]))
     
     # Compute payload position from obs: target_position - payload_error (first 3 elements)
-    final_payload_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3])(batched_states))[:, :2]
+    final_payload_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3])(batched_states))[:, :2]
     # Quad relative positions are stored at obs indices 6:9 (for quad1) and 30:33 (for quad2)
-    final_quad1_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3] + s["obs"][6:9])(batched_states))[:, :2]
-    final_quad2_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3] + s["obs"][30:33])(batched_states))[:, :2]
+    final_quad1_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3] + s["obs"][6:9])(batched_states))[:, :2]
+    final_quad2_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3] + s["obs"][30:33])(batched_states))[:, :2]
     
+
+    goal = target_position
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.scatter(start_positions[:, 0], start_positions[:, 1],
                color='black', s=10, label='Start Payload')
