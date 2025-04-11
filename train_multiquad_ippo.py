@@ -102,7 +102,7 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     batched_rngs = jax.random.split(jax.random.PRNGKey(1234), num_envs)
     batched_states = jax.vmap(jit_reset)(batched_rngs)
     
-    start_positions = np.array(jax.vmap(lambda s: s["pipeline_state"].xpos[eval_env.payload_body_id])(batched_states))
+    start_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3])(batched_states))
     
     batched_errors = []
     timeline = []
@@ -223,7 +223,7 @@ def main():
             "obs_noise": 0.0,
             "act_noise": 0.05,
         },
-        "TOTAL_TIMESTEPS": 30_000_000,
+        "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 4096,
         "NUM_STEPS": 512,
         "NUM_MINIBATCHES": 256,
@@ -372,21 +372,21 @@ def main():
     wandb.log_artifact(critic_artifact)
     print("ONNX models have been exported and logged to wandb.")
     
-    # ---- Call eval_results ----
-    def dummy_jit_reset(rng):
-        s = env.reset(rng)
-        # Return a dictionary with valid JAX types.
-        return {"pipeline_state": s[1], "obs": env.get_obs(s[1])}
+    # # ---- Call eval_results ----
+    # def dummy_jit_reset(rng):
+    #     s = env.reset(rng)
+    #     # Return a dictionary with valid JAX types.
+    #     return {"pipeline_state": s[1], "obs": env.get_obs(s[1])}
 
-    jit_reset = dummy_jit_reset
-    jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
-    def dummy_jit_step(s, ctrl):
-        result = env.step_env(jax.random.PRNGKey(0), s["pipeline_state"], ctrl)
-        new_state = result[1]
-        new_obs = env.get_obs(new_state)
-        return {"pipeline_state": new_state, "obs": new_obs}
-    jit_step = dummy_jit_step
-    eval_results(env, jit_reset, jit_inference_fn, jit_step)
+    # jit_reset = dummy_jit_reset
+    # jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
+    # def dummy_jit_step(s, ctrl):
+    #     result = env.step_env(jax.random.PRNGKey(0), s["pipeline_state"], ctrl)
+    #     new_state = result[1]
+    #     new_obs = env.get_obs(new_state)
+    #     return {"pipeline_state": new_state, "obs": new_obs}
+    # jit_step = dummy_jit_step
+    # eval_results(env, jit_reset, jit_inference_fn, jit_step)
     
 if __name__ == "__main__":
     main()
