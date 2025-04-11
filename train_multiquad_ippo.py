@@ -104,7 +104,7 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     
     target_position = np.array([0.0, 0.0, 1.5])
     
-    start_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3])(batched_states))
+    # start_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3])(batched_states))
     
     batched_errors = []
     timeline = []
@@ -119,55 +119,55 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
         times_env = jax.vmap(lambda s: s["pipeline_state"].time)(batched_states)
         timeline.append(np.array(times_env[0]))
     
-    # Compute payload position from obs: target_position - payload_error (first 3 elements)
-    final_payload_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3])(batched_states))[:, :2]
-    # Quad relative positions are stored at obs indices 6:9 (for quad1) and 30:33 (for quad2)
-    final_quad1_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3] + s["obs"][6:9])(batched_states))[:, :2]
-    final_quad2_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3] + s["obs"][30:33])(batched_states))[:, :2]
+    # # Compute payload position from obs: target_position - payload_error (first 3 elements)
+    # final_payload_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3])(batched_states))[:, :2]
+    # # Quad relative positions are stored at obs indices 6:9 (for quad1) and 30:33 (for quad2)
+    # final_quad1_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3] + s["obs"][6:9])(batched_states))[:, :2]
+    # final_quad2_positions = np.array(jax.vmap(lambda s: target_position - s["obs"][:3] + s["obs"][30:33])(batched_states))[:, :2]
     
 
-    goal = target_position
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.scatter(start_positions[:, 0], start_positions[:, 1],
-               color='black', s=10, label='Start Payload')
-    ax.scatter(goal[0], goal[1], color='red', s=70, marker='*', label='Goal Position')
-    new_cmap = LinearSegmentedColormap.from_list('custom_cmap', [(0, (1,1,1,0)), (1, (0,0,1,1))], N=256)
-    x_low, x_high = -0.3, 0.3
-    y_low, y_high = -0.3, 0.3
-    inliers_mask = ((final_payload_positions[:, 0] >= x_low) &
-                    (final_payload_positions[:, 0] <= x_high) &
-                    (final_payload_positions[:, 1] >= y_low) &
-                    (final_payload_positions[:, 1] <= y_high))
-    inliers = final_payload_positions[inliers_mask]
-    outliers = final_payload_positions[~inliers_mask]
-    xbins = np.linspace(x_low, x_high, 30)
-    ybins = np.linspace(y_low, y_high, 30)
-    H, xedges, yedges = np.histogram2d(inliers[:, 0], inliers[:, 1], bins=[xbins, ybins], density=True)
-    Xc = (xedges[:-1] + xedges[1:]) / 2
-    Yc = (yedges[:-1] + yedges[1:]) / 2
-    X, Y = np.meshgrid(Xc, Yc)
-    cont = ax.contourf(X, Y, H.T, levels=10, cmap=new_cmap, alpha=0.7, vmin=0)
-    cbar = fig.colorbar(cont, ax=ax)
-    cbar.set_label('Density')
-    if outliers.size > 0:
-        ax.scatter(outliers[:, 0], outliers[:, 1], color='cyan', marker='x', s=20, label='Outliers')
-    ax.set_xlim(x_low, x_high)
-    ax.set_ylim(y_low, y_high)
-    ax.scatter(final_quad1_positions[:, 0], final_quad1_positions[:, 1],
-               color='blue', marker='s', s=15, alpha=0.3, label='Quad1 Final')
-    ax.scatter(final_quad2_positions[:, 0], final_quad2_positions[:, 1],
-               color='magenta', marker='s', s=15, alpha=0.3, label='Quad2 Final')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_title('Top-Down XY Plot for Final Positions (Batched Rollout)')
-    ax.legend()
-    buf_final = io.BytesIO()
-    plt.savefig(buf_final, format='png', dpi=300)
-    buf_final.seek(0)
-    img_final = Image.open(buf_final)
-    wandb.log({"batched_rollout_topdown": wandb.Image(img_final)})
-    print("Plot saved and logged: batched_rollout_topdown")
-    plt.close(fig)
+    # goal = target_position
+    # fig, ax = plt.subplots(figsize=(8, 8))
+    # ax.scatter(start_positions[:, 0], start_positions[:, 1],
+    #            color='black', s=10, label='Start Payload')
+    # ax.scatter(goal[0], goal[1], color='red', s=70, marker='*', label='Goal Position')
+    # new_cmap = LinearSegmentedColormap.from_list('custom_cmap', [(0, (1,1,1,0)), (1, (0,0,1,1))], N=256)
+    # x_low, x_high = -0.3, 0.3
+    # y_low, y_high = -0.3, 0.3
+    # inliers_mask = ((final_payload_positions[:, 0] >= x_low) &
+    #                 (final_payload_positions[:, 0] <= x_high) &
+    #                 (final_payload_positions[:, 1] >= y_low) &
+    #                 (final_payload_positions[:, 1] <= y_high))
+    # inliers = final_payload_positions[inliers_mask]
+    # outliers = final_payload_positions[~inliers_mask]
+    # xbins = np.linspace(x_low, x_high, 30)
+    # ybins = np.linspace(y_low, y_high, 30)
+    # H, xedges, yedges = np.histogram2d(inliers[:, 0], inliers[:, 1], bins=[xbins, ybins], density=True)
+    # Xc = (xedges[:-1] + xedges[1:]) / 2
+    # Yc = (yedges[:-1] + yedges[1:]) / 2
+    # X, Y = np.meshgrid(Xc, Yc)
+    # cont = ax.contourf(X, Y, H.T, levels=10, cmap=new_cmap, alpha=0.7, vmin=0)
+    # cbar = fig.colorbar(cont, ax=ax)
+    # cbar.set_label('Density')
+    # if outliers.size > 0:
+    #     ax.scatter(outliers[:, 0], outliers[:, 1], color='cyan', marker='x', s=20, label='Outliers')
+    # ax.set_xlim(x_low, x_high)
+    # ax.set_ylim(y_low, y_high)
+    # ax.scatter(final_quad1_positions[:, 0], final_quad1_positions[:, 1],
+    #            color='blue', marker='s', s=15, alpha=0.3, label='Quad1 Final')
+    # ax.scatter(final_quad2_positions[:, 0], final_quad2_positions[:, 1],
+    #            color='magenta', marker='s', s=15, alpha=0.3, label='Quad2 Final')
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # ax.set_title('Top-Down XY Plot for Final Positions (Batched Rollout)')
+    # ax.legend()
+    # buf_final = io.BytesIO()
+    # plt.savefig(buf_final, format='png', dpi=300)
+    # buf_final.seek(0)
+    # img_final = Image.open(buf_final)
+    # wandb.log({"batched_rollout_topdown": wandb.Image(img_final)})
+    # print("Plot saved and logged: batched_rollout_topdown")
+    # plt.close(fig)
     
     # --------------------
     # Batched Payload Error Over Time Plot using percentiles
