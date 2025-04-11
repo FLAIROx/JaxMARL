@@ -372,21 +372,21 @@ def main():
     wandb.log_artifact(critic_artifact)
     print("ONNX models have been exported and logged to wandb.")
     
-    # # ---- Call eval_results ----
-    # def dummy_jit_reset(rng):
-    #     s = env.reset(rng)
-    #     # Return a dictionary with valid JAX types.
-    #     return {"pipeline_state": s[1], "obs": env.get_obs(s[1])}
+    # ---- Call eval_results ----
+    def dummy_jit_reset(rng):
+        s = env.reset(rng)
+        # Return a dictionary with valid JAX types.
+        return {"pipeline_state": s[1], "obs": env.get_obs(s[1])}
 
-    # jit_reset = dummy_jit_reset
-    # jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
-    # def dummy_jit_step(s, ctrl):
-    #     result = env.step_env(jax.random.PRNGKey(0), s["pipeline_state"], ctrl)
-    #     new_state = result[1]
-    #     new_obs = env.get_obs(new_state)
-    #     return {"pipeline_state": new_state, "obs": new_obs}
-    # jit_step = dummy_jit_step
-    # eval_results(env, jit_reset, jit_inference_fn, jit_step)
+    jit_reset = dummy_jit_reset
+    jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
+    def dummy_jit_step(s, ctrl):
+        result = env.step_env(jax.random.PRNGKey(0), s["pipeline_state"], ctrl)
+        new_state = result[1]
+        new_obs = env.get_obs(new_state)
+        return {"pipeline_state": new_state, "obs": new_obs}
+    jit_step = dummy_jit_step
+    eval_results(env, jit_reset, jit_inference_fn, jit_step)
     
 if __name__ == "__main__":
     main()
