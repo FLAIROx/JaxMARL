@@ -71,13 +71,13 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     render_every = 2
     rng = jax.random.PRNGKey(0)
     state = jit_reset(rng)
-    rollout = [state.pipeline_state]
+    rollout = [state["pipeline_state"]]
     quad_actions_list = []
     for i in range(n_steps):
         act_rng, rng = jax.random.split(rng)
-        ctrl, _ = jit_inference_fn(state.obs, act_rng)
+        ctrl, _ = jit_inference_fn(state["obs"], act_rng)
         state = jit_step(state, ctrl)
-        rollout.append(state.pipeline_state)
+        rollout.append(state["pipeline_state"])
         quad_actions_list.append(np.concatenate([np.array(val) for val in ctrl.values()]))
     # Skipping video rendering since it is handled separately.
     
@@ -94,92 +94,6 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     wandb.log({"quad_actions_histogram": wandb.Image('quad_actions_histogram.png')})
     plt.close()
 
-    # # --------------------
-    # # 3D Trajectory Plot for Payload
-    # # --------------------
-    # payload_id = eval_env.payload_body_id
-    # payload_positions = [np.array(s.xpos[payload_id]) for s in rollout]
-    # payload_positions = np.stack(payload_positions)
-    
-    # fig = plt.figure(figsize=(5, 5))
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot(payload_positions[:,0], payload_positions[:,1], payload_positions[:,2],
-    #         label='Payload Trajectory', lw=2)
-    # goal = np.array(eval_env.target_position)
-    # ax.scatter(goal[0], goal[1], goal[2], color='red', s=50, label='Goal Position')
-    # start_pos = payload_positions[0]
-    # ax.scatter(start_pos[0], start_pos[1], start_pos[2], color='green', s=50, label='Start Position')
-    
-    # quad1_positions = np.stack([np.array(s.xpos[eval_env.q1_body_id]) for s in rollout])
-    # quad2_positions = np.stack([np.array(s.xpos[eval_env.q2_body_id]) for s in rollout])
-    
-    # ax.plot(quad1_positions[:,0], quad1_positions[:,1], quad1_positions[:,2],
-    #         ls='--', color='blue', lw=2, alpha=0.5, label='Quad1 Trajectory')
-    # ax.plot(quad2_positions[:,0], quad2_positions[:,1], quad2_positions[:,2],
-    #         ls='--', color='magenta', lw=2, alpha=0.5, label='Quad2 Trajectory')
-    
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    # ax.legend()
-    # ax.set_title('Payload Trajectory')
-    # ax.xaxis.set_major_locator(mticker.MaxNLocator(5))
-    # ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
-    # ax.zaxis.set_major_locator(mticker.MaxNLocator(5))
-    # ax.set_zlim(0, 1.5)
-    
-    # buf = io.BytesIO()
-    # plt.savefig(buf, format='png', dpi=300)
-    # print("Plot saved: 3D payload trajectory plot")
-    # buf.seek(0)
-    # img = Image.open(buf)
-    # wandb.log({"payload_trajectory": wandb.Image(img)})
-    # plt.close(fig)
-    
-    # # --------------------
-    # # Top-Down (XY) Trajectory Plot for Payload
-    # # --------------------
-    # fig_topdown = plt.figure(figsize=(5, 5))
-    # plt.plot(payload_positions[:,0], payload_positions[:,1],
-    #          label='Payload XY Trajectory', lw=2)
-    # plt.plot(quad1_positions[:,0], quad1_positions[:,1],
-    #          ls='--', color='blue', lw=2, alpha=0.7, label='Quad1 XY Trajectory')
-    # plt.plot(quad2_positions[:,0], quad2_positions[:,1],
-    #          ls='--', color='magenta', lw=2, alpha=0.7, label='Quad2 XY Trajectory')
-    # plt.scatter(goal[0], goal[1], color='red', s=50, label='Goal Position')
-    # plt.scatter(start_pos[0], start_pos[1], color='green', s=50, label='Start Position')
-    # plt.xlabel('X')
-    # plt.ylabel('Y')
-    # plt.title('Payload Trajectory (Top Down)')
-    # plt.legend()
-    # buf_top = io.BytesIO()
-    # plt.savefig(buf_top, format='png', dpi=300)
-    # print("Plot saved: Top-down payload trajectory plot")
-    # buf_top.seek(0)
-    # img_top = Image.open(buf_top)
-    # wandb.log({"payload_trajectory_topdown": wandb.Image(img_top)})
-    # plt.close(fig_topdown)
-    
-    # # --------------------
-    # # Payload Position Error Over Time Plot
-    # # --------------------
-    # times_sim = np.array([s.time for s in rollout])
-    # payload_errors = np.array([np.linalg.norm(np.array(s.xpos[payload_id]) - np.array(eval_env.target_position))
-    #                            for s in rollout])
-    # fig2 = plt.figure()
-    # plt.plot(times_sim, payload_errors, linestyle='-', color='orange', label='Payload Error')
-    # plt.xlabel('Simulation Time (s)')
-    # plt.ylabel('Payload Position Error')
-    # plt.title('Payload Position Error Over Time')
-    # plt.legend()
-    # buf2 = io.BytesIO()
-    # plt.savefig(buf2, format='png', dpi=300)
-    # print("Plot saved: Payload error over time plot")
-    # buf2.seek(0)
-    # img2 = Image.open(buf2)
-    # wandb.log({"payload_error_over_time": wandb.Image(img2)})
-    # plt.close(fig2)
-    
     # --------------------
     # Batched Rollout over 100 Envs and Top-Down XY Plot for Final Positions 
     # --------------------
@@ -188,7 +102,7 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     batched_rngs = jax.random.split(jax.random.PRNGKey(1234), num_envs)
     batched_states = jax.vmap(jit_reset)(batched_rngs)
     
-    start_positions = np.array(jax.vmap(lambda s: s.pipeline_state.xpos[eval_env.payload_body_id])(batched_states))
+    start_positions = np.array(jax.vmap(lambda s: s["pipeline_state"].xpos[eval_env.payload_body_id])(batched_states))
     
     batched_errors = []
     timeline = []
@@ -196,18 +110,18 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     for step in range(n_steps):
         rng_main, rng_step = jax.random.split(rng_main)
         act_rngs = jax.random.split(rng_step, num_envs)
-        ctrls, _ = jax.vmap(jit_inference_fn)(batched_states.obs, act_rngs)
+        ctrls, _ = jax.vmap(jit_inference_fn)(batched_states["obs"], act_rngs)
         batched_states = jax.vmap(jit_step)(batched_states, ctrls)
-        errors = jax.vmap(lambda s: jax.numpy.linalg.norm(s.obs[:3]))(batched_states)
+        errors = jax.vmap(lambda s: jax.numpy.linalg.norm(s["obs"][:3]))(batched_states)
         batched_errors.append(np.array(errors))
-        times_env = jax.vmap(lambda s: s.pipeline_state.time)(batched_states)
+        times_env = jax.vmap(lambda s: s["pipeline_state"].time)(batched_states)
         timeline.append(np.array(times_env[0]))
     
     # Compute payload position from obs: target_position - payload_error (first 3 elements)
-    final_payload_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s.obs[:3])(batched_states))[:, :2]
+    final_payload_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3])(batched_states))[:, :2]
     # Quad relative positions are stored at obs indices 6:9 (for quad1) and 30:33 (for quad2)
-    final_quad1_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s.obs[:3] + s.obs[6:9])(batched_states))[:, :2]
-    final_quad2_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s.obs[:3] + s.obs[30:33])(batched_states))[:, :2]
+    final_quad1_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3] + s["obs"][6:9])(batched_states))[:, :2]
+    final_quad2_positions = np.array(jax.vmap(lambda s: eval_env.target_position - s["obs"][:3] + s["obs"][30:33])(batched_states))[:, :2]
     
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.scatter(start_positions[:, 0], start_positions[:, 1],
@@ -461,14 +375,16 @@ def main():
     # ---- Call eval_results ----
     def dummy_jit_reset(rng):
         s = env.reset(rng)
-        return type("State", (), {"pipeline_state": s[1], "obs": env.get_obs(s[1])})()
+        # Return a dictionary with valid JAX types.
+        return {"pipeline_state": s[1], "obs": env.get_obs(s[1])}
+
     jit_reset = dummy_jit_reset
     jit_inference_fn = lambda obs, key: (policy_fn(train_state.params, obs, key), None)
     def dummy_jit_step(s, ctrl):
-        result = env.step_env(jax.random.PRNGKey(0), s.pipeline_state, ctrl)
+        result = env.step_env(jax.random.PRNGKey(0), s["pipeline_state"], ctrl)
         new_state = result[1]
         new_obs = env.get_obs(new_state)
-        return type("State", (), {"pipeline_state": new_state, "obs": new_obs})()
+        return {"pipeline_state": new_state, "obs": new_obs}
     jit_step = dummy_jit_step
     eval_results(env, jit_reset, jit_inference_fn, jit_step)
     
