@@ -78,7 +78,7 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
         ctrl, _ = jit_inference_fn(state.obs, act_rng)
         state = jit_step(state, ctrl)
         rollout.append(state.pipeline_state)
-        quad_actions_list.append(np.array(ctrl))
+        quad_actions_list.append(np.concatenate([np.array(val) for val in ctrl.values()]))
     # Skipping video rendering since it is handled separately.
     
     # Histogram plot over quad actions.
