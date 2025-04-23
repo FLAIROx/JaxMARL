@@ -337,16 +337,13 @@ def main():
     # Call the separated video rendering function
     render_video(rollout, env)
     
-    def export_to_onnx(module, params, input_shape, onnx_filename, method=None):
+    def export_to_onnx(module, params, obs_shape, onnx_filename, method=None):
         def jax_callable(x):
             return module.apply(params, x, method=method)
         # Use a hardcoded batch size = 1 for export
-        save_onnx(jax_callable, [(1, input_shape[1])], onnx_filename)
+        save_onnx(jax_callable, [("B", obs_shape)], onnx_filename)
         print(f"Exported ONNX model: {onnx_filename}")
         return onnx_filename
-
-    # Define input shape for export (use a static batch size)
-    input_shape = [1, obs_shape]
 
     # Use the full parameter tree from train_state
     full_params = train_state.params
@@ -355,14 +352,14 @@ def main():
     actor_onnx = export_to_onnx(
         module=network,
         params=full_params,
-        input_shape=input_shape,
+        obs_shape=obs_shape,
         onnx_filename="actor_policy.onnx",
         method=ActorCritic.actor_forward
     )
     critic_onnx = export_to_onnx(
         module=network,
         params=full_params,
-        input_shape=input_shape,
+        obs_shape=obs_shape,
         onnx_filename="critic_value.onnx",
         method=ActorCritic.critic_forward
     )
