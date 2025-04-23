@@ -225,7 +225,7 @@ def main():
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 0.0,
             "act_noise": 0.05,
-            "max_thrust_range": 0.3,
+            "max_thrust_range": 0.0,
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 16384,
