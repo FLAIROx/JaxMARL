@@ -48,6 +48,7 @@ class MultiQuadEnv(PipelineEnv):
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
+      max_thrust_range: float = 0.3,               # range for randomizing thrust
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
@@ -98,7 +99,9 @@ class MultiQuadEnv(PipelineEnv):
     sys.mj_model.opt.timestep = dt
 
     # Maximum thrust from the original environment.
-    self.max_thrust = 0.11772
+    self.base_max_thrust = 0.14             
+    self.max_thrust = self.base_max_thrust     
+    self.max_thrust_range = max_thrust_range    
     # Define the target goal for the payload.
     self.goal_center = jp.array([0.0, 0.0, 1.5])
     self.target_position = self.goal_center
@@ -220,7 +223,13 @@ class MultiQuadEnv(PipelineEnv):
 
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
+    # randomize max_thrust between in range
+    rng, mt_rng = jax.random.split(rng)
+    factor = jax.random.uniform(mt_rng, (), minval=1.0 - self.max_thrust_range, maxval=1.0)
+    self.max_thrust = self.base_max_thrust * factor
+    
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
+
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
     qvel = 0.1 * jax.random.normal(rng2, (self.sys.nv,))
     qvel = jp.clip(qvel, a_min=-5.0, a_max=5.0)

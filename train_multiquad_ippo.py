@@ -83,7 +83,6 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     
     # Histogram plot over quad actions.
     quad_actions_flat = np.concatenate(quad_actions_list).flatten()
-    quad_actions_flat = 0.5 * (quad_actions_flat + 1)  # Scale to [0, 1]
     plt.figure()
     plt.hist(quad_actions_flat, bins=50)
     plt.xlabel('Action Value')
@@ -226,11 +225,12 @@ def main():
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 0.0,
             "act_noise": 0.05,
+            "max_thrust_range": 0.3,
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,
-        "NUM_ENVS": 32768,
+        "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
-        "NUM_MINIBATCHES": 1024,
+        "NUM_MINIBATCHES": 512,
         "UPDATE_EPOCHS": 8,
         "ANNEAL_LR": False,
         "LR":  4e-4,
