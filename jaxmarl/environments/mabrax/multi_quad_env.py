@@ -99,9 +99,8 @@ class MultiQuadEnv(PipelineEnv):
     sys.mj_model.opt.timestep = dt
 
     # Maximum thrust from the original environment.
-    self.base_max_thrust = 0.14             
-    self.max_thrust = self.base_max_thrust     
-    self.max_thrust_range = max_thrust_range    
+    self.base_max_thrust = 0.14
+    self.max_thrust_range = max_thrust_range
     # Define the target goal for the payload.
     self.goal_center = jp.array([0.0, 0.0, 1.5])
     self.target_position = self.goal_center
@@ -226,7 +225,7 @@ class MultiQuadEnv(PipelineEnv):
     # randomize max_thrust between in range
     rng, mt_rng = jax.random.split(rng)
     factor = jax.random.uniform(mt_rng, (), minval=1.0 - self.max_thrust_range, maxval=1.0)
-    self.max_thrust = self.base_max_thrust * factor
+    max_thrust = self.base_max_thrust * factor
     
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
 
@@ -294,7 +293,9 @@ class MultiQuadEnv(PipelineEnv):
     obs = self._get_obs(pipeline_state, last_action, self.target_position, noise_key)
     reward = jp.array(0.0)
     done = jp.array(0.0)
-    metrics = {'time': pipeline_state.time, 'reward': reward}
+    metrics = {'time': pipeline_state.time,
+               'reward': reward,
+               'max_thrust': max_thrust}
     return State(pipeline_state, obs, reward, done, metrics)
 
   
@@ -311,8 +312,9 @@ class MultiQuadEnv(PipelineEnv):
     # Extract previous action from the observation.
     prev_last_action = state.obs[-(self.sys.nu+1):-1]
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
+    max_thrust = state.metrics['max_thrust']
     thrust_cmds = 0.5 * (action + 1.0)
-    action_scaled = thrust_cmds * self.max_thrust
+    action_scaled = thrust_cmds * max_thrust
 
     data0 = state.pipeline_state
     pipeline_state = self.pipeline_step(data0, action_scaled)
@@ -326,7 +328,7 @@ class MultiQuadEnv(PipelineEnv):
     # Add actuator noise.
     if self.act_noise:
         noise = jax.random.normal(noise_key, shape=action_scaled.shape)
-        action_scaled = action_scaled + self.act_noise * self.max_thrust * noise
+        action_scaled = action_scaled + self.act_noise * max_thrust * noise
 
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
@@ -372,7 +374,8 @@ class MultiQuadEnv(PipelineEnv):
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
-        angle_q1, angle_q2, prev_last_action, self.target_position, pipeline_state
+        angle_q1, angle_q2, prev_last_action, self.target_position,
+        pipeline_state, max_thrust
     )
 
     # dont terminate ground collision on ground start
@@ -543,7 +546,8 @@ class MultiQuadEnv(PipelineEnv):
     return obs
 
   def calc_reward(self, obs, sim_time, collision, out_of_bounds, action,
-                  angle_q1, angle_q2, last_action, target_position, data) -> (jp.ndarray, None, dict):
+                  angle_q1, angle_q2, last_action, target_position, data,
+                  max_thrust) -> (jp.ndarray, None, dict):
     """
     Computes the reward by combining several factors such as payload tracking, quad safety,
     and energy penalties.
@@ -614,8 +618,8 @@ class MultiQuadEnv(PipelineEnv):
     target_reward *= jp.exp(-1.4 * jp.abs(dis))
 
 
-    smooth_action_penalty = jp.mean(jp.abs(action - last_action) / self.max_thrust)
-    action_energy_penalty = jp.mean(jp.abs(action)) / self.max_thrust
+    smooth_action_penalty = jp.mean(jp.abs(action - last_action) / max_thrust)
+    action_energy_penalty = jp.mean(jp.abs(action)) / max_thrust
 
 
 
