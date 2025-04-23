@@ -395,7 +395,11 @@ class MultiQuadEnv(PipelineEnv):
     
     done = done * 1.0
 
-    metrics = {'time': pipeline_state.time, 'reward': reward}
+    metrics = {
+      'time': pipeline_state.time,
+      'reward': reward,
+      'max_thrust': state.metrics['max_thrust']
+    }
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward, done=done, metrics=metrics)
 
   def _get_obs(self, data: base.State, last_action: jp.ndarray, target_position: jp.ndarray, noise_key) -> jp.ndarray:
