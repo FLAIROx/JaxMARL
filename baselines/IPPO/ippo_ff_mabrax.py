@@ -62,6 +62,9 @@ class ActorCritic(nn.Module):
     actor_arch: Sequence[int] = None
     critic_arch: Sequence[int] = None
 
+    actor_module: ActorModule = None
+    critic_module: CriticModule = None
+
     def setup(self):
         self.actor_module = ActorModule(action_dim=self.action_dim,
                                         activation=self.activation,
@@ -75,11 +78,11 @@ class ActorCritic(nn.Module):
         pi = distrax.MultivariateNormalDiag(actor_mean, jnp.exp(self.log_std))
         critic = self.critic_module(x)
         return pi, critic
-    @onnx_function
+   
     def actor_forward(self, x):
         # Returns actor output only
         return self.actor_module(x)
-    @onnx_function
+   
     def critic_forward(self, x):
         # Returns critic value only
         return self.critic_module(x)
