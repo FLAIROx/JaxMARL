@@ -200,7 +200,7 @@ def main():
     )
 
     actor_params = train_state.params["params"]["actor_module"]
-    actor.bind({'params': actor_params})
+    actor = actor.bind({'params': actor_params})
 
 
     # Initialize critic
@@ -212,7 +212,7 @@ def main():
 
     
     critic_params = train_state.params["params"]["critic_module"]
-    critic.bind({'params': critic_params})
+    critic = critic.bind({'params': critic_params})
 
 
 
