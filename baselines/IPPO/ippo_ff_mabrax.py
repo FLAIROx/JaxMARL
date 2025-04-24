@@ -36,9 +36,9 @@ class ActorModule(nn.Module):
         act_fn = nn.relu if self.activation == "relu" else nn.tanh
         a = x
         for h in self.actor_arch or [128, 64, 64]:
-            a = nn.Dense(h, kernel_init=zeros, bias_init=zeros)(a)
+            a = nn.Dense(h)(a)
             a = act_fn(a)
-        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=zeros)(a)
+        actor_mean = nn.Dense(self.action_dim)(a)
         return actor_mean
 
 class CriticModule(nn.Module):
@@ -51,9 +51,9 @@ class CriticModule(nn.Module):
         act_fn = nn.relu if self.activation == "relu" else nn.tanh
         c = x
         for h in self.critic_arch or [128, 128, 128, 128]:
-            c = nn.Dense(h, kernel_init=zeros, bias_init=zeros)(c)
+            c = nn.Dense(h)(c)
             c = act_fn(c)
-        c = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=zeros)(c)
+        c = nn.Dense(1)(c)
         return jnp.squeeze(c, axis=-1)
 
 class ActorCritic(nn.Module):
@@ -68,7 +68,7 @@ class ActorCritic(nn.Module):
                                         actor_arch=self.actor_arch)
         self.critic_module = CriticModule(activation=self.activation,
                                           critic_arch=self.critic_arch)
-        self.log_std = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
+        self.log_std = self.param('log_std', nn.initializers.ones, (self.action_dim,))
 
     def __call__(self, x):
         actor_mean = self.actor_module(x)
