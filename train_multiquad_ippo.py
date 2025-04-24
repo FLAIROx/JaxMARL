@@ -32,7 +32,7 @@ import wandb
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
 import onnx
-from jax2onnx import to_onnx
+from jax2onnx import to_onnx, onnx_function
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
@@ -338,41 +338,27 @@ def main():
     # Call the separated video rendering function
     render_video(rollout, env)
     
-    def export_to_onnx(module, params, obs_shape, onnx_filename, method=None):
-        def jax_callable(x):
-            return module.apply(params, x, method=method)
-        # Convert and save
-        onnx_model = to_onnx(jax_callable, [("B", obs_shape)])
-        onnx.save_model(onnx_model, onnx_filename)
-        print(f"Exported ONNX model: {onnx_filename}")
-        return onnx_filename
-
     # Use the full parameter tree from train_state
     full_params = train_state.params
 
-    # Export actor and critic using the full parameters with their specific methods.
-    actor_onnx = export_to_onnx(
-        module=network,
-        params=full_params,
-        obs_shape=obs_shape,
-        onnx_filename="actor_policy.onnx",
-        method=ActorCritic.actor_forward
-    )
-    critic_onnx = export_to_onnx(
-        module=network,
-        params=full_params,
-        obs_shape=obs_shape,
-        onnx_filename="critic_value.onnx",
-        method=ActorCritic.critic_forward
-    )
-    
-    # Log the ONNX models as wandb artifacts.
-    actor_artifact = wandb.Artifact("actor_policy", type="model")
-    actor_artifact.add_file(actor_onnx)
-    critic_artifact = wandb.Artifact("critic_value", type="model")
-    critic_artifact.add_file(critic_onnx)
-    wandb.log_artifact(actor_artifact)
-    wandb.log_artifact(critic_artifact)
+    # wrap actor/critic as ONNX subgraphs
+    @onnx_function
+    def actor_fn(x):
+        return network.apply(full_params, x, method=ActorCritic.actor_forward)
+
+    @onnx_function
+    def critic_fn(x):
+        return network.apply(full_params, x, method=ActorCritic.critic_forward)
+
+    # Export directly
+    onnx.save_model(to_onnx(actor_fn, [("B", obs_shape)]), "actor_policy.onnx")
+    print("Exported ONNX model: actor_policy.onnx")
+    onnx.save_model(to_onnx(critic_fn, [("B", obs_shape)]), "critic_value.onnx")
+    print("Exported ONNX model: critic_value.onnx")
+
+    # Log the ONNX files to wandb
+    wandb.log_artifact(wandb.Artifact("actor_policy", type="model").add_file("actor_policy.onnx"))
+    wandb.log_artifact(wandb.Artifact("critic_value", type="model").add_file("critic_value.onnx"))
     print("ONNX models have been exported and logged to wandb.")
     
     # ---- Call eval_results ----
