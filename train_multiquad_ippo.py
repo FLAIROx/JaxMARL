@@ -200,7 +200,7 @@ def main():
         activation=config["ACTIVATION"],
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
     )
-    actor.init(rng, dummy_obs)
+    actor.init(jax.random.PRNGKey(0), dummy_obs)
 
     actor_params = train_state.params["params"]["actor_module"]
     actor = actor.bind({'params': actor_params})
@@ -210,7 +210,7 @@ def main():
         activation=config["ACTIVATION"],
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
-    critic.init(rng, dummy_obs)
+    critic.init(jax.random.PRNGKey(0), dummy_obs)
 
     critic_params = train_state.params["params"]["critic_module"]
     critic = critic.bind({'params': critic_params})
