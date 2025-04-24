@@ -34,6 +34,8 @@ from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, ActorModule, 
 import onnx
 from jax2onnx import to_onnx
 
+import jax.numpy as jnp
+
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
 # jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
@@ -196,8 +198,8 @@ def main():
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
 
-    # init network by calling it with a dummy input
-    network(jp.ones((1, obs_shape)))
+    # init network 
+    network.init(rng, jnp.ones((1, obs_shape)))
     
     # Bind trained parameters once for concise calls
     variables = {'params': train_state.params}
