@@ -246,12 +246,16 @@ def main():
     
     # Call the separated video rendering function
     render_video(rollout, env)
-    
 
-    actor_onnx = to_onnx(actor.apply, [(1, obs_shape)], input_params={"params": actor_params})
+    def actor_fn(x):
+        return actor.apply({'params': actor_params}, x)
+    actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
-    critic_onnx = to_onnx(critic.apply, [(1, obs_shape)], input_params={"params": critic_params})
+
+    def critic_fn(x):
+        return critic.apply({'params': critic_params}, x)
+    critic_onnx = to_onnx(critic_fn, [(1, obs_shape)])
     onnx.save_model(critic_onnx, "critic_value.onnx")
     print("Exported ONNX model: critic_value.onnx")
 
