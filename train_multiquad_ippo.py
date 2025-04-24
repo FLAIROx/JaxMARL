@@ -33,6 +33,8 @@ from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic,CriticModule, 
 
 import onnx
 from jax2onnx import to_onnx, onnx_function
+import tensorflow as tf
+from jax.experimental import jax2tf
 
 import jax.numpy as jnp
 
@@ -200,10 +202,9 @@ def main():
         activation=config["ACTIVATION"],
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
     )
+
     actor_params = train_state.params["params"]["actor_module"]
-    @onnx_function
-    def actor_fn(x):
-        return actor.apply({'params': actor_params}, x)
+    actor = actor.bind({'params': actor_params})
 
     # Initialize critic
     critic = CriticModule(
@@ -211,13 +212,11 @@ def main():
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
     critic_params = train_state.params["params"]["critic_module"]
-    @onnx_function
-    def critic_fn(x):
-        return critic.apply({'params': critic_params}, x)
+    critic = critic.bind({'params': critic_params})
 
     def policy_fn(obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        actions = actor_fn(batched_obs)
+        actions = actor(batched_obs)
         unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
 
@@ -246,23 +245,42 @@ def main():
     
     # Call the separated video rendering function
     render_video(rollout, env)
-
-   
-
-    actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
-    onnx.save_model(actor_onnx, "actor_policy.onnx")
-    print("Exported ONNX model: actor_policy.onnx")
-
-
-    critic_onnx = to_onnx(critic_fn, [(1, obs_shape)])
-    onnx.save_model(critic_onnx, "critic_value.onnx")
-    print("Exported ONNX model: critic_value.onnx")
-
-    # Log the ONNX files to wandb
-    wandb.log_artifact(wandb.Artifact("actor_policy", type="model").add_file("actor_policy.onnx"))
-    wandb.log_artifact(wandb.Artifact("critic_value", type="model").add_file("critic_value.onnx"))
-    print("ONNX models have been exported and logged to wandb.")
     
+
+    # Prepare TF functions via jax2tf
+    tf_actor = tf.function(
+        jax2tf.convert(actor, enable_xla=False),
+        input_signature=[tf.TensorSpec([None, obs_shape], tf.float32)]
+    )
+    tf_critic = tf.function(
+        jax2tf.convert(critic, enable_xla=False),
+        input_signature=[tf.TensorSpec([None, obs_shape], tf.float32)]
+    )
+
+    # Convert actor to TFLite
+    concrete_actor = tf_actor.get_concrete_function()
+    actor_converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_actor])
+    actor_tflite = actor_converter.convert()
+    with open("actor_policy.tflite", "wb") as f:
+        f.write(actor_tflite)
+    print("Exported TFLite model: actor_policy.tflite")
+    wandb.log_artifact(
+        wandb.Artifact("actor_policy", type="model")
+            .add_file("actor_policy.tflite")
+    )
+
+    # Convert critic to TFLite
+    concrete_critic = tf_critic.get_concrete_function()
+    critic_converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_critic])
+    critic_tflite = critic_converter.convert()
+    with open("critic_value.tflite", "wb") as f:
+        f.write(critic_tflite)
+    print("Exported TFLite model: critic_value.tflite")
+    wandb.log_artifact(
+        wandb.Artifact("critic_value", type="model")
+            .add_file("critic_value.tflite")
+    )
+
     # ---- Call eval_results ----
     def dummy_jit_reset(rng):
         s = env.reset(rng)
