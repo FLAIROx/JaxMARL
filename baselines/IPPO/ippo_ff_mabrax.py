@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import flax.linen as nn
 import numpy as np
 import optax
-from flax.linen.initializers import constant, orthogonal
+from flax.linen.initializers import constant, orthogonal, zeros
 from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
 import distrax
@@ -36,9 +36,9 @@ class ActorModule(nn.Module):
         act_fn = nn.relu if self.activation == "relu" else nn.tanh
         a = x
         for h in self.actor_arch or [128, 64, 64]:
-            a = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(a)
+            a = nn.Dense(h, kernel_init=zeros, bias_init=zeros)(a)
             a = act_fn(a)
-        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(a)
+        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=zeros)(a)
         return actor_mean
 
 class CriticModule(nn.Module):
@@ -51,9 +51,9 @@ class CriticModule(nn.Module):
         act_fn = nn.relu if self.activation == "relu" else nn.tanh
         c = x
         for h in self.critic_arch or [128, 128, 128, 128]:
-            c = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(c)
+            c = nn.Dense(h, kernel_init=zeros, bias_init=zeros)(c)
             c = act_fn(c)
-        c = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(c)
+        c = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=zeros)(c)
         return jnp.squeeze(c, axis=-1)
 
 class ActorCritic(nn.Module):
