@@ -342,9 +342,11 @@ def main():
     full_params = train_state.params
 
 
-
-    actor_onnx = to_onnx(network.actor_forward, [(1, obs_shape)])
-    critic_onnx = to_onnx(network.critic_forward, [(1, obs_shape)])
+    actor_fn = lambda x: network.apply(full_params, x, method=ActorCritic.actor_forward)
+    critic_fn = lambda x: network.apply(full_params, x, method=ActorCritic.critic_forward)
+    
+    actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
+    critic_onnx = to_onnx(critic_fn, [(1, obs_shape)])
     # Export
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
