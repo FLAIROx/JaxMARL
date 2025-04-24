@@ -207,7 +207,6 @@ def main():
 
     # Initialize critic
     critic = CriticModule(
-        action_dim=act_dim,
         activation=config["ACTIVATION"],
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
