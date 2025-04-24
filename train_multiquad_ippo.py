@@ -195,6 +195,10 @@ def main():
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64]),
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
+
+    # init network by calling it with a dummy input
+    network(jp.ones((1, obs_shape)))
+    
     # Bind trained parameters once for concise calls
     variables = {'params': train_state.params}
     bound_network = network.bind(variables)
