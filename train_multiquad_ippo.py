@@ -33,10 +33,10 @@ from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic,CriticModule, 
 
 import onnx
 from jax2onnx import to_onnx, onnx_function
-import tensorflow as tf
-from jax.experimental import jax2tf
 
 import jax.numpy as jnp
+import tensorflow as tf
+import numpy as np
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
@@ -246,40 +246,41 @@ def main():
     # Call the separated video rendering function
     render_video(rollout, env)
     
+    # Build tf
+    class TFActor(tf.keras.Model):
+        def __init__(self, actor_arch, action_dim):
+            super().__init__()
+            self.layers_list = []
+            for units in actor_arch:
+                self.layers_list.append(tf.keras.layers.Dense(units, activation='tanh'))
+            self.layers_list.append(tf.keras.layers.Dense(action_dim, activation=None))
 
-    # Prepare TF functions via jax2tf
-    tf_actor = tf.function(
-        jax2tf.convert(actor, polymorphic_shapes=[f"(batch, {obs_shape})"]),
-        input_signature=[tf.TensorSpec([None, obs_shape], tf.float32)]
-    )
-    tf_critic = tf.function(
-        jax2tf.convert(critic, polymorphic_shapes=[f"(batch, {obs_shape})"]),
-        input_signature=[tf.TensorSpec([None, obs_shape], tf.float32)]
-    )
+        def call(self, x):
+            y = x
+            for layer in self.layers_list:
+                y = layer(y)
+            return y
 
-    # Convert actor to TFLite
-    concrete_actor = tf_actor.get_concrete_function()
-    actor_converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_actor])
-    actor_tflite = actor_converter.convert()
-    with open("actor_policy.tflite", "wb") as f:
-        f.write(actor_tflite)
-    print("Exported TFLite model: actor_policy.tflite")
-    wandb.log_artifact(
-        wandb.Artifact("actor_policy", type="model")
-            .add_file("actor_policy.tflite")
-    )
+    # Instantiate and build model
+    tf_actor = TFActor(config.get("ACTOR_ARCH", [64,64,64]), act_dim)
+    dummy = tf.zeros((1, obs_shape), dtype=tf.float32)
+    _ = tf_actor(dummy)  # builds weights
 
-    # Convert critic to TFLite
-    concrete_critic = tf_critic.get_concrete_function()
-    critic_converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_critic])
-    critic_tflite = critic_converter.convert()
-    with open("critic_value.tflite", "wb") as f:
-        f.write(critic_tflite)
-    print("Exported TFLite model: critic_value.tflite")
-    wandb.log_artifact(
-        wandb.Artifact("critic_value", type="model")
-            .add_file("critic_value.tflite")
-    )
+    # Assign JAX-trained weights into TF model
+    dense_keys = sorted([k for k in actor_params.keys() if k.startswith("Dense_")],
+                        key=lambda x: int(x.split("_")[1]))
+    for idx, key in enumerate(dense_keys):
+        w = np.array(actor_params[key]["kernel"])
+        b = np.array(actor_params[key]["bias"])
+        tf_actor.layers_list[idx].set_weights([w, b])
+
+    # Convert to TFLite and save
+    converter = tf.lite.TFLiteConverter.from_keras_model(tf_actor)
+    tflite_model = converter.convert()
+    with open("actor_model.tflite", "wb") as f:
+        f.write(tflite_model)
+    print("Saved TFLite model to actor_model.tflite")
+    wandb.save("actor_model.tflite")
 
     # ---- Call eval_results ----
     def dummy_jit_reset(rng):
