@@ -29,7 +29,7 @@ import jaxmarl
 import time
 import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
-from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, ActorModule, batchify, unbatchify
+from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic,CriticModule, ActorModule, batchify, unbatchify
 
 import onnx
 from jax2onnx import to_onnx
@@ -206,8 +206,8 @@ def main():
     actor = actor.bind({'params': actor_params})
 
     # Initialize critic
-    critic = ActorModule(
-        action_dim=1,
+    critic = CriticModule(
+        action_dim=act_dim,
         activation=config["ACTIVATION"],
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
