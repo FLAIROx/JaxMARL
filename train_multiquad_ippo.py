@@ -249,11 +249,11 @@ def main():
 
     # Prepare TF functions via jax2tf
     tf_actor = tf.function(
-        jax2tf.convert(actor, enable_xla=False),
+        jax2tf.convert(actor, polymorphic_shapes=[f"(batch, {obs_shape})"]),
         input_signature=[tf.TensorSpec([None, obs_shape], tf.float32)]
     )
     tf_critic = tf.function(
-        jax2tf.convert(critic, enable_xla=False),
+        jax2tf.convert(critic, polymorphic_shapes=[f"(batch, {obs_shape})"]),
         input_signature=[tf.TensorSpec([None, obs_shape], tf.float32)]
     )
 
