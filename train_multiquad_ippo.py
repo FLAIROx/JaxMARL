@@ -32,7 +32,7 @@ import wandb
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
 import onnx
-from jax2onnx import to_onnx, onnx_function
+from jax2onnx import to_onnx
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
@@ -341,19 +341,14 @@ def main():
     # Use the full parameter tree from train_state
     full_params = train_state.params
 
-    # wrap actor/critic as ONNX subgraphs
-    @onnx_function
-    def actor_fn(x):
-        return network.apply(full_params, x, method=ActorCritic.actor_forward)
 
-    @onnx_function
-    def critic_fn(x):
-        return network.apply(full_params, x, method=ActorCritic.critic_forward)
 
-    # Export directly
-    onnx.save_model(to_onnx(actor_fn, [("B", obs_shape)]), "actor_policy.onnx")
+    actor_onnx = to_onnx(network.actor_module, [(1, obs_shape)])
+    critic_onnx = to_onnx(network.critic_module, [(1, obs_shape)])
+    # Export
+    onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
-    onnx.save_model(to_onnx(critic_fn, [("B", obs_shape)]), "critic_value.onnx")
+    onnx.save_model(critic_onnx, "critic_value.onnx")
     print("Exported ONNX model: critic_value.onnx")
 
     # Log the ONNX files to wandb
