@@ -199,7 +199,8 @@ def main():
         action_dim=act_dim,
         activation=config["ACTIVATION"],
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
-    ).init(rng, dummy_obs)
+    )
+    actor.init(rng, dummy_obs)
 
     actor_params = train_state.params["params"]["actor_module"]
     actor = actor.bind({'params': actor_params})
@@ -208,8 +209,9 @@ def main():
     critic = ActorModule(
         action_dim=1,
         activation=config["ACTIVATION"],
-        actor_arch=config.get("CRITIC_ARCH", [128, 128, 128])
-    ).init(rng, dummy_obs)
+        critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
+    )
+    critic.init(rng, dummy_obs)
 
     critic_params = train_state.params["params"]["critic_module"]
     critic = critic.bind({'params': critic_params})
