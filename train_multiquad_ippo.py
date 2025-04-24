@@ -200,24 +200,22 @@ def main():
         activation=config["ACTIVATION"],
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
     )
-    actor.init(jax.random.PRNGKey(0), dummy_obs)
-
     actor_params = train_state.params["params"]["actor_module"]
-    actor = actor.bind({'params': actor_params})
+    def actor_fn(x):
+        return actor.apply({'params': actor_params}, x)
 
     # Initialize critic
     critic = CriticModule(
         activation=config["ACTIVATION"],
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
-    critic.init(jax.random.PRNGKey(0), dummy_obs)
-
     critic_params = train_state.params["params"]["critic_module"]
-    critic = critic.bind({'params': critic_params})
+    def critic_fn(x):
+        return critic.apply({'params': critic_params}, x)
 
     def policy_fn(obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        actions = actor(batched_obs)
+        actions = actor_fn(batched_obs)
         unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
 
@@ -247,8 +245,7 @@ def main():
     # Call the separated video rendering function
     render_video(rollout, env)
 
-    def actor_fn(x):
-        return actor.apply({'params': actor_params}, x)
+   
     actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
