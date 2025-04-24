@@ -29,7 +29,7 @@ import jaxmarl
 import time
 import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
-from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
+from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, ActorModule, batchify, unbatchify
 
 import onnx
 from jax2onnx import to_onnx
@@ -202,7 +202,7 @@ def main():
 
     def policy_fn(obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        means = bound_network.actor_forward(batched_obs)
+        means = bound_network.actor_module(batched_obs)
         unbatched = unbatchify(means, env.agents, 1, env.num_agents)
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
 
