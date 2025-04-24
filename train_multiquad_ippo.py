@@ -250,10 +250,10 @@ def main():
     render_video(rollout, env)
     
 
-    actor_onnx = to_onnx(actor, [(obs_shape)])
+    actor_onnx = to_onnx(actor, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
-    critic_onnx = to_onnx(critic, [(obs_shape)])
+    critic_onnx = to_onnx(critic, [(1, obs_shape)])
     onnx.save_model(critic_onnx, "critic_value.onnx")
     print("Exported ONNX model: critic_value.onnx")
 
