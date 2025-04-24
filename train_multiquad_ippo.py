@@ -201,6 +201,7 @@ def main():
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
     )
     actor_params = train_state.params["params"]["actor_module"]
+    @onnx_function
     def actor_fn(x):
         return actor.apply({'params': actor_params}, x)
 
@@ -210,6 +211,7 @@ def main():
         critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
     )
     critic_params = train_state.params["params"]["critic_module"]
+    @onnx_function
     def critic_fn(x):
         return critic.apply({'params': critic_params}, x)
 
@@ -246,13 +248,13 @@ def main():
     render_video(rollout, env)
 
    
-    actor_onnx_fn = onnx_function(actor_fn, actor_params)
-    actor_onnx = to_onnx(actor_onnx_fn, [(1, obs_shape)])
+
+    actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
 
-    critic_onnx_fn = onnx_function(critic_fn, critic_params)
-    critic_onnx = to_onnx(critic_onnx_fn, [(1, obs_shape)])
+
+    critic_onnx = to_onnx(critic_fn, [(1, obs_shape)])
     onnx.save_model(critic_onnx, "critic_value.onnx")
     print("Exported ONNX model: critic_value.onnx")
 
