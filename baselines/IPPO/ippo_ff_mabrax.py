@@ -25,7 +25,6 @@ from jax2onnx import to_onnx, onnx_function
 class EarlyTermination(Exception): 
     pass
 
-@onnx_function
 class ActorModule(nn.Module):
     action_dim: int
     activation: str = "tanh"
@@ -41,7 +40,6 @@ class ActorModule(nn.Module):
         actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(a)
         return actor_mean
 
-@onnx_function
 class CriticModule(nn.Module):
     activation: str = "tanh"
     critic_arch: Sequence[int] = None
@@ -61,9 +59,6 @@ class ActorCritic(nn.Module):
     activation: str = "tanh"
     actor_arch: Sequence[int] = None
     critic_arch: Sequence[int] = None
-
-    actor_module: ActorModule = None
-    critic_module: CriticModule = None
 
     def setup(self):
         self.actor_module = ActorModule(action_dim=self.action_dim,
