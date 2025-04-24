@@ -201,6 +201,7 @@ def main():
     # init network 
     network.init(rng, jnp.ones((1, obs_shape)))
     
+    print(train_state.params)
     # Bind trained parameters once for concise calls
     variables = {'params': train_state.params}
     bound_network = network.bind(variables)

@@ -30,6 +30,13 @@ class ActorModule(nn.Module):
     activation: str = "tanh"
     actor_arch: Sequence[int] = None
 
+    def setup(self):
+        self.actor_arch = self.actor_arch or [128, 64, 64]
+        if len(self.actor_arch) == 0:
+            raise ValueError("Actor architecture must have at least one layer.")
+        if self.activation not in ["relu", "tanh"]:
+            raise ValueError("Activation function must be 'relu' or 'tanh'.")
+
     @nn.compact
     def __call__(self, x):
         act_fn = nn.relu if self.activation == "relu" else nn.tanh
@@ -43,6 +50,13 @@ class ActorModule(nn.Module):
 class CriticModule(nn.Module):
     activation: str = "tanh"
     critic_arch: Sequence[int] = None
+
+    def setup(self):
+        self.critic_arch = self.critic_arch or [128, 128, 128, 128]
+        if len(self.critic_arch) == 0:
+            raise ValueError("Critic architecture must have at least one layer.")
+        if self.activation not in ["relu", "tanh"]:
+            raise ValueError("Activation function must be 'relu' or 'tanh'.")
 
     @nn.compact
     def __call__(self, x):
