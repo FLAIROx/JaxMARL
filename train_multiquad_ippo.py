@@ -190,27 +190,37 @@ def main():
     # Initialize the ActorCritic network with proper dimensions (use first agent's spaces)
     obs_shape = env.observation_spaces[env.agents[0]].shape[0]
     act_dim = env.action_spaces[env.agents[0]].shape[0]
-    # Initialize ActorCritic with architectures from config
-    network = ActorCritic(
+
+
+    # Initialize actor
+    actor = ActorModule(
         action_dim=act_dim,
         activation=config["ACTIVATION"],
-        actor_arch=config.get("ACTOR_ARCH", [128, 64, 64]),
-        critic_arch=config.get("CRITIC_ARCH", [128, 128, 128])
+        actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
     )
 
-    # init network 
-    network.init(rng, jnp.ones((1, obs_shape)))
+    actor_params = train_state.params["params"]["actor_module"]
+    actor.bind({'params': actor_params})
+
+
+    # Initialize critic
+    critic = ActorModule(
+        action_dim=1,
+        activation=config["ACTIVATION"],
+        actor_arch=config.get("CRITIC_ARCH", [128, 128, 128])
+    )
+
     
-    print(train_state.params)
-    # Bind trained parameters once for concise calls
-    variables = {'params': train_state.params}
-    bound_network = network.bind(variables)
+    critic_params = train_state.params["params"]["critic_module"]
+    critic.bind({'params': critic_params})
+
+
 
 
     def policy_fn(obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
-        means = bound_network.actor_module(batched_obs)
-        unbatched = unbatchify(means, env.agents, 1, env.num_agents)
+        actions = actor(batched_obs)
+        unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
 
     # Simulation: run an episode using the trained policy
@@ -240,8 +250,8 @@ def main():
     render_video(rollout, env)
     
     # Export ONNX using bound submodules
-    actor_onnx = to_onnx(bound_network.actor_module, [(1, obs_shape)])
-    critic_onnx = to_onnx(bound_network.critic_module, [(1, obs_shape)])
+    actor_onnx = to_onnx(actor, [(1, obs_shape)])
+    critic_onnx = to_onnx(critic, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
     onnx.save_model(critic_onnx, "critic_value.onnx")
