@@ -249,15 +249,11 @@ def main():
     # Call the separated video rendering function
     render_video(rollout, env)
     
-    # Export ONNX using bound submodules
-    # Wrap actor and critic in apply functions with params for ONNX export
-    actor_fn = lambda x: actor.apply({'params': actor_params}, x)
-    critic_fn = lambda x: critic.apply({'params': critic_params}, x)
-    
-    actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
+
+    actor_onnx = to_onnx(actor, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
-    critic_onnx = to_onnx(critic_fn, [(1, obs_shape)])
+    critic_onnx = to_onnx(critic, [(1, obs_shape)])
     onnx.save_model(critic_onnx, "critic_value.onnx")
     print("Exported ONNX model: critic_value.onnx")
 
