@@ -32,7 +32,7 @@ import wandb
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic,CriticModule, ActorModule, batchify, unbatchify
 
 import onnx
-from jax2onnx import to_onnx
+from jax2onnx import to_onnx, onnx_function
 
 import jax.numpy as jnp
 
@@ -246,13 +246,13 @@ def main():
     render_video(rollout, env)
 
    
-    actor_onnx = to_onnx(actor_fn, [(1, obs_shape)])
+    actor_onnx_fn = onnx_function(actor_fn, actor_params)
+    actor_onnx = to_onnx(actor_onnx_fn, [(1, obs_shape)])
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
 
-    def critic_fn(x):
-        return critic.apply({'params': critic_params}, x)
-    critic_onnx = to_onnx(critic_fn, [(1, obs_shape)])
+    critic_onnx_fn = onnx_function(critic_fn, critic_params)
+    critic_onnx = to_onnx(critic_onnx_fn, [(1, obs_shape)])
     onnx.save_model(critic_onnx, "critic_value.onnx")
     print("Exported ONNX model: critic_value.onnx")
 
