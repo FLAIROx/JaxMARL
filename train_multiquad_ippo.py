@@ -343,8 +343,8 @@ def main():
 
 
 
-    actor_onnx = to_onnx(network.actor_module, [(1, obs_shape)])
-    critic_onnx = to_onnx(network.critic_module, [(1, obs_shape)])
+    actor_onnx = to_onnx(network.actor_forward, [(1, obs_shape)])
+    critic_onnx = to_onnx(network.critic_forward, [(1, obs_shape)])
     # Export
     onnx.save_model(actor_onnx, "actor_policy.onnx")
     print("Exported ONNX model: actor_policy.onnx")
