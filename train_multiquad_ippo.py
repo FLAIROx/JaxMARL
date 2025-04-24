@@ -31,7 +31,8 @@ import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic, batchify, unbatchify
 
-from jax2onnx import save_onnx
+import onnx
+from jax2onnx import to_onnx
 
 # Set JAX cache
 jax.config.update("jax_compilation_cache_dir", cache_dir)
@@ -340,8 +341,9 @@ def main():
     def export_to_onnx(module, params, obs_shape, onnx_filename, method=None):
         def jax_callable(x):
             return module.apply(params, x, method=method)
-        # Use a hardcoded batch size = 1 for export
-        save_onnx(jax_callable, [("B", obs_shape)], onnx_filename)
+        # Convert and save
+        onnx_model = to_onnx(jax_callable, [("B", obs_shape)])
+        onnx.save_model(onnx_model, onnx_filename)
         print(f"Exported ONNX model: {onnx_filename}")
         return onnx_filename
 
