@@ -191,31 +191,28 @@ def main():
     obs_shape = env.observation_spaces[env.agents[0]].shape[0]
     act_dim = env.action_spaces[env.agents[0]].shape[0]
 
+    # create a dummy input for initializing modules
+    dummy_obs = jnp.zeros((1, obs_shape))
 
     # Initialize actor
     actor = ActorModule(
         action_dim=act_dim,
         activation=config["ACTIVATION"],
         actor_arch=config.get("ACTOR_ARCH", [128, 64, 64])
-    ).init(rng)
+    ).init(rng, dummy_obs)
 
     actor_params = train_state.params["params"]["actor_module"]
     actor = actor.bind({'params': actor_params})
-
 
     # Initialize critic
     critic = ActorModule(
         action_dim=1,
         activation=config["ACTIVATION"],
         actor_arch=config.get("CRITIC_ARCH", [128, 128, 128])
-    ).init(rng)
+    ).init(rng, dummy_obs)
 
-    
     critic_params = train_state.params["params"]["critic_module"]
     critic = critic.bind({'params': critic_params})
-
-
-
 
     def policy_fn(obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
