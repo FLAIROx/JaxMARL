@@ -19,8 +19,9 @@ os.environ["XLA_CACHE_DIR"] = cache_dir
 # This is a workaround for a known issue with JAX and NVLink on some systems.
 # os.environ["TF_USE_NVLINK_FOR_PARALLEL_COMPILATION"] = "0"
 # os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
+import jaxmarl.environments.mabrax.quad_env #register the quad environment
+import jaxmarl.environments.mabrax
 
-import jax
 import jax.numpy as jp
 import imageio
 import mujoco  # Used to create an OpenGL context
