@@ -331,7 +331,8 @@ class QuadEnv(PipelineEnv):
     # ground_collision_payload = pipeline_state.xpos[self.payload_body_id][2] < 0.03
     
     # ground_collision = jp.logical_and(ground_collision_quad, ground_collision_payload)
-
+    ground_collision = ground_collision_quad
+    
     collision = ground_collision_quad
 
     out_of_bounds = jp.absolute(angle_q1) > jp.radians(90)
