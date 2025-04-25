@@ -16,6 +16,7 @@ wandb/
 outputs/
 models/
 *.mp4
+*.tflite
 
 !jaxmarl/environments/mabrax/randomization.ipynb
 !jaxmarl/environments/mabrax/vel_reward.ipynb
