@@ -77,7 +77,8 @@
             name="q0_container"
             pos="0 -0.15 1.6"
             >        
-            
+            <camera name="track" pos="-0.7 0 0.5" quat="0.601501 0.371748 -0.371748 -0.601501"
+            mode="trackcom" />
             <joint type="free" name="q0_joint" actuatorfrclimited="false" />
             
             <site name="q0_attachment" pos="0 0 0" group="5"/>
