@@ -297,7 +297,7 @@ class QuadEnv(PipelineEnv):
         The next state.
     """
     # Extract previous action from the observation.
-    prev_last_action = state.obs[-(self.sys.nu+1):-1]
+    prev_last_action = state.obs[-self.sys.nu:]
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
     thrust_cmds = 0.5 * (action + 1.0)
@@ -419,14 +419,14 @@ class QuadEnv(PipelineEnv):
     
 
     obs = jp.concatenate([
-      # ----                  # Shape  Index
-        pos_error,            # (3,)  0-2
-        quad1_rot,            # (9,)  3-11
-        quad1_linvel,         # (3,)  12-14
-        quad1_angvel,         # (3,)  15-17
-        quad1_linear_acc,     # (3,)  18-20
-        quad1_angular_acc,    # (3,)  21-23
-        last_action,          # (4,)  24-27
+      # ----                  # Shape  Slice
+        pos_error,            # (3,)  0:3
+        quad1_rot,            # (9,)  3:12
+        quad1_linvel,         # (3,)  12:15
+        quad1_angvel,         # (3,)  15:18
+        quad1_linear_acc,     # (3,)  18:21
+        quad1_angular_acc,    # (3,)  21:24
+        last_action,          # (4,)  24:28
     ])
 
     # Lookup for noise scale factors (each multiplied with self.obs_noise):
@@ -469,9 +469,8 @@ class QuadEnv(PipelineEnv):
 
 
     # Safety and smoothness penalties.
-    quad1_obs = obs[0:23]
+    quad1_obs = obs   
 
-  
     collision_penalty = 1.0 * collision
     # out_of_bounds_penalty = 50.0 * out_of_bounds
 

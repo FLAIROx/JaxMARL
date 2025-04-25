@@ -310,7 +310,7 @@ class MultiQuadEnv(PipelineEnv):
         The next state.
     """
     # Extract previous action from the observation.
-    prev_last_action = state.obs[-(self.sys.nu+1):-1]
+    prev_last_action = state.obs[-self.sys.nu:]
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
     thrust_cmds = 0.5 * (action + 1.0)
