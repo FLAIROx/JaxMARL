@@ -548,6 +548,5 @@ class QuadEnv(PipelineEnv):
 
     return reward, None, {}
 
-print("QuadEnv registered.")
 # Register the environment under the name 'multiquad'
 envs.register_environment('quad', QuadEnv)
