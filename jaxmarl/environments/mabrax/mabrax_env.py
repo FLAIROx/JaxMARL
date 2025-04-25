@@ -4,6 +4,7 @@ from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from jaxmarl.environments import spaces
 from brax import envs
 import jaxmarl.environments.mabrax.multi_quad_env  
+import jaxmarl.environments.mabrax.quad_env
 import jax
 import jax.numpy as jnp
 from functools import partial
@@ -246,3 +247,7 @@ class Walker2d(MABraxEnv):
 class MultiQuad(MABraxEnv):
     def __init__(self, episode_length=3072, **kwargs):
         super().__init__("multiquad_2x4", episode_length=episode_length, **kwargs)
+
+class Quad(MABraxEnv):
+    def __init__(self, episode_length=3072, **kwargs):
+        super().__init__("quad_1x4", episode_length=episode_length, **kwargs)

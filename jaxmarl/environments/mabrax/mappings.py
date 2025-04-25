@@ -37,6 +37,9 @@ _agent_action_mapping = {
         "agent_0": jnp.array([0, 1, 2, 3]),
         "agent_1": jnp.array([4, 5, 6, 7])
     },
+    "quad_1x4": {
+        "agent_0": jnp.array([0, 1, 2, 3]),
+    },
 }
 
 
@@ -149,6 +152,9 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
             (58,61),    # quad2 last action subset
             (125,127),  # quad2->quad1 rel sph coords
         ], 
+    },
+    "quad_1x4": {
+        "agent_0": [(0, 28)], 
     },
 }
 
