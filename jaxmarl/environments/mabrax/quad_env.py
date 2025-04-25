@@ -498,10 +498,10 @@ class QuadEnv(PipelineEnv):
     # The reward is higher for lower linear velocities. 
     ang_vel_q1 = quad1_obs[15:18] 
 
-    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * (er(jp.linalg.norm(ang_vel_q1)))
+    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1))
     linvel_q1 = quad1_obs[12:15] 
 
-    linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1))  )
+    linvel_quad_reward =  er(jp.linalg.norm(linvel_q1))
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
