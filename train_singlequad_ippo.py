@@ -22,6 +22,8 @@ os.environ["XLA_CACHE_DIR"] = cache_dir
 import jaxmarl.environments.mabrax.quad_env #register the quad environment
 import jaxmarl.environments.mabrax
 
+import jax
+
 import jax.numpy as jp
 import imageio
 import mujoco  # Used to create an OpenGL context
