@@ -40,6 +40,9 @@ class QuadEnv(PipelineEnv):
   The environment is initialized from a MuJoCo XML model and then converted into a Brax
   system using the MJX backend. The control actions (in [-1, 1]) are scaled into thrust commands.
   """
+  # total obs dims: 3(pos_error)+9(rot)+3(linvel)+3(angvel)+3(lin_acc)+3(ang_acc)+4(last_action)
+  OBS_SIZE = 3 + 9 + 3 + 3 + 3 + 3 + 4
+
   def __init__(
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
@@ -429,6 +432,9 @@ class QuadEnv(PipelineEnv):
         last_action,          # (4,)  24:28
     ])
 
+    # runtime check
+    assert obs.shape[0] == self.OBS_SIZE, f"obs length {obs.shape[0]} != expected {self.OBS_SIZE}"
+
     # Lookup for noise scale factors (each multiplied with self.obs_noise):
     noise_lookup = jp.concatenate([
         jp.ones(3) * 0.005,  # quad position
@@ -452,6 +458,9 @@ class QuadEnv(PipelineEnv):
     Computes the reward by combining several factors such as payload tracking, quad safety,
     and energy penalties.
     """
+    # verify obs dims before any slicing
+    assert obs.shape[0] == self.OBS_SIZE, f"obs length {obs.shape[0]} != expected {self.OBS_SIZE}"
+
     # lambda for exponential reward
     er = lambda x, s=2: jp.exp(-s * jp.abs(x))
 
