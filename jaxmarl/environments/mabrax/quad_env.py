@@ -164,7 +164,7 @@ class QuadEnv(PipelineEnv):
     
   
     # mask: if True use uniform sample, if False use normal sample.
-    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.9
+    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.5
     normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.1
     
     # Choose payload position based on mask.
@@ -498,10 +498,11 @@ class QuadEnv(PipelineEnv):
     # The reward is higher for lower linear velocities. 
     ang_vel_q1 = quad1_obs[15:18] 
 
-    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1))
+
+    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * (er(jp.linalg.norm(ang_vel_q1)))
     linvel_q1 = quad1_obs[12:15] 
 
-    linvel_quad_reward =  er(jp.linalg.norm(linvel_q1))
+    linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1)) )
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
@@ -537,7 +538,7 @@ class QuadEnv(PipelineEnv):
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
-    stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * velocity_towards_target
+    stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     #stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
     
 
