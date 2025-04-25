@@ -302,8 +302,7 @@ class QuadEnv(PipelineEnv):
     # Extract previous action from the observation.
     last_thrust = state.obs[-self.sys.nu:]
 
-    if jp.abs(action).max() > 1.0:
-        raise ValueError("Action values must be in the range [-1, 1].")
+    clipped_action = jp.clip(action, -1.0, 1.0)
 
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
@@ -312,7 +311,7 @@ class QuadEnv(PipelineEnv):
     last_action = 2 * (last_thrust / max_thrust) - 1.0
 
     # Scale the action to the range [0, max_thrust].
-    thrust_cmds = 0.5 * (action + 1.0)
+    thrust_cmds = 0.5 * (clipped_action + 1.0)
     action_scaled = thrust_cmds * max_thrust
 
     data0 = state.pipeline_state
@@ -367,7 +366,7 @@ class QuadEnv(PipelineEnv):
 
     obs = self._get_obs(pipeline_state, last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
-        obs, pipeline_state.time, collision, out_of_bounds, action,
+        obs, pipeline_state.time, collision, out_of_bounds, clipped_action,
         angle_q1, last_action, self.target_position,
         pipeline_state, max_thrust
     )
