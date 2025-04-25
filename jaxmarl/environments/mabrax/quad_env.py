@@ -209,9 +209,9 @@ class QuadEnv(PipelineEnv):
     # dist_q2_payload = jp.linalg.norm(candidate_quad2 - candidate_payload, axis=1)
     
     # valid_mask = (dist_quads >= 0.16) & (dist_q1_payload >= 0.07)
-    # valid_index = jp.argmax(valid_mask)  # returns 0 if none are valid
+    #valid_index = jp.argmax(valid_mask)  # returns 0 if none are valid
     
-    return candidate_payload,candidate_quad1 #[valid_index], candidate_quad2[valid_index]
+    return candidate_payload[0], candidate_quad1[0] #[valid_index], candidate_quad2[valid_index]
 
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
