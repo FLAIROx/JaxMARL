@@ -119,7 +119,7 @@ class QuadEnv(PipelineEnv):
    
 
     # Cache the starting indices in qpos from the model.
-    self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
+    # self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
     self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
 
 
