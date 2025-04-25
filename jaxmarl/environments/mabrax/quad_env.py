@@ -40,8 +40,8 @@ class QuadEnv(PipelineEnv):
   The environment is initialized from a MuJoCo XML model and then converted into a Brax
   system using the MJX backend. The control actions (in [-1, 1]) are scaled into thrust commands.
   """
-  # total obs dims: 3(pos_error)+9(rot)+3(linvel)+3(angvel)+3(lin_acc)+3(ang_acc)+4(last_action)
-  OBS_SIZE = 3 + 9 + 3 + 3 + 3 + 3 + 4
+  # total obs dims: 3(pos_error)+9(rot)+3(linvel)+3(angvel)+3(lin_acc)+4(last_action)
+  OBS_SIZE = 3 + 9 + 3 + 3 + 3 + 4
 
   def __init__(
       self,
@@ -416,20 +416,18 @@ class QuadEnv(PipelineEnv):
     # quad1_rel = quad1_pos - payload_pos
     quad1_rot = jp_R_from_quat(quad1_quat).ravel()
     quad1_linear_acc = data.cacc[self.q1_body_id][3:6]
-    quad1_angular_acc = data.cacc[self.q1_body_id][:3]
     quad1_id = jp.array([1.0, 0.0])
 
     
 
     obs = jp.concatenate([
       # ----                  # Shape  Slice
-        pos_error,            # (3,)  0:3
-        quad1_rot,            # (9,)  3:12
+        pos_error,            # (3,)   0:3
+        quad1_rot,            # (9,)   3:12
         quad1_linvel,         # (3,)  12:15
         quad1_angvel,         # (3,)  15:18
         quad1_linear_acc,     # (3,)  18:21
-        quad1_angular_acc,    # (3,)  21:24
-        last_action,          # (4,)  24:28
+        last_action,          # (4,)  21:25
     ])
 
     # runtime check
@@ -438,12 +436,11 @@ class QuadEnv(PipelineEnv):
     # Lookup for noise scale factors (each multiplied with self.obs_noise):
     noise_lookup = jp.concatenate([
         jp.ones(3) * 0.002,  # quad position
-        jp.ones(9) * 0.01,  # quad rotation
-        jp.ones(3) * 0.01,  # quad linear velocity
-        jp.ones(3) * 0.01,  # quad angular velocity
-        jp.ones(3) * 0.01,  # quad linear acceleration
-        jp.ones(3) * 0.01,  # quad angular acceleration
-        jp.ones(4) * 0.0,  # last action
+        jp.ones(9) * 0.01,   # quad rotation
+        jp.ones(3) * 0.01,   # quad linear velocity
+        jp.ones(3) * 0.01,   # quad angular velocity
+        jp.ones(3) * 0.01,   # quad linear acceleration
+        jp.ones(4) * 0.0,    # last action
     ])
 
     if self.obs_noise != 0.0:
