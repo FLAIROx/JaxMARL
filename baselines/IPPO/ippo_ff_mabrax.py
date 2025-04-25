@@ -19,6 +19,7 @@ import hydra
 from omegaconf import OmegaConf
 import time
 import sys
+import jaxmarl.environments.mabrax.mabrax_env
 
 from jax2onnx import to_onnx, onnx_function
 
