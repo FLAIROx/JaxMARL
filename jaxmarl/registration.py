@@ -22,6 +22,7 @@ from .environments import (
     Walker2d,
     HalfCheetah,
     MultiQuad,
+    Quad,
     InTheGrid,
     InTheGrid_2p,
     InTheMatrix,
