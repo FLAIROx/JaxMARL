@@ -31,7 +31,6 @@ import wandb
 # Import training utilities and network definitions from ippo_ff_mabrax.py
 from baselines.IPPO.ippo_ff_mabrax import make_train, ActorCritic,CriticModule, ActorModule, batchify, unbatchify
 
-import jaxmarl.environments.mabrax
 import onnx
 from jax2onnx import to_onnx, onnx_function
 
