@@ -300,9 +300,16 @@ class QuadEnv(PipelineEnv):
         The next state.
     """
     # Extract previous action from the observation.
-    prev_last_action = state.obs[-self.sys.nu:]
+    last_thrust = state.obs[-self.sys.nu:]
+
+
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
+
+    #scale last_thrust to [-1, 1]
+    last_action = 2 * (last_thrust / max_thrust) - 1.0
+
+    # Scale the action to the range [0, max_thrust].
     thrust_cmds = 0.5 * (action + 1.0)
     action_scaled = thrust_cmds * max_thrust
 
@@ -356,10 +363,10 @@ class QuadEnv(PipelineEnv):
 
 
 
-    obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
+    obs = self._get_obs(pipeline_state, last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
-        obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
-        angle_q1, prev_last_action, self.target_position,
+        obs, pipeline_state.time, collision, out_of_bounds, action,
+        angle_q1, last_action, self.target_position,
         pipeline_state, max_thrust
     )
 
@@ -521,8 +528,8 @@ class QuadEnv(PipelineEnv):
     # target_reward *= jp.exp(-1.4 * jp.abs(dis))
 
 
-    smooth_action_penalty = jp.mean(jp.abs(action - last_action) / max_thrust)
-    action_energy_penalty = jp.mean(jp.abs(action)) / max_thrust
+    smooth_action_penalty = jp.mean(jp.abs(action - last_action))
+    action_energy_penalty = 0.5*jp.mean(action + 1)
 
 
 
