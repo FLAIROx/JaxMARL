@@ -302,6 +302,8 @@ class QuadEnv(PipelineEnv):
     # Extract previous action from the observation.
     last_thrust = state.obs[-self.sys.nu:]
 
+    if jp.abs(action).max() > 1.0:
+        raise ValueError("Action values must be in the range [-1, 1].")
 
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']

@@ -45,6 +45,10 @@ rng = jax.random.PRNGKey(int(time.time()))
 rng, reset_key = jax.random.split(rng)
 state = env.reset(reset_key)[1]
 
+# before entering the loop
+last_render = time.time()
+render_interval = 1.0 / 25.0
+
 # Interactive simulation loop
 while True:
     # Get observation for the first agent
@@ -60,6 +64,7 @@ while True:
     model_input = obs_agent.astype(np.float32).reshape(1, input_dim)
     interpreter.set_tensor(input_details[0]['index'], model_input)
     interpreter.invoke()
+    print(interpreter.get_tensor(output_details[0]['index']))
     action = interpreter.get_tensor(output_details[0]['index'])[0]
     
     # Create actions dict for all agents (non-controlled agents get zero action)
@@ -72,12 +77,16 @@ while True:
     rng, step_key = jax.random.split(rng)
     _, new_state, rewards, dones, info = env.step_env(step_key, state, actions)
     state = new_state
-    
-    # Render current state (env.render expects a list of states)
-    frame = env.render([state], camera="track", width=640, height=480)[0]
-    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    cv2.imshow("Interactive Policy", frame_bgr)
-    
+
+    # throttle rendering to 25 fps
+    curr_time = time.time()
+    if curr_time - last_render >= render_interval:
+        frame = env.render([state], camera="track", width=640, height=480)[0]
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        cv2.imshow("Interactive Policy", frame_bgr)
+        last_render = curr_time
+
+    # always poll for quit key
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
