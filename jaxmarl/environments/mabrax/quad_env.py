@@ -332,7 +332,7 @@ class QuadEnv(PipelineEnv):
     
     # ground_collision = jp.logical_and(ground_collision_quad, ground_collision_payload)
     ground_collision = ground_collision_quad
-    
+
     collision = ground_collision_quad
 
     out_of_bounds = jp.absolute(angle_q1) > jp.radians(90)
@@ -363,10 +363,11 @@ class QuadEnv(PipelineEnv):
     # dont terminate ground collision on ground start
     ground_collision = jp.logical_and(
       ground_collision,
-      jp.logical_or(
-        pipeline_state.time > 3,
-        pipeline_state.cvel[self.payload_body_id][2] < -3.0,
-      )
+      pipeline_state.time > 3
+      # jp.logical_or(
+      #   pipeline_state.time > 3,
+      #   pipeline_state.cvel[self.payload_body_id][2] < -3.0,
+      # )
     )
 
     collision = ground_collision
