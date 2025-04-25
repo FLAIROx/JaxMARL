@@ -127,7 +127,7 @@ def main():
             "act_noise": 0.00,
             "max_thrust_range": 0.0,
         },
-        "TOTAL_TIMESTEPS": 1_500_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 10_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
