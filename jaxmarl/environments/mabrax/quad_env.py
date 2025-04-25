@@ -363,7 +363,7 @@ class QuadEnv(PipelineEnv):
     # dont terminate ground collision on ground start
     ground_collision = jp.logical_and(
       ground_collision,
-      pipeline_state.time > 3
+      pipeline_state.time > 0.3
       # jp.logical_or(
       #   pipeline_state.time > 3,
       #   pipeline_state.cvel[self.payload_body_id][2] < -3.0,
