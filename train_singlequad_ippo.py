@@ -83,6 +83,7 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
     for i in range(n_steps):
         act_rng, rng = jax.random.split(rng)
         ctrl, _ = jit_inference_fn(state["obs"], act_rng)
+
         state = jit_step(state, ctrl)
         rollout.append(state["pipeline_state"])
         quad_actions_list.append(np.concatenate([np.array(val) for val in ctrl.values()]))
@@ -127,7 +128,7 @@ def main():
             "act_noise": 0.00,
             "max_thrust_range": 0.3,
         },
-        "TOTAL_TIMESTEPS": 10_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 500_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
