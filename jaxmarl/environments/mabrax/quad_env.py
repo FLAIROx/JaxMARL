@@ -353,6 +353,15 @@ class QuadEnv(PipelineEnv):
 
   
     #out of bounds for pos error shrinking with time
+    quad_error = self.target_position - quad1_pos
+    quad_error_norm = jp.linalg.norm(quad_error)
+    max_time_to_target = self.max_time * 0.5
+    time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
+    max_quad_error = 4 * (1 - time_progress) + 0.01 # allow for 1cm error at the target
+    out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
+
+
+
     # payload_pos = pipeline_state.xpos[self.payload_body_id]
     # payload_error = self.target_position - payload_pos
     # payload_error_norm = jp.linalg.norm(payload_error)
@@ -529,7 +538,6 @@ class QuadEnv(PipelineEnv):
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
-    # smooth_action_penalty += jp.mean(jp.abs(action - jp.mean(last_action)))
     action_energy_penalty = jp.mean(0.5 * (action + 1)) 
 
 
