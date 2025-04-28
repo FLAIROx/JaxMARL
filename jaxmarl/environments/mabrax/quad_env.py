@@ -311,7 +311,7 @@ class QuadEnv(PipelineEnv):
     thrust_cmds = 0.5 * (clipped_action + 1.0)
     action_scaled = thrust_cmds * max_thrust
 
-    jax.debug.print("action_scaled: {action_scaled}", action_scaled=action_scaled)
+    #jax.debug.print("action_scaled: {action_scaled}", action_scaled=action_scaled)
 
     data0 = state.pipeline_state
     pipeline_state = self.pipeline_step(data0, action_scaled)
