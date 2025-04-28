@@ -323,7 +323,7 @@ class QuadEnv(PipelineEnv):
     noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.cvel) * 1e3))
 
     # Add actuator noise.
-    if self.act_noise:
+    if self.act_noise > 0.0:
         noise = jax.random.normal(noise_key, shape=action_scaled.shape)
         action_scaled = action_scaled + self.act_noise * max_thrust * noise
 
@@ -365,7 +365,7 @@ class QuadEnv(PipelineEnv):
 
     obs = self._get_obs(pipeline_state, action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
-        obs, pipeline_state.time, collision, out_of_bounds, clipped_action,
+        obs, pipeline_state.time, collision, out_of_bounds, action,
         angle_q1, last_action, self.target_position,
         pipeline_state, max_thrust
     )
@@ -529,6 +529,7 @@ class QuadEnv(PipelineEnv):
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
+    # smooth_action_penalty += jp.mean(jp.abs(action - jp.mean(last_action)))
     action_energy_penalty = jp.mean(0.5 * (action + 1)) 
 
 
