@@ -84,6 +84,8 @@ def eval_results(eval_env, jit_reset, jit_inference_fn, jit_step):
         act_rng, rng = jax.random.split(rng)
         ctrl, _ = jit_inference_fn(state["obs"], act_rng)
 
+        
+
         state = jit_step(state, ctrl)
         rollout.append(state["pipeline_state"])
         quad_actions_list.append(np.concatenate([np.array(val) for val in ctrl.values()]))
@@ -116,7 +118,7 @@ def main():
         "taut_reward_coef": 0.0,
         "collision_penalty_coef": -1.0,
         "out_of_bounds_penalty_coef": 0.0,
-        "smooth_action_coef": -0.1,
+        "smooth_action_coef": -1.0,
         "action_energy_coef": -0.1,
     }
     # Build configuration for IPPO training on multiquad_2x4
@@ -220,8 +222,10 @@ def main():
     def policy_fn(obs, key):
         batched_obs = batchify(obs, env.agents, env.num_agents)
         actions = actor(batched_obs)
+        actions = jp.clip(actions,-1.0, 1.0)
         unbatched = unbatchify(actions, env.agents, 1, env.num_agents)
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
+    
 
     # Simulation: run an episode using the trained policy
     sim_steps = 10000

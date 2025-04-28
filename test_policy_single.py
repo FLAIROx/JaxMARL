@@ -64,7 +64,8 @@ while True:
     model_input = obs_agent.astype(np.float32).reshape(1, input_dim)
     interpreter.set_tensor(input_details[0]['index'], model_input)
     interpreter.invoke()
-    print(interpreter.get_tensor(output_details[0]['index']))
+   
+   
     action = interpreter.get_tensor(output_details[0]['index'])[0]
     
     # Create actions dict for all agents (non-controlled agents get zero action)
