@@ -538,6 +538,8 @@ class QuadEnv(PipelineEnv):
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
+    smooth_action_penalty += jp.mean(jp.abs(action - jp.mean(last_action)))
+
     action_energy_penalty = jp.mean(0.5 * (action + 1)) 
 
 
