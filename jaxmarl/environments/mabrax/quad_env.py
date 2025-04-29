@@ -1,4 +1,4 @@
-# multi_quad_env.py
+# quad_env.py
 
 """
 A Brax/MJX version of a multi-rotor quadcopter team with payload.
