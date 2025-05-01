@@ -1,5 +1,5 @@
 """
-Test correspondance between pettingzoo and JaxMARL MPE environments
+Test correspondence between pettingzoo and JaxMARL MPE environments
 """
 import jax
 import jax.numpy as jnp
@@ -64,7 +64,7 @@ def assert_same_trans(step, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_j
         assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
         assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
         #print('done zoo', done_zoo, 'done jax', done_jax)
-        assert np.alltrue(done_zoo[agent] == done_jax[agent]), f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
+        assert np.all(done_zoo[agent] == done_jax[agent]), f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
 
 def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
 
@@ -112,7 +112,7 @@ def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
     
     key, key_reset = jax.random.split(key)
     env_jax.reset(key_reset)
-    for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}, epsiode:", leave=True):
+    for ep in tqdm.tqdm(range(num_episodes), desc=f"Testing {zoo_env_name}, episode:", leave=True):
         obs = env_zoo.reset()
         for s in range(num_steps):
             actions = {agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents}
@@ -124,7 +124,7 @@ def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
             
             assert_same_trans(s, obs_zoo, rew_zoo, done_zoo, obs_jax, rew_jax, done_jax)
             
-            if not np.alltrue(done_zoo.values()):
+            if not np.all(done_zoo.values()):
                 assert_same_state(env_zoo, env_jax, state_jax)
 
     print(f'-- {zoo_env_name} all tests passed --')
