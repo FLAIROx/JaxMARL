@@ -13,7 +13,7 @@ from jax import numpy as jp
 import mujoco
 import os
 
-# Helper functions in JAX (converted from numpy/numba)
+# Helper functions in JAX
 def jp_R_from_quat(q: jp.ndarray) -> jp.ndarray:
   """Compute rotation matrix from quaternion [w, x, y, z]."""
   q = q / jp.linalg.norm(q)
@@ -280,7 +280,13 @@ class QuadEnv(PipelineEnv):
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
     rng, noise_key = jax.random.split(rng)       # new: split for observation noise
-    obs = self._get_obs(pipeline_state, last_action, self.target_position, noise_key)
+    obs = self._get_obs(
+      pipeline_state,
+      last_action,
+      self.target_position,
+      noise_key,
+      prev_linvel=jp.zeros(3)
+    )
     reward = jp.array(0.0)
     done = jp.array(0.0)
     metrics = {'time': pipeline_state.time,
@@ -372,7 +378,14 @@ class QuadEnv(PipelineEnv):
 
 
 
-    obs = self._get_obs(pipeline_state, action, self.target_position, noise_key)
+    prev_linvel = data0.cvel[self.q1_body_id][3:6]
+    obs = self._get_obs(
+      pipeline_state,
+      action,
+      self.target_position,
+      noise_key,
+      prev_linvel
+    )
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action,
         angle_q1, last_action, self.target_position,
@@ -404,7 +417,13 @@ class QuadEnv(PipelineEnv):
     }
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward, done=done, metrics=metrics)
 
-  def _get_obs(self, data: base.State, last_action: jp.ndarray, target_position: jp.ndarray, noise_key) -> jp.ndarray:
+  def _get_obs(self,
+               data: base.State,
+               last_action: jp.ndarray,
+               target_position: jp.ndarray,
+               noise_key,
+               prev_linvel: jp.ndarray = None
+              ) -> jp.ndarray:
     """Constructs the observation vector from simulation data."""
     # Payload state.
     #payload_pos = data.xpos[self.payload_body_id]    
@@ -431,7 +450,11 @@ class QuadEnv(PipelineEnv):
     quad1_angvel = data.cvel[self.q1_body_id][:3]
     # quad1_rel = quad1_pos - payload_pos
     quad1_rot = jp_R_from_quat(quad1_quat).ravel()
-    quad1_linear_acc = data.cacc[self.q1_body_id][3:6]
+    if prev_linvel is None:
+      quad1_linear_acc = jp.zeros(3)
+    else:
+      curr_linvel = data.cvel[self.q1_body_id][3:6]
+      quad1_linear_acc = (curr_linvel - prev_linvel) / self.time_per_action
     quad1_id = jp.array([1.0, 0.0])
 
     
@@ -445,6 +468,15 @@ class QuadEnv(PipelineEnv):
         quad1_linear_acc,     # (3,)  18:21
         last_action,          # (4,)  21:25
     ])
+
+    # jax.debug.print("lpos_error: {pos_error}", pos_error=pos_error)
+    # jax.debug.print("quad1_rot: {quad1_rot}", quad1_rot=quad1_rot)
+    # jax.debug.print("quad1_linvel: {quad1_linvel}", quad1_linvel=quad1_linvel)
+    # jax.debug.print("quad1_angvel: {quad1_angvel}", quad1_angvel=quad1_angvel)
+    # jax.debug.print("quad1_linear_acc: {quad1_linear_acc}", quad1_linear_acc=quad1_linear_acc)
+    # jax.debug.print("last_action: {last_action}", last_action=last_action)
+    # jax.debug.print("---------")
+
 
     # runtime check
     assert obs.shape[0] == self.OBS_SIZE, f"obs length {obs.shape[0]} != expected {self.OBS_SIZE}"
