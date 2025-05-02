@@ -130,6 +130,7 @@ def main():
             "act_noise": 0.1,
             "max_thrust_range": 0.3,
             "episode_length": 3072,
+            "policy_freq": 100,
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
