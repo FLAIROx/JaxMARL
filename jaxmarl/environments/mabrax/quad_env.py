@@ -493,9 +493,9 @@ class QuadEnv(PipelineEnv):
     noise_lookup = jp.concatenate([
         jp.ones(3) * 0.002,  # quad position
         jp.ones(9) * 0.01,   # quad rotation
-        jp.ones(3) * 0.01,   # quad linear velocity
-        jp.ones(3) * 0.01,   # quad angular velocity
-        jp.ones(3) * 0.01,   # quad linear acceleration
+        jp.ones(3) * 0.05,   # quad linear velocity
+        jp.ones(3) * 0.05,   # quad angular velocity
+        jp.ones(3) * 0.05,   # quad linear acceleration
         jp.ones(4) * 0.0,    # last action
     ])
 
@@ -578,7 +578,7 @@ class QuadEnv(PipelineEnv):
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
-    smooth_action_penalty += jp.mean(jp.abs(action - jp.mean(last_action)))
+    #smooth_action_penalty += jp.mean(jp.abs(action - jp.mean(last_action)))
 
     action_energy_penalty = jp.mean(0.5 * (action + 1)) 
 
