@@ -309,6 +309,10 @@ class QuadEnv(PipelineEnv):
     """
     # Extract previous action from the observation.
     last_action = state.obs[-self.sys.nu:]
+    
+    if self.debug:
+      jax.debug.print("last_action: {last_action}", last_action=last_action)
+      jax.debug.print("action: {action}", action=action)
 
     clipped_action = jp.clip(action, -1.0, 1.0)
 
@@ -388,9 +392,6 @@ class QuadEnv(PipelineEnv):
       noise_key,
       prev_linvel
     )
-    if self.debug:
-      jax.debug.print("action: {action}", action=action)
-      jax.debug.print("---------")
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action,
         angle_q1, last_action, self.target_position,
@@ -420,6 +421,8 @@ class QuadEnv(PipelineEnv):
       'reward': reward,
       'max_thrust': state.metrics['max_thrust']
     }
+    if self.debug:
+      jax.debug.print("---------")
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward, done=done, metrics=metrics)
 
   def _get_obs(self,
@@ -552,7 +555,7 @@ class QuadEnv(PipelineEnv):
     ang_vel_reward = (0.5 + 3 * er(dis, 20)) * (er(jp.linalg.norm(ang_vel_q1)))
     linvel_q1 = quad1_obs[12:15] 
 
-    linvel_quad_reward =  (0.5 + 6 * er(dis, 40)) * (er(jp.linalg.norm(linvel_q1)) )
+    linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1)) )
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
