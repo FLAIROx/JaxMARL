@@ -79,6 +79,12 @@ while True:
     rng, step_key = jax.random.split(rng)
     _, new_state, rewards, dones, info = env.step_env(step_key, state, actions)
     state = new_state
+    # Reset environment and RNG if any agent is done
+    if any(dones.values()):
+        rng = jax.random.PRNGKey(int(time.time()))
+        rng, reset_key = jax.random.split(rng)
+        state = env.reset(reset_key)[1]
+        continue
 
     # throttle rendering to 25 fps
     curr_time = time.time()
