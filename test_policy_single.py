@@ -28,6 +28,7 @@ config = {
         "reward_coeffs": default_reward_coeffs,
         "obs_noise": 0.0,
         "act_noise": 0.0,
+        "debug": True,
     },
 }
 env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])

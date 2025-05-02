@@ -52,6 +52,7 @@ class QuadEnv(PipelineEnv):
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
       max_thrust_range: float = 0.3,               # range for randomizing thrust
+      debug: bool = False,
       **kwargs,
   ):
     print("Initializing QuadEnv")
@@ -74,6 +75,7 @@ class QuadEnv(PipelineEnv):
     self.max_time = episode_length * self.time_per_action
     self.obs_noise = obs_noise    
     self.act_noise = act_noise 
+    self.debug = debug
     if reward_coeffs is None:
       reward_coeffs = {
          "distance_reward_coef": 0.0,
@@ -317,7 +319,7 @@ class QuadEnv(PipelineEnv):
     thrust_cmds = 0.5 * (clipped_action + 1.0)
     action_scaled = thrust_cmds * max_thrust
 
-    #jax.debug.print("action_scaled: {action_scaled}", action_scaled=action_scaled)
+    
 
     data0 = state.pipeline_state
     pipeline_state = self.pipeline_step(data0, action_scaled)
@@ -386,6 +388,9 @@ class QuadEnv(PipelineEnv):
       noise_key,
       prev_linvel
     )
+    if self.debug:
+      jax.debug.print("action: {action}", action=action)
+      jax.debug.print("---------")
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action,
         angle_q1, last_action, self.target_position,
@@ -469,13 +474,13 @@ class QuadEnv(PipelineEnv):
         last_action,          # (4,)  21:25
     ])
 
-    # jax.debug.print("lpos_error: {pos_error}", pos_error=pos_error)
-    # jax.debug.print("quad1_rot: {quad1_rot}", quad1_rot=quad1_rot)
-    # jax.debug.print("quad1_linvel: {quad1_linvel}", quad1_linvel=quad1_linvel)
-    # jax.debug.print("quad1_angvel: {quad1_angvel}", quad1_angvel=quad1_angvel)
-    # jax.debug.print("quad1_linear_acc: {quad1_linear_acc}", quad1_linear_acc=quad1_linear_acc)
-    # jax.debug.print("last_action: {last_action}", last_action=last_action)
-    # jax.debug.print("---------")
+    if self.debug:
+      jax.debug.print("lpos_error: {pos_error}", pos_error=pos_error)
+      jax.debug.print("quad1_rot: {quad1_rot}", quad1_rot=quad1_rot)
+      jax.debug.print("quad1_linvel: {quad1_linvel}", quad1_linvel=quad1_linvel)
+      jax.debug.print("quad1_angvel: {quad1_angvel}", quad1_angvel=quad1_angvel)
+      jax.debug.print("quad1_linear_acc: {quad1_linear_acc}", quad1_linear_acc=quad1_linear_acc)
+      jax.debug.print("last_action: {last_action}", last_action=last_action)
 
 
     # runtime check
