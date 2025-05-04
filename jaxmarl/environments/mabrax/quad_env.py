@@ -167,7 +167,7 @@ class QuadEnv(PipelineEnv):
   
     # mask: if True use uniform sample, if False use normal sample.
     mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.5
-    normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.1
+    normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.2
     
     # Choose payload position based on mask.
     payload_pos = jp.where(mask, uniform_payload_pos, normal_payload_pos)
@@ -233,6 +233,11 @@ class QuadEnv(PipelineEnv):
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad1_pos = QuadEnv.generate_valid_configuration(rng_config, self.target_position)
+
+    # 10% chance to reset quad to exactly the target
+    rng, quad_reset_rng = jax.random.split(rng)
+    quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.1
+    quad1_pos = jp.where(quad_reset, self.target_position, quad1_pos)
 
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
@@ -552,7 +557,7 @@ class QuadEnv(PipelineEnv):
     ang_vel_q1 = quad1_obs[15:18] 
 
 
-    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * (er(jp.linalg.norm(ang_vel_q1)))
+    ang_vel_reward = (0.5 + 3 * er(dis, 30)) * (er(jp.linalg.norm(ang_vel_q1)))
     linvel_q1 = quad1_obs[12:15] 
 
     linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1)) )
