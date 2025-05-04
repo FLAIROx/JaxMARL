@@ -238,6 +238,8 @@ class QuadEnv(PipelineEnv):
     rng, quad_reset_rng = jax.random.split(rng)
     quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.1
     quad1_pos = jp.where(quad_reset, self.target_position, quad1_pos)
+    qvel = jp.where(quad_reset, 0.0, qvel)
+    
 
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
@@ -557,10 +559,10 @@ class QuadEnv(PipelineEnv):
     ang_vel_q1 = quad1_obs[15:18] 
 
 
-    ang_vel_reward = (0.5 + 3 * er(dis, 30)) * (er(jp.linalg.norm(ang_vel_q1)))
+    ang_vel_reward = (0.5 + 6 * er(dis, 30)) * (er(jp.linalg.norm(ang_vel_q1)))
     linvel_q1 = quad1_obs[12:15] 
 
-    linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1)) )
+    linvel_quad_reward =  (0.5 + 6 * er(dis, 30)) * (er(jp.linalg.norm(linvel_q1)) )
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
