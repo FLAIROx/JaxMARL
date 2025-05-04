@@ -239,7 +239,7 @@ class QuadEnv(PipelineEnv):
     quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.1
     quad1_pos = jp.where(quad_reset, self.target_position, quad1_pos)
     qvel = jp.where(quad_reset, 0.0, qvel)
-    
+
 
     # Generate new orientations (as quaternions) for the quadrotors.
     rng, rng_euler = jax.random.split(rng, 2)
@@ -288,6 +288,9 @@ class QuadEnv(PipelineEnv):
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
     last_action = jp.zeros(self.sys.nu)
+    last_action = jax.random.normal(rng1, shape=last_action.shape) * 0.4
+    last_action = jp.clip(last_action, -1.0, 1.0)
+
     rng, noise_key = jax.random.split(rng)       # new: split for observation noise
     obs = self._get_obs(
       pipeline_state,
