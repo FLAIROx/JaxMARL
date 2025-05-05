@@ -665,5 +665,5 @@ class MultiQuadEnv(PipelineEnv):
 
     return reward, None, {}
 
-# Register the environment under the name 'multiquad'
-envs.register_environment('multiquad', MultiQuadEnv)
+# Register the environment under the name 'threequad'
+envs.register_environment('threequad', MultiQuadEnv)
