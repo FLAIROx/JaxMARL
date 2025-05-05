@@ -346,9 +346,9 @@ class QuadEnv(PipelineEnv):
 
      # Generate a dynamic noise_key using pipeline_state fields.
     noise_key = jax.random.PRNGKey(0)
-    noise_key = jax.random.fold_in(noise_key, jp.int32(state.time * 1e6))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.xpos) * 1e3))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.cvel) * 1e3))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.pipeline_state.time)))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.obs[:6])))
+
 
 
     # Scale the action to the range [0, 1].
