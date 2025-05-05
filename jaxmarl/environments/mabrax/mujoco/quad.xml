@@ -89,7 +89,7 @@
                 >
                 <inertial
                     pos="0 0 0"
-                    mass="0.034"
+                    mass="0.033"
                     diaginertia="1.65717e-05 1.66556e-05 2.92617e-05" />
                 
                 <geom

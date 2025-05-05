@@ -51,7 +51,7 @@ class QuadEnv(PipelineEnv):
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
-      max_thrust_range: float = 0.3,               # range for randomizing thrust
+      max_thrust_range: float = 0.2,               # range for randomizing thrust
       debug: bool = False,
       **kwargs,
   ):
@@ -104,7 +104,7 @@ class QuadEnv(PipelineEnv):
     sys.mj_model.opt.timestep = dt
 
     # Maximum thrust from the original environment.
-    self.base_max_thrust = 0.14
+    self.base_max_thrust = 0.13 # 0.118 in firmware
     self.max_thrust_range = max_thrust_range
     # Define the target goal for the payload.
     self.goal_center = jp.array([0.0, 0.0, 1.5])
