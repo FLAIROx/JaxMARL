@@ -301,14 +301,21 @@ class QuadEnv(PipelineEnv):
     )
     reward = jp.array(0.0)
     done = jp.array(0.0)
-    metrics = {'time': pipeline_state.time,
-               'reward': reward,
-               'max_thrust': max_thrust,
-               'last_action': last_action,
-               }
+
+    # compute initial thrust and store it
+    action_scaled = 0.5 * (last_action + 1.0)
+    init_thrust = self.motor_model(action_scaled, max_thrust, self.act_noise, noise_key, last_thrust=None)
+
+    metrics = {
+      'time': pipeline_state.time,
+      'reward': reward,
+      'max_thrust': max_thrust,
+      'last_action': last_action,
+      'last_thrust': init_thrust,
+    }
     return State(pipeline_state, obs, reward, done, metrics)
   
-  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key):
+  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key, last_thrust=None):
     """Motor model for thrust calculation."""
 
     # Add actuator noise.
@@ -351,12 +358,16 @@ class QuadEnv(PipelineEnv):
     noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.pipeline_state.time)))
     noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.obs[:6])))
 
-
-
-    # Scale the action to the range [0, 1].
+    # get previous thrust and pass to motor model
+    prev_thrust = state.metrics.get('last_thrust', jp.zeros_like(action))
     action_scaled = 0.5 * (clipped_action + 1.0)
-
-    motor_thusts_N = self.motor_model(action_normalized=action_scaled, max_thrust=max_thrust, act_noise=self.act_noise, noise_key=noise_key)
+    motor_thusts_N = self.motor_model(
+      action_normalized=action_scaled,
+      max_thrust=max_thrust,
+      act_noise=self.act_noise,
+      noise_key=noise_key,
+      last_thrust=prev_thrust
+    )
 
     data0 = state.pipeline_state
     pipeline_state = self.pipeline_step(data0, motor_thusts_N)
@@ -446,6 +457,7 @@ class QuadEnv(PipelineEnv):
       'reward': reward,
       'max_thrust': state.metrics['max_thrust'],
       'last_action': clipped_action,
+      'last_thrust': motor_thusts_N,
     }
     if self.debug:
       jax.debug.print("---------")
