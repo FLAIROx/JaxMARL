@@ -1,0 +1,332 @@
+<mujoco>
+    <compiler angle="radian" meshdir="assets/" discardvisual="false"/>
+    <option timestep="0.004" gravity="0 0 -9.81" solver="Newton"  jacobian="dense" iterations="1" ls_iterations="4" >
+        <flag eulerdamp="disable"/>
+    </option>
+
+    <visual>
+        <global azimuth="-20" elevation="-20" ellipsoidinertia="true" offwidth="1920" offheight="1080"/>
+        <headlight ambient="0.3 0.3 0.3" diffuse="0.6 0.6 0.6" specular="0 0 0" />
+        <rgba haze="0.15 0.25 0.35 1" />
+        <scale jointlength="0" jointwidth="0"/>
+    </visual>
+
+
+    <default>
+        <default class="cf2">
+            <site group="5" />
+            <default class="visual">
+                <geom type="mesh" contype="0" conaffinity="0" group="2" />
+            </default>
+            <default class="collision">
+                <geom type="mesh" group="3" />
+            </default>
+        </default>
+    </default>
+
+  
+
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512"
+            height="3072" />
+        <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4"
+            rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300" />
+        <material name="polished_plastic" rgba="0.631 0.659 0.678 1" />
+        <material name="polished_gold" rgba="0.969 0.878 0.6 1" />
+        <material name="medium_gloss_plastic" rgba="0.109 0.184 0 1" />
+        <material name="propeller_plastic" rgba="0.792 0.82 0.933 1" />
+        <material name="white" />
+        <material name="body_frame_plastic" rgba="0.102 0.102 0.102 1" />
+        <material name="burnished_chrome" rgba="0.898 0.898 0.898 1" />
+        <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="10 10"
+            reflectance="0" />
+        <mesh name="cf2_0" file="cf2_0.obj" />
+        <mesh name="cf2_1" file="cf2_1.obj" />
+        <mesh name="cf2_2" file="cf2_2.obj" />
+        <mesh name="cf2_3" file="cf2_3.obj" />
+        <mesh name="cf2_4" file="cf2_4.obj" />
+        <mesh name="cf2_5" file="cf2_5.obj" />
+        <mesh name="cf2_6" file="cf2_6.obj" />
+       
+    </asset>
+
+    <worldbody>
+        <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" />
+        <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
+
+        <site name="goal_marker" pos="0 0 1.5" size="0.01" type="sphere" rgba="0 1 0 0.7"/>
+<!-- 
+        <site name="q0_start" pos="0 -0.15 1.1" euler="0 0 0" />
+<site name="q1_start" pos="0 0.15 1.1" euler="0 0 0" /> -->
+
+        <!-- Payload start site-->
+        
+
+        
+            <body name="payload" pos="0.0 0.0 1.5" >
+            <camera name="track" pos="-0.7 0 0.5" quat="0.601501 0.371748 -0.371748 -0.601501"
+                mode="trackcom" />
+            <joint type="free" name="payload_joint" actuatorfrclimited="false" damping="0.00001"/>
+            <geom size="0.01" type="sphere" mass="0.01" rgba="0.8 0.8 0.8 1" />
+            <site name="payload_s" pos="0 0 0.01" />
+            </body>
+            
+       
+
+        <body
+            name="q0_container"
+            pos="0 -0.15 1.6"
+            >        
+            
+            <joint type="free" name="q0_joint" actuatorfrclimited="false" />
+            
+            <site name="q0_attachment" pos="0 0 0" group="5"/>
+            <body
+                name="q0_cf2"
+                childclass="cf2"
+                pos="0 0 -0.0015"
+                >
+                <inertial
+                    pos="0 0 0"
+                    mass="0.034"
+                    diaginertia="1.65717e-05 1.66556e-05 2.92617e-05" />
+                
+                <geom
+                    class="visual"
+                    material="propeller_plastic"
+                    mesh="cf2_0" />
+                <geom
+                    class="visual"
+                    material="medium_gloss_plastic"
+                    mesh="cf2_1" />
+                <geom
+                    class="visual"
+                    material="polished_gold"
+                    mesh="cf2_2" />
+                <geom
+                    class="visual"
+                    material="polished_plastic"
+                    mesh="cf2_3" />
+                <geom
+                    class="visual"
+                    material="burnished_chrome"
+                    mesh="cf2_4" />
+                <geom
+                    class="visual"
+                    material="body_frame_plastic"
+                    mesh="cf2_5" />
+                <geom
+                    class="visual"
+                    material="white"
+                    mesh="cf2_6" />
+               <geom class="collision" type="box" pos="0 0 0" size="0.05 0.05 0.015" group="3" rgba="1 0 0 0.5" />
+                <site
+                    name="q0_imu"
+                    pos="0 0 0" />
+                <site
+                    name="q0_thrust1"
+                    pos="0.032527 -0.032527 0" />
+                <site
+                    name="q0_thrust2"
+                    pos="-0.032527 -0.032527 0" />
+                <site
+                    name="q0_thrust3"
+                    pos="-0.032527 0.032527 0" />
+                <site
+                    name="q0_thrust4"
+                    pos="0.032527 0.032527 0" />
+                
+            </body>    
+        </body>      
+                                                                                       
+
+        <body
+            name="q1_container"
+            pos="0 0.15 1.6"
+            >        
+            
+            <joint type="free" name="q1_joint" actuatorfrclimited="false" />
+            
+            <site name="q1_attachment" pos="0 0 0" group="5"/>
+            <body
+                name="q1_cf2"
+                childclass="cf2"
+                pos="0 0 -0.0015"
+                >
+                <inertial
+                    pos="0 0 0"
+                    mass="0.034"
+                    diaginertia="1.65717e-05 1.66556e-05 2.92617e-05" />
+                
+                <geom
+                    class="visual"
+                    material="propeller_plastic"
+                    mesh="cf2_0" />
+                <geom
+                    class="visual"
+                    material="medium_gloss_plastic"
+                    mesh="cf2_1" />
+                <geom
+                    class="visual"
+                    material="polished_gold"
+                    mesh="cf2_2" />
+                <geom
+                    class="visual"
+                    material="polished_plastic"
+                    mesh="cf2_3" />
+                <geom
+                    class="visual"
+                    material="burnished_chrome"
+                    mesh="cf2_4" />
+                <geom
+                    class="visual"
+                    material="body_frame_plastic"
+                    mesh="cf2_5" />
+                <geom
+                    class="visual"
+                    material="white"
+                    mesh="cf2_6" />
+                <geom class="collision" type="box" pos="0 0 0" size="0.05 0.05 0.015" group="3" rgba="1 0 0 0.5" />
+                <site
+                    name="q1_imu"
+                    pos="0 0 0" />
+                <site
+                    name="q1_thrust1"
+                    pos="0.032527 -0.032527 0" />
+                <site
+                    name="q1_thrust2"
+                    pos="-0.032527 -0.032527 0" />
+                <site
+                    name="q1_thrust3"
+                    pos="-0.032527 0.032527 0" />
+                <site
+                    name="q1_thrust4"
+                    pos="0.032527 0.032527 0" />
+                
+            </body>    
+        </body>      
+                                                                                       
+        <body
+            name="q2_container"
+            pos="0.15 0 1.6"
+            >        
+            
+            <joint type="free" name="q2_joint" actuatorfrclimited="false" />
+            
+            <site name="q2_attachment" pos="0 0 0" group="5"/>
+            <body
+                name="q2_cf2"
+                childclass="cf2"
+                pos="0 0 -0.0015"
+                >
+                <inertial
+                    pos="0 0 0"
+                    mass="0.034"
+                    diaginertia="1.65717e-05 1.66556e-05 2.92617e-05" />
+                
+                <geom
+                    class="visual"
+                    material="propeller_plastic"
+                    mesh="cf2_0" />
+                <geom
+                    class="visual"
+                    material="medium_gloss_plastic"
+                    mesh="cf2_1" />
+                <geom
+                    class="visual"
+                    material="polished_gold"
+                    mesh="cf2_2" />
+                <geom
+                    class="visual"
+                    material="polished_plastic"
+                    mesh="cf2_3" />
+                <geom
+                    class="visual"
+                    material="burnished_chrome"
+                    mesh="cf2_4" />
+                <geom
+                    class="visual"
+                    material="body_frame_plastic"
+                    mesh="cf2_5" />
+                <geom
+                    class="visual"
+                    material="white"
+                    mesh="cf2_6" />
+                <geom class="collision" type="box" pos="0 0 0" size="0.05 0.05 0.015" group="3" rgba="1 0 0 0.5" />
+                <site
+                    name="q2_imu"
+                    pos="0 0 0" />
+                <site
+                    name="q2_thrust1"
+                    pos="0.032527 -0.032527 0" />
+                <site
+                    name="q2_thrust2"
+                    pos="-0.032527 -0.032527 0" />
+                <site
+                    name="q2_thrust3"
+                    pos="-0.032527 0.032527 0" />
+                <site
+                    name="q2_thrust4"
+                    pos="0.032527 0.032527 0" />
+                
+            </body>    
+        </body>      
+    </worldbody>
+
+    <contact>
+        
+    </contact>
+
+    <tendon>
+        
+                <spatial name="q0_tendon" limited="true" range="0 0.3" width="0.001" rgba="0.1 0.8 0.1 1">
+                    <site site="q0_attachment" />
+                    <site site="payload_s" />
+                </spatial>
+                
+                <spatial name="q1_tendon" limited="true" range="0 0.3" width="0.001" rgba="0.8 0.1 0.1 1">
+                    <site site="q1_attachment" />
+                    <site site="payload_s" />
+                </spatial>
+                
+                <spatial name="q2_tendon" limited="true" range="0 0.3" width="0.001" rgba="0.1 0.1 0.8 1">
+                    <site site="q2_attachment" />
+                    <site site="payload_s" />
+                </spatial>
+                
+    </tendon>
+
+    <!-- <equality>
+        <weld site1="q0_start" site2="q0_imu" solref="0.01 4" />
+<weld site1="q1_start" site2="q1_imu" solref="0.01 4" />
+       
+    </equality> -->
+
+    <actuator>
+        <general name="q0_thrust1" class="cf2" site="q0_thrust1" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
+<general name="q0_thrust2" class="cf2" site="q0_thrust2" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
+<general name="q0_thrust3" class="cf2" site="q0_thrust3" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
+<general name="q0_thrust4" class="cf2" site="q0_thrust4" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
+<general name="q1_thrust1" class="cf2" site="q1_thrust1" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
+<general name="q1_thrust2" class="cf2" site="q1_thrust2" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
+<general name="q1_thrust3" class="cf2" site="q1_thrust3" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
+<general name="q1_thrust4" class="cf2" site="q1_thrust4" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
+<general name="q2_thrust1" class="cf2" site="q2_thrust1" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
+<general name="q2_thrust2" class="cf2" site="q2_thrust2" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
+<general name="q2_thrust3" class="cf2" site="q2_thrust3" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
+<general name="q2_thrust4" class="cf2" site="q2_thrust4" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
+
+    </actuator>
+
+    <!-- <sensor>
+        <gyro site="q0_imu" name="q0_gyro" />
+<accelerometer site="q0_imu" name="q0_linacc" />
+<framequat objtype="site" objname="q0_imu" name="q0_framequat" />
+<force name="q0_cable_force" site="q0_attachment" />
+<gyro site="q1_imu" name="q1_gyro" />
+<accelerometer site="q1_imu" name="q1_linacc" />
+<framequat objtype="site" objname="q1_imu" name="q1_framequat" />
+<force name="q1_cable_force" site="q1_attachment" />
+
+    </sensor> -->
+</mujoco>
