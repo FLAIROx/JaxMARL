@@ -129,12 +129,12 @@ def main():
             "obs_noise": 0.5,
             "act_noise": 0.1,
             "max_thrust_range": 0.2,
-            "episode_length": 2048,
+            "episode_length": 3072,
             "policy_freq": 250,
             "tau_up": 0.0,   # 60ms   
             "tau_down": 0.0,    # 5ms
         },
-        "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 5_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
