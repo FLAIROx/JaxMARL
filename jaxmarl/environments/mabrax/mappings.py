@@ -154,7 +154,7 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         ], 
     },
     "quad_1x4": {
-        "agent_0": [(0, 24)], 
+        "agent_0": [(0, 20)],  # 24 with actions
     },
 }
 
