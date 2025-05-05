@@ -118,21 +118,21 @@ def main():
         "taut_reward_coef": 0.0,
         "collision_penalty_coef": -1.0,
         "out_of_bounds_penalty_coef": 0.0,
-        "smooth_action_coef": -1.0,
-        "action_energy_coef": -0.1,
+        "smooth_action_coef": -5.0,
+        "action_energy_coef": -1.0,
     }
     # Build configuration for IPPO training on multiquad_2x4
     config = {
         "ENV_NAME": "quad_1x4",
         "ENV_KWARGS": {
             "reward_coeffs": default_reward_coeffs,
-            "obs_noise": 1.0,
+            "obs_noise": 0.5,
             "act_noise": 0.1,
             "max_thrust_range": 0.2,
             "episode_length": 2048,
             "policy_freq": 250,
-            "tau_up": 0.06,   # 60ms   
-            "tau_down": 0.005,    # 5ms
+            "tau_up": 0.0,   # 60ms   
+            "tau_down": 0.0,    # 5ms
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
