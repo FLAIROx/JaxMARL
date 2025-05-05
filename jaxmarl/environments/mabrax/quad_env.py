@@ -53,6 +53,8 @@ class QuadEnv(PipelineEnv):
       act_noise: float = 0.0,         # Parameter for actuator noise
       max_thrust_range: float = 0.2,               # range for randomizing thrust
       debug: bool = False,
+      tau_up: float = 0.0,      
+      tau_down: float = 0.0,    
       **kwargs,
   ):
     print("Initializing QuadEnv")
@@ -76,6 +78,9 @@ class QuadEnv(PipelineEnv):
     self.obs_noise = obs_noise    
     self.act_noise = act_noise 
     self.debug = debug
+    self.tau_up = tau_up           
+    self.tau_down = tau_down       
+   
     if reward_coeffs is None:
       reward_coeffs = {
          "distance_reward_coef": 0.0,
@@ -236,7 +241,7 @@ class QuadEnv(PipelineEnv):
 
     # 10% chance to reset quad to exactly the target
     rng, quad_reset_rng = jax.random.split(rng)
-    quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.25
+    quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.1
     quad1_pos = jp.where(quad_reset, self.target_position + jax.random.normal(rng, (3,)) * 0.005, quad1_pos)
     qvel = jp.where(quad_reset, 0.0, qvel)
 
@@ -317,19 +322,26 @@ class QuadEnv(PipelineEnv):
   
   def motor_model(self, action_normalized, max_thrust, act_noise, noise_key, last_thrust=None):
     """Motor model for thrust calculation."""
+    # compute target thrust and corresponding PWM
+    target_thrusts = jp.clip(action_normalized * max_thrust, 0.0, max_thrust)
+    target_pwm = jp.sqrt(target_thrusts)
 
-    # Add actuator noise.
+
+    if last_thrust is None or (self.tau_up <= 0.0 and self.tau_down <= 0.0):
+      new_thrusts = target_thrusts
+    else:
+      # first-order dynamics on PWM
+      dt = self.time_per_action
+      last_pwm = jp.sqrt(jp.clip(last_thrust, 0.0, max_thrust))
+      tau = jp.where(target_pwm >= last_pwm, self.tau_up, self.tau_down)
+      pwm_filtered = last_pwm + (dt / tau) * (target_pwm - last_pwm)
+      new_thrusts = jp.clip(pwm_filtered**2, 0.0, max_thrust)
+
+    # apply actuator noise on thrust
     if act_noise > 0.0:
-        noise =  act_noise * jax.random.normal(noise_key, shape=action_normalized.shape)
-        action_normalized = action_normalized + noise
-
-    motor_thusts = action_normalized * max_thrust
-
-    # Scale the thrust commands to the range [0, max_thrust].
-    motor_thusts = jp.clip(motor_thusts, 0.0, max_thrust)
-    # Calculate the thrust based on the motor model.
-    return motor_thusts
-
+      noise = act_noise * max_thrust * jax.random.normal(noise_key, shape=new_thrusts.shape)
+      new_thrusts = jp.clip(new_thrusts + noise, 0.0, max_thrust)
+    return new_thrusts
   
   def step(self, state: State, action: jax.Array) -> State:
     """Advances the environment by one control step.
