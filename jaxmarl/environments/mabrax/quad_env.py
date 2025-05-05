@@ -305,6 +305,21 @@ class QuadEnv(PipelineEnv):
                'reward': reward,
                'max_thrust': max_thrust}
     return State(pipeline_state, obs, reward, done, metrics)
+  
+  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key):
+    """Motor model for thrust calculation."""
+
+    # Add actuator noise.
+    if act_noise > 0.0:
+        noise =  act_noise * jax.random.normal(noise_key, shape=action_normalized.shape)
+        action_normalized = action_normalized + noise
+
+    motor_thusts = action_normalized * max_thrust
+
+    # Scale the thrust commands to the range [0, max_thrust].
+    motor_thusts = jp.clip(motor_thusts, 0.0, max_thrust)
+    # Calculate the thrust based on the motor model.
+    return motor_thusts
 
   
   def step(self, state: State, action: jax.Array) -> State:
@@ -329,25 +344,23 @@ class QuadEnv(PipelineEnv):
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
 
-    # Scale the action to the range [0, max_thrust].
-    thrust_cmds = 0.5 * (clipped_action + 1.0)
-    action_scaled = thrust_cmds * max_thrust
+     # Generate a dynamic noise_key using pipeline_state fields.
+    noise_key = jax.random.PRNGKey(0)
+    noise_key = jax.random.fold_in(noise_key, jp.int32(state.time * 1e6))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.xpos) * 1e3))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.cvel) * 1e3))
 
-    
+
+    # Scale the action to the range [0, 1].
+    action_scaled = 0.5 * (clipped_action + 1.0)
+
+    motor_thusts_N = self.motor_model(action_normalized=action_scaled, max_thrust=max_thrust, act_noise=self.act_noise, noise_key=noise_key)
 
     data0 = state.pipeline_state
-    pipeline_state = self.pipeline_step(data0, action_scaled)
+    pipeline_state = self.pipeline_step(data0, motor_thusts_N)
 
-    # Generate a dynamic noise_key using pipeline_state fields.
-    noise_key = jax.random.PRNGKey(0)
-    noise_key = jax.random.fold_in(noise_key, jp.int32(pipeline_state.time * 1e6))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.xpos) * 1e3))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(pipeline_state.cvel) * 1e3))
-
-    # Add actuator noise.
-    if self.act_noise > 0.0:
-        noise = jax.random.normal(noise_key, shape=action_scaled.shape)
-        action_scaled = action_scaled + self.act_noise * max_thrust * noise
+   
+    
 
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
@@ -588,7 +601,7 @@ class QuadEnv(PipelineEnv):
 
 
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
-    smooth_action_penalty += jp.mean(jp.abs(action - jp.mean(last_action)))
+    smooth_action_penalty /= self.time_per_action * 1000  # normlize for frequency
 
     action_energy_penalty = jp.mean((0.5 * (action + 1))**2)
 
