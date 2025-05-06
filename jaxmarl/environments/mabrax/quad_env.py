@@ -41,7 +41,7 @@ class QuadEnv(PipelineEnv):
   system using the MJX backend. The control actions (in [-1, 1]) are scaled into thrust commands.
   """
   # total obs dims: 3(pos_error)+9(rot)+3(linvel)+3(angvel)+3(lin_acc)+4(last_action)
-  OBS_SIZE = 3 + 9 + 3 + 3 + 3 # +4
+  OBS_SIZE = 3 + 9 + 3 + 3 #+ 3 # +4
 
   def __init__(
       self,
