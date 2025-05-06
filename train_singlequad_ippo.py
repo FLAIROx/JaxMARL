@@ -126,8 +126,8 @@ def main():
         "ENV_NAME": "quad_1x4",
         "ENV_KWARGS": {
             "reward_coeffs": default_reward_coeffs,
-            "obs_noise": 0.5,
-            "act_noise": 0.1,
+            "obs_noise": 0.0,
+            "act_noise": 0.0,
             "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 250,
