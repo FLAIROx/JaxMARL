@@ -116,8 +116,8 @@ def main():
         "ang_vel_reward_coef": 1.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 0.0,
-        "collision_penalty_coef": -1.0,
-        "out_of_bounds_penalty_coef": 0.0,
+        "collision_penalty_coef": -10.0,
+        "out_of_bounds_penalty_coef": -10.0,
         "smooth_action_coef": -1.0,
         "action_energy_coef": -0.1,
     }
@@ -134,7 +134,7 @@ def main():
             "tau_up": 0.06,   # 60ms   
             "tau_down": 0.06,    # 5ms
         },
-        "TOTAL_TIMESTEPS": 2_000_000_000,
+        "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
