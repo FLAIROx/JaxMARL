@@ -523,7 +523,7 @@ class QuadEnv(PipelineEnv):
         quad1_rot,            # (9,)   3:12
         quad1_linvel,         # (3,)  12:15
         quad1_angvel,         # (3,)  15:18
-        quad1_linear_acc,     # (3,)  18:21
+        #quad1_linear_acc,     # (3,)  18:21
         #last_action,          # (4,)  21:25
     ])
 

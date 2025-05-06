@@ -131,21 +131,21 @@ def main():
             "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 250,
-            "tau_up": 0.0,   # 60ms   
-            "tau_down": 0.0,    # 5ms
+            "tau_up": 0.06,   # 60ms   
+            "tau_down": 0.06,    # 5ms
         },
-        "TOTAL_TIMESTEPS": 10_000_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 50_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
-        "UPDATE_EPOCHS": 8,
+        "UPDATE_EPOCHS": 2,
         "ANNEAL_LR": False,
-        "LR":  4e-4,
+        "LR": 1e-3,
         "ACTIVATION": "tanh",
         "MAX_GRAD_NORM": 0.5,
         "CLIP_EPS": 0.2,
-        "VF_COEF": 0.5,
-        "ENT_COEF": 0.01,
+        "VF_COEF": 4.5,
+        "ENT_COEF": 2e-6,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
