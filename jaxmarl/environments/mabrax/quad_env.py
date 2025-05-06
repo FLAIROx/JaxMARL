@@ -545,7 +545,7 @@ class QuadEnv(PipelineEnv):
         jp.ones(9) * 0.01,   # quad rotation
         jp.ones(3) * 0.05,   # quad linear velocity
         jp.ones(3) * 0.05,   # quad angular velocity
-        jp.ones(3) * 0.05,   # quad linear acceleration
+       # jp.ones(3) * 0.05,   # quad linear acceleration
        # jp.ones(4) * 0.0,    # last action
     ])
 
