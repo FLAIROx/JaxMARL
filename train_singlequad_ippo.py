@@ -254,8 +254,7 @@ def main():
     state = jax.block_until_ready(state)
     print("Simulation finished.")
     
-    # Call the separated video rendering function
-    render_video(rollout, env)
+   
     
     # Build tf
     class TFActor(tf.keras.Model):
@@ -308,6 +307,9 @@ def main():
         return {"pipeline_state": new_state, "obs": new_obs}
     jit_step = dummy_jit_step
     eval_results(env, jit_reset, jit_inference_fn, jit_step)
+
+    # Call the separated video rendering function
+    render_video(rollout, env)
     
 if __name__ == "__main__":
     main()
