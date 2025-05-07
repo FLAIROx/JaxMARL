@@ -116,10 +116,10 @@ def main():
         "ang_vel_reward_coef": 1.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 0.0,
-        "collision_penalty_coef": -10.0,
-        "out_of_bounds_penalty_coef": -10.0,
-        "smooth_action_coef": -1.0,
-        "action_energy_coef": -0.1,
+        "collision_penalty_coef": -5.0,
+        "out_of_bounds_penalty_coef": -5.0,
+        "smooth_action_coef": -5.0,
+        "action_energy_coef": -0.5,
     }
     # Build configuration for IPPO training on multiquad_2x4
     config = {
@@ -131,8 +131,8 @@ def main():
             "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 250,
-            "tau_up": 0.06,   # 60ms   
-            "tau_down": 0.06,    # 5ms
+            "tau_up": 0.00,   # 60ms   
+            "tau_down": 0.00,    # 5ms
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 16384,
