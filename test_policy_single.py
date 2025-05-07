@@ -30,9 +30,9 @@ config = {
         "act_noise": 0.0,
         "debug": True,
         "episode_length": 1024,
-        "policy_freq": 100,
-        "tau_up": 0.0,   # 60ms   
-        "tau_down": 0.0,    # 5ms
+        "policy_freq": 250,
+        "tau_up": 0.15/4,   # 60ms   
+        "tau_down": 0.15/4,    # 5ms
     },
 }
 env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
