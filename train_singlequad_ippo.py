@@ -131,8 +131,8 @@ def main():
             "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 250,
-            "tau_up": 0.00,   # 60ms   
-            "tau_down": 0.00,    # 5ms
+            "tau_up": 0.15/4,   # T = 150ms => approx: tau =4T 
+            "tau_down": 0.15/4,    #
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 16384,
