@@ -606,7 +606,7 @@ class QuadEnv(PipelineEnv):
     linvel_q1 = quad1_obs[12:15] 
 
     #linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
-    linvel_quad_reward = er(-jp.linalg.norm(linvel_q1),jp.max(3 - 20 * dis,-0.05)) # lower linvel range closer to target
+    linvel_quad_reward = er(-jp.linalg.norm(linvel_q1), jp.maximum(3 - 20 * dis, -0.05)) # lower linvel range closer to target
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
