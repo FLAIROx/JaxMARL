@@ -415,9 +415,9 @@ class QuadEnv(PipelineEnv):
     #out of bounds for pos error shrinking with time
     quad_error = self.target_position - quad1_pos
     quad_error_norm = jp.linalg.norm(quad_error)
-    max_time_to_target = self.max_time * 0.5
+    max_time_to_target = self.max_time
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
-    max_quad_error = 4 * (1 - time_progress) + 0.01 # allow for 1cm error at the target
+    max_quad_error = 10 * jp.exp(-8 * quad_error_norm) # high error tolerance in the beginning, low error (1cm) at the end
     out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
 
 
@@ -602,10 +602,11 @@ class QuadEnv(PipelineEnv):
     ang_vel_q1 = quad1_obs[15:18] 
 
 
-    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20 * er(dis, 5)) # lower angvel range closer to target
+    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1))
     linvel_q1 = quad1_obs[12:15] 
 
-    linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
+    #linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
+    linvel_quad_reward = er(-jp.linalg.norm(linvel_q1),jp.max(3 - 20 * dis,-0.05)) # lower linvel range closer to target
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
