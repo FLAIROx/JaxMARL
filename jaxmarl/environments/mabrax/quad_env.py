@@ -241,7 +241,7 @@ class QuadEnv(PipelineEnv):
 
     # 10% chance to reset quad to exactly the target
     rng, quad_reset_rng = jax.random.split(rng)
-    quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.1
+    quad_reset = jax.random.uniform(quad_reset_rng, (), minval=0.0, maxval=1.0) < 0.25
     quad1_pos = jp.where(quad_reset, self.target_position + jax.random.normal(rng, (3,)) * 0.005, quad1_pos)
     qvel = jp.where(quad_reset, 0.0, qvel)
 
