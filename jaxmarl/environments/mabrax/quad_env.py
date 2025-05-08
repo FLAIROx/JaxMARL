@@ -41,7 +41,7 @@ class QuadEnv(PipelineEnv):
   system using the MJX backend. The control actions (in [-1, 1]) are scaled into thrust commands.
   """
   # total obs dims: 3(pos_error)+9(rot)+3(linvel)+3(angvel)+3(lin_acc)+4(last_action)
-  OBS_SIZE = 3 + 9 + 3 + 3 + 3 # +4
+  OBS_SIZE = 3 + 9 + 3 + 3 + 3 +4
 
   def __init__(
       self,
@@ -354,7 +354,7 @@ class QuadEnv(PipelineEnv):
         The next state.
     """
     # Extract previous action from the observation.
-    last_action =  state.metrics['last_action']
+    last_action =  state.obs[-self.sys.nu:]#state.metrics['last_action']
     
     if self.debug:
       jax.debug.print("last_action: {last_action}", last_action=last_action)
@@ -548,7 +548,7 @@ class QuadEnv(PipelineEnv):
         quad1_linvel,         # (3,)  12:15
         quad1_angvel,         # (3,)  15:18
         quad1_linear_acc,     # (3,)  18:21
-        #last_action,          # (4,)  21:25
+        last_action,          # (4,)  21:25
     ])
 
     if self.debug:
