@@ -120,7 +120,7 @@ def main():
         "out_of_bounds_penalty_coef": -5.0,
         "smooth_action_coef": -1.0,
         "action_energy_coef": -0.1,
-        "yaw_penalty_coef": -1.0,
+        "yaw_reward_coef": 1.0,
     }
     # Build configuration for IPPO training on multiquad_2x4
     config = {

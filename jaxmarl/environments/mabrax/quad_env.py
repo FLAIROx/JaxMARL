@@ -96,7 +96,7 @@ class QuadEnv(PipelineEnv):
          "out_of_bounds_penalty_coef": -1.0,
          "smooth_action_coef": -1.0,
          "action_energy_coef": 0.0,
-         "yaw_penalty_coef": -1.0,
+         "yaw_reward_coef": 1.0,
       }
 
     self.reward_divisor = sum(reward_coeffs.values())
@@ -662,7 +662,7 @@ class QuadEnv(PipelineEnv):
     quat = data.xquat[self.q1_body_id]
     w, x, y, z = quat
     yaw = jp.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
-    yaw_penalty =  jp.abs(yaw)
+    yaw_reward =  er(yaw)
 
     tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
     #tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
@@ -671,7 +671,7 @@ class QuadEnv(PipelineEnv):
     #tracking_reward = target_reward
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
-    stability_reward += self.reward_coeffs["yaw_penalty_coef"] * yaw_penalty
+    stability_reward += self.reward_coeffs["yaw_reward_coef"] * yaw_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
