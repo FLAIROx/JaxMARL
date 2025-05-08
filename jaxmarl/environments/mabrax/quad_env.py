@@ -664,7 +664,7 @@ class QuadEnv(PipelineEnv):
     yaw = jp.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
     yaw_reward =  er(yaw)
 
-    quad_mass =  self.sys.mass[self.q1_body_id]
+    quad_mass =  0.033 
     # Compute thrust to compensate for gravity.
     thrust_gravity = quad_mass * 9.81
     # compute per motor thrust to compensate for gravity
