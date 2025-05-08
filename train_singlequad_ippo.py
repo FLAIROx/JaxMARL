@@ -141,7 +141,7 @@ def main():
         "NUM_MINIBATCHES": 512,
         "UPDATE_EPOCHS": 8,
         "ANNEAL_LR": False,
-        "LR": 1e-3,
+        "LR": 4e-4,
         "ACTIVATION": "tanh",
         "MAX_GRAD_NORM": 0.5,
         "CLIP_EPS": 0.2,
