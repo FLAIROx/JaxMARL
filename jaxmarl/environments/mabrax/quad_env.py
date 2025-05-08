@@ -669,9 +669,9 @@ class QuadEnv(PipelineEnv):
     thrust_gravity = quad_mass * 9.81
     # compute per motor thrust to compensate for gravity
     thrust_gravity_per_motor = thrust_gravity / 4.0
+    action_gravity = jp.clip(thrust_gravity_per_motor / max_thrust, 0.0, 1.0)
     # compute thrust to compensate for gravity and thrust from motor model
-    motor_thrusts = 0.5 * (action + 1.0) * max_thrust
-    thrust_reward = er(thrust_gravity_per_motor - motor_thrusts)
+    thrust_reward = er(action_gravity - action)
 
 
 
