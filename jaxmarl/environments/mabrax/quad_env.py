@@ -506,6 +506,30 @@ class QuadEnv(PipelineEnv):
     quad1_quat = data.xquat[self.q1_body_id]
     quad1_linvel = data.cvel[self.q1_body_id][3:6]
     quad1_angvel = data.cvel[self.q1_body_id][:3]
+
+    # # target_quaternion zero
+    # target_quat = jp.array([1.0, 0.0, 0.0, 0.0])
+    # # compute quaternion error between current quad orientation and target
+    # def quat_conjugate(q):
+    #   # q = [w, x, y, z]
+    #   return jp.array([q[0], -q[1], -q[2], -q[3]])
+
+    # def quat_multiply(a, b):
+    #   # Hamilton product of quaternions a and b
+    #   w0, x0, y0, z0 = a
+    #   w1, x1, y1, z1 = b
+    #   return jp.array([
+    #     w0*w1 - x0*x1 - y0*y1 - z0*z1,
+    #     w0*x1 + x0*w1 + y0*z1 - z0*y1,
+    #     w0*y1 - x0*z1 + y0*w1 + z0*x1,
+    #     w0*z1 + x0*y1 - y0*x1 + z0*w1,
+    #   ])
+
+    # # error = q_target * conj(q_current)
+    # q_err = quat_multiply(target_quat, quat_conjugate(quad1_quat))
+    # # normalize to avoid drift
+    # quat_error = q_err / (jp.linalg.norm(q_err) + 1e-6)
+
     # quad1_rel = quad1_pos - payload_pos
     quad1_rot = jp_R_from_quat(quad1_quat).ravel()
     if prev_linvel is None:
@@ -543,8 +567,8 @@ class QuadEnv(PipelineEnv):
     noise_lookup = jp.concatenate([
         jp.ones(3) * 0.002,  # quad position
         jp.ones(9) * 0.01,   # quad rotation
-        jp.ones(3) * 0.05,   # quad linear velocity
-        jp.ones(3) * 0.05,   # quad angular velocity
+        jp.ones(3) * 0.1,   # quad linear velocity
+        jp.ones(3) * 0.2,   # quad angular velocity
        # jp.ones(3) * 0.05,   # quad linear acceleration
        # jp.ones(4) * 0.0,    # last action
     ])
@@ -605,8 +629,8 @@ class QuadEnv(PipelineEnv):
     ang_vel_reward = er(jp.linalg.norm(ang_vel_q1))
     linvel_q1 = quad1_obs[12:15] 
 
-    #linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
-    linvel_quad_reward = er(jp.linalg.norm(linvel_q1)) # lower linvel range closer to target
+    linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
+    #linvel_quad_reward = er(jp.linalg.norm(linvel_q1)) # lower linvel range closer to target
 
     # Velocity alignment.
     target_dir  = pos_error / (dis + 1e-6)
