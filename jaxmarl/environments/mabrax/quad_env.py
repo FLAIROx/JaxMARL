@@ -664,6 +664,21 @@ class QuadEnv(PipelineEnv):
     yaw = jp.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
     yaw_reward =  er(yaw)
 
+    quad_mass =  self.sys.mass[self.q1_body_id]
+    # Compute thrust to compensate for gravity.
+    thrust_gravity = quad_mass * 9.81
+    # compute per motor thrust to compensate for gravity
+    thrust_gravity_per_motor = thrust_gravity / 4.0
+    # compute thrust to compensate for gravity and thrust from motor model
+    motor_thrusts = 0.5 * (action + 1.0) * max_thrust
+    thrust_reward = er(thrust_gravity_per_motor - motor_thrusts)
+
+
+
+    
+
+
+
     tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
     #tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
     tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
@@ -676,6 +691,7 @@ class QuadEnv(PipelineEnv):
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     #stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
+    stability_reward += thrust_reward
     
 
     #penalties
