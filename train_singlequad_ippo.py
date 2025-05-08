@@ -162,7 +162,7 @@ def main():
         tags=["IPPO", "FF", "single_quad", "noise"],
         config=config,
         mode=config["WANDB_MODE"],
-        notes="Training with noise and no tau, with linvel target emphasized, lin_acc, with last action",
+        notes="penalize yaw",
     )
     # Merge any sweep overrides into config
     config = {**config, **wandb.config}
