@@ -118,7 +118,7 @@ def main():
         "taut_reward_coef": 0.0,
         "collision_penalty_coef": -5.0,
         "out_of_bounds_penalty_coef": -5.0,
-        "smooth_action_coef": -5.0,
+        "smooth_action_coef": -1.0,
         "action_energy_coef": -0.1,
     }
     # Build configuration for IPPO training on multiquad_2x4
@@ -131,8 +131,8 @@ def main():
             "max_thrust_range": 0.3,
             "episode_length": 3072,
             "policy_freq": 250,
-            "tau_up": 0, #0.15/4,   # T = 150ms => approx: tau =4T 
-            "tau_down":0,# 0.15/4,    #
+            "tau_up": 0.15/4,   # T = 150ms => approx: tau =4T 
+            "tau_down":0.15/4,    #
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 16384,
