@@ -172,7 +172,7 @@ class QuadEnv(PipelineEnv):
     
   
     # mask: if True use uniform sample, if False use normal sample close to target.
-    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.5 # 80% uniform, 20% normal
+    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.8 # 80% uniform, 20% normal
     normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.03
     
     # Choose payload position based on mask.
@@ -418,7 +418,7 @@ class QuadEnv(PipelineEnv):
     quad_error_norm = jp.linalg.norm(quad_error)
     max_time_to_target = self.max_time
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
-    max_quad_error = 10 * jp.exp(-8 * quad_error_norm) # high error tolerance in the beginning, low error (1cm) at the end
+    max_quad_error = 10 * jp.exp(-8 * time_progress) # high error tolerance in the beginning, low error (1cm) at the end
     out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
 
 
