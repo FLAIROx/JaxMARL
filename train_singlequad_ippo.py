@@ -140,7 +140,7 @@ def main():
         # "NUM_ENVS": 16384,
         # "NUM_STEPS": 128,
         # "NUM_MINIBATCHES": 512,
-        "TOTAL_TIMESTEPS": 500_000_000,
+        "TOTAL_TIMESTEPS": 1_000_000_000,
         "NUM_ENVS": 4096, # 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 128, #512,
