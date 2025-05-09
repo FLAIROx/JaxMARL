@@ -338,6 +338,10 @@ class QuadEnv(PipelineEnv):
     target_thrusts = jp.clip(action_normalized * max_thrust, 0.0, max_thrust)
     target_pwm = jp.sqrt(target_thrusts)
 
+    # set tau to None if 0.0
+    tau_up = jp.where(tau_up < 0.001, None, tau_up)
+    tau_down = jp.where(tau_down < 0.001, None, tau_down)
+
 
     if last_thrust is None or tau_up is None or tau_down is None:
       new_thrusts = target_thrusts
