@@ -230,7 +230,13 @@ class QuadEnv(PipelineEnv):
     rng, mt_rng = jax.random.split(rng)
     factor = jax.random.uniform(mt_rng, (), minval=1.0 - self.max_thrust_range, maxval=1.0)
     max_thrust = self.base_max_thrust * factor
-    
+
+    # randomize tau parameters between 0 and their original bounds
+    rng, tu_rng = jax.random.split(rng)
+    tau_up = jax.random.uniform(tu_rng, (), minval=0.0, maxval=self.tau_up)
+    rng, td_rng = jax.random.split(rng)
+    tau_down = jax.random.uniform(td_rng, (), minval=0.0, maxval=self.tau_down)
+
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
 
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
@@ -310,7 +316,7 @@ class QuadEnv(PipelineEnv):
 
     # compute initial thrust and store it
     action_scaled = 0.5 * (last_action + 1.0)
-    init_thrust = self.motor_model(action_scaled, max_thrust, self.act_noise, noise_key, last_thrust=None)
+    init_thrust = self.motor_model(action_scaled, max_thrust, self.act_noise, noise_key,tau_up=tau_up, tau_down=tau_down, last_thrust=None)
 
     metrics = {
       'time': pipeline_state.time,
@@ -318,23 +324,25 @@ class QuadEnv(PipelineEnv):
       'max_thrust': max_thrust,
       'last_action': last_action,
       'last_thrust': init_thrust,
+      'tau_up': tau_up,
+      'tau_down': tau_down,
     }
     return State(pipeline_state, obs, reward, done, metrics)
   
-  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key, last_thrust=None):
+  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key, tau_up, tau_down, last_thrust=None):
     """Motor model for thrust calculation."""
     # compute target thrust and corresponding PWM
     target_thrusts = jp.clip(action_normalized * max_thrust, 0.0, max_thrust)
     target_pwm = jp.sqrt(target_thrusts)
 
 
-    if last_thrust is None or (self.tau_up <= 0.0 and self.tau_down <= 0.0):
+    if last_thrust is None or (tau_up <= 0.0 and tau_down <= 0.0):
       new_thrusts = target_thrusts
     else:
       # first-order dynamics on PWM
       dt = self.time_per_action
       last_pwm = jp.sqrt(jp.clip(last_thrust, 0.0, max_thrust))
-      tau = jp.where(target_pwm >= last_pwm, self.tau_up, self.tau_down)
+      tau = jp.where(target_pwm >= last_pwm, tau_up, tau_down)
       pwm_filtered = last_pwm + (dt / tau) * (target_pwm - last_pwm)
       new_thrusts = jp.clip(pwm_filtered**2, 0.0, max_thrust)
 
@@ -379,6 +387,8 @@ class QuadEnv(PipelineEnv):
       max_thrust=max_thrust,
       act_noise=self.act_noise,
       noise_key=noise_key,
+      tau_up=metrics['tau_up'],
+      tau_down=metrics['tau_down'],
       last_thrust=prev_thrust
     )
 
@@ -471,6 +481,8 @@ class QuadEnv(PipelineEnv):
       'max_thrust': state.metrics['max_thrust'],
       'last_action': clipped_action,
       'last_thrust': motor_thusts_N,
+      'tau_up': metrics['tau_up'],
+      'tau_down': metrics['tau_down'],
     }
     if self.debug:
       jax.debug.print("---------")
