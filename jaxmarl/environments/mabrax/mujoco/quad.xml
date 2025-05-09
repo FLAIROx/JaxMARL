@@ -168,10 +168,10 @@
     </equality> -->
 
     <actuator>
-        <general name="q0_thrust1" class="cf2" site="q0_thrust1" ctrlrange="0 0.14" gear="0 0 1 0 0 0.006" /> <!-- 0.006 is thrust to body ratio-->
-<general name="q0_thrust2" class="cf2" site="q0_thrust2" ctrlrange="0 0.14" gear="0 0 1 0 0 -0.006" />
-<general name="q0_thrust3" class="cf2" site="q0_thrust3" ctrlrange="0 0.14" gear="0 0 1 0 0 0.006" />
-<general name="q0_thrust4" class="cf2" site="q0_thrust4" ctrlrange="0 0.14" gear="0 0 1 0 0 -0.006" />
+        <general name="q0_thrust1" class="cf2" site="q0_thrust1" ctrlrange="0 0.14" gear="0 0 1 0 0 0.0" /> <!-- 0.0 is thrust to body ratio-->
+<general name="q0_thrust2" class="cf2" site="q0_thrust2" ctrlrange="0 0.14" gear="0 0 1 0 0 -0.0" />
+<general name="q0_thrust3" class="cf2" site="q0_thrust3" ctrlrange="0 0.14" gear="0 0 1 0 0 0.0" />
+<general name="q0_thrust4" class="cf2" site="q0_thrust4" ctrlrange="0 0.14" gear="0 0 1 0 0 -0.0" />
 <!-- <general name="q1_thrust1" class="cf2" site="q1_thrust1" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
 <general name="q1_thrust2" class="cf2" site="q1_thrust2" ctrlrange="0 0.14" gear="0 0 1 0 0 -6e-06" />
 <general name="q1_thrust3" class="cf2" site="q1_thrust3" ctrlrange="0 0.14" gear="0 0 1 0 0 6e-06" />
