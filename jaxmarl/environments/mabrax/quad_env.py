@@ -172,7 +172,7 @@ class QuadEnv(PipelineEnv):
     
   
     # mask: if True use uniform sample, if False use normal sample close to target.
-    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.6 # 60% uniform, 40% normal
+    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.8 # 80% uniform, 20% normal
     normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.03
     
     # Choose payload position based on mask.
@@ -686,12 +686,12 @@ class QuadEnv(PipelineEnv):
     #tracking_reward = target_reward
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
-    stability_reward += self.reward_coeffs["yaw_reward_coef"] * yaw_reward
+    #stability_reward += self.reward_coeffs["yaw_reward_coef"] * yaw_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     #stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
-    stability_reward += thrust_reward
+    #stability_reward += thrust_reward
     
 
     #penalties
