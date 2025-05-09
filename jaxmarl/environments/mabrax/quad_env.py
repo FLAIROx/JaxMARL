@@ -387,8 +387,8 @@ class QuadEnv(PipelineEnv):
       max_thrust=max_thrust,
       act_noise=self.act_noise,
       noise_key=noise_key,
-      tau_up=metrics['tau_up'],
-      tau_down=metrics['tau_down'],
+      tau_up= state.metrics['tau_up'],
+      tau_down=state.metrics['tau_down'],
       last_thrust=prev_thrust
     )
 
@@ -481,8 +481,8 @@ class QuadEnv(PipelineEnv):
       'max_thrust': state.metrics['max_thrust'],
       'last_action': clipped_action,
       'last_thrust': motor_thusts_N,
-      'tau_up': metrics['tau_up'],
-      'tau_down': metrics['tau_down'],
+      'tau_up':  state.metrics['tau_up'],
+      'tau_down': state.metrics['tau_down'],
     }
     if self.debug:
       jax.debug.print("---------")
