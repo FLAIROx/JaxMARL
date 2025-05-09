@@ -338,9 +338,7 @@ class QuadEnv(PipelineEnv):
     target_thrusts = jp.clip(action_normalized * max_thrust, 0.0, max_thrust)
     target_pwm = jp.sqrt(target_thrusts)
 
-    # set tau to None if 0.0
-    tau_up = jp.where(tau_up < 0.001, None, tau_up)
-    tau_down = jp.where(tau_down < 0.001, None, tau_down)
+  
 
 
     if last_thrust is None or tau_up is None or tau_down is None:
@@ -352,6 +350,9 @@ class QuadEnv(PipelineEnv):
       tau = jp.where(target_pwm >= last_pwm, tau_up, tau_down)
       pwm_filtered = last_pwm + (dt / tau) * (target_pwm - last_pwm)
       new_thrusts = jp.clip(pwm_filtered**2, 0.0, max_thrust)
+      
+      new_thrusts = jp.where(jp.logical_or(tau_up < 0.001, tau_down < 0.001), target_thrusts, new_thrusts)
+  
 
     # apply actuator noise on thrust
     if act_noise > 0.0:
