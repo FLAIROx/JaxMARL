@@ -133,7 +133,8 @@ def main():
             "episode_length": 3072,
             "policy_freq": 250,
             "tau_up": 0 ,#0.15/4,   # T = 150ms => approx: tau =4T 
-            "tau_down":0 #0.15/4,    #
+            "tau_down":0, #0.15/4,    #
+            "sim_steps_per_action" : 2,
         },
         "TOTAL_TIMESTEPS": 200_000_000,
         "NUM_ENVS": 1024, # 16384,
