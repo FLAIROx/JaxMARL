@@ -336,7 +336,7 @@ class QuadEnv(PipelineEnv):
     target_pwm = jp.sqrt(target_thrusts)
 
 
-    if last_thrust is None or (tau_up <= 0.0 and tau_down <= 0.0):
+    if last_thrust is None or tau_up is None or tau_down is None:
       new_thrusts = target_thrusts
     else:
       # first-order dynamics on PWM
