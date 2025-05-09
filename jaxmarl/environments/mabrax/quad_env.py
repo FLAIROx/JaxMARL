@@ -735,7 +735,7 @@ class QuadEnv(PipelineEnv):
     #tracking_reward = target_reward
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
-    stability_reward +=  yaw_reward
+    #stability_reward +=  yaw_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward

@@ -168,7 +168,7 @@ def main():
         tags=["IPPO", "FF", "single_quad", "noise"],
         config=config,
         mode=config["WANDB_MODE"],
-        notes="penalize yaw",
+        notes="no yaw penalty",
     )
     # Merge any sweep overrides into config
     config = {**config, **wandb.config}
