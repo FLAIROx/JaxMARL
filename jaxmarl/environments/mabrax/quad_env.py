@@ -675,7 +675,7 @@ class QuadEnv(PipelineEnv):
     # linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
     # #linvel_quad_reward = er(jp.linalg.norm(linvel_q1)) # lower linvel range closer to target
 
-    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20) #- 0.005 * jp.abs(ang_vel_q1[2])
+    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20) - 0.01 * jp.abs(ang_vel_q1[2])
     
     linvel_q1 = quad1_obs[12:15] 
 
