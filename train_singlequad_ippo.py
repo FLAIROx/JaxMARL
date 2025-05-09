@@ -128,7 +128,7 @@ def main():
         "ENV_KWARGS": {
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 1.0,
-            "act_noise": 0.1,
+            "act_noise": 0.2,
             "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 250,
@@ -140,7 +140,7 @@ def main():
         # "NUM_ENVS": 16384,
         # "NUM_STEPS": 128,
         # "NUM_MINIBATCHES": 512,
-        "TOTAL_TIMESTEPS": 400_000_000,
+        "TOTAL_TIMESTEPS": 500_000_000,
         "NUM_ENVS": 4096, # 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 128, #512,
