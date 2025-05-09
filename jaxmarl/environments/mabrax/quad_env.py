@@ -667,7 +667,7 @@ class QuadEnv(PipelineEnv):
     # linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
     # #linvel_quad_reward = er(jp.linalg.norm(linvel_q1)) # lower linvel range closer to target
 
-    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20) - 0.05 * jp.abs(ang_vel_q1[2])
+    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20) - 0.01 * jp.abs(ang_vel_q1[2])
     
     linvel_q1 = quad1_obs[12:15] 
 
@@ -727,7 +727,7 @@ class QuadEnv(PipelineEnv):
     #tracking_reward = target_reward
 
     stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
-    #stability_reward +=  yaw_reward
+    stability_reward +=  yaw_reward
     stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
