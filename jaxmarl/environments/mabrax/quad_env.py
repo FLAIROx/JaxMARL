@@ -328,8 +328,8 @@ class QuadEnv(PipelineEnv):
       'tau_down': tau_down,
     }
     return State(pipeline_state, obs, reward, done, metrics)
-  
-  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key, tau_up, tau_down, last_thrust=None):
+
+  def motor_model(self, action_normalized, max_thrust, act_noise, noise_key, tau_up=0.0, tau_down=0.0, last_thrust=None):
     """Motor model for thrust calculation."""
     # compute target thrust and corresponding PWM
     target_thrusts = jp.clip(action_normalized * max_thrust, 0.0, max_thrust)
