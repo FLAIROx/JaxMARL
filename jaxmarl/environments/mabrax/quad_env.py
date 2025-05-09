@@ -233,9 +233,10 @@ class QuadEnv(PipelineEnv):
 
     # randomize tau parameters between 0 and their original bounds
     rng, tu_rng = jax.random.split(rng)
-    tau_up = jax.random.uniform(tu_rng, (), minval=0.0, maxval=self.tau_up)
+    tau_up = jp.maximum(0, jax.random.uniform(tu_rng, (), minval=-self.tau_up, maxval=self.tau_up)) # 50% is 0 tau
+
     rng, td_rng = jax.random.split(rng)
-    tau_down = jax.random.uniform(td_rng, (), minval=0.0, maxval=self.tau_down)
+    tau_down = jp.maximum(0, jax.random.uniform(td_rng, (), minval=-self.tau_down, maxval=self.tau_down))
 
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
 
