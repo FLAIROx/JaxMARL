@@ -26,8 +26,8 @@ config = {
     "ENV_NAME": "quad_1x4",      
     "ENV_KWARGS": {
         "reward_coeffs": default_reward_coeffs,
-        "obs_noise": 0.0,
-        "act_noise": 0.0,
+        "obs_noise": 1.0,
+        "act_noise": 0.1,
         "debug": True,
         "episode_length": 1024,
         "policy_freq": 250,
