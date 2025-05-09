@@ -633,10 +633,11 @@ class QuadEnv(PipelineEnv):
     # linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
     # #linvel_quad_reward = er(jp.linalg.norm(linvel_q1)) # lower linvel range closer to target
 
-    ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20 * er(dis, 5)) # lower angvel range closer to target
+    ang_vel_reward = (0.5 + 6 * er(dis, 30)) * (er(jp.linalg.norm(ang_vel_q1)))
     linvel_q1 = quad1_obs[12:15] 
 
-    linvel_quad_reward =  er(jp.linalg.norm(linvel_q1),20 * er(dis,5)) # lower linvel range closer to target
+    linvel_quad_reward =  (0.5 + 6 * er(dis, 30)) * (er(jp.linalg.norm(linvel_q1)) )
+
 
 
     # Velocity alignment.
@@ -649,7 +650,6 @@ class QuadEnv(PipelineEnv):
     aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
     velocity_towards_target = aligned_vel
   
-
     # vel_cap = 3.45 - 0.115 * vel**4
     # zero_at_target = 14.7 * dis * jp.exp(-10.5 * dis * jp.abs(vel))
     # no_zero_while_error = jp.exp(- (0.5 / (26.0 * dis + 0.3)) * jp.abs(vel))
