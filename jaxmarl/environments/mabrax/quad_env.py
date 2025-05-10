@@ -442,8 +442,8 @@ class QuadEnv(PipelineEnv):
 
     collision = ground_collision_quad
 
-    out_of_bounds = False#jp.absolute(angle_q1) > jp.radians(150)
-                             
+    out_of_bounds = jp.absolute(angle_q1)  > jp.radians(90) * jp.maximum(1.0, pipeline_state.time) # disable after 1s
+
     # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.05)
 
 
