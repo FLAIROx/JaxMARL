@@ -669,7 +669,7 @@ class QuadEnv(PipelineEnv):
     # Safety and smoothness penalties.
     quad1_obs = obs   
 
-    collision_penalty = 1.0 * collision * jp.clip( 0.5 * sim_time, 1.0, 10.0)
+    collision_penalty = 1.0 * collision * jp.clip( 0.3 * sim_time, 0.5, 5.0)
     # out_of_bounds_penalty = 50.0 * out_of_bounds
 
     # Reward for quad orientations (encouraging them to remain upright).
