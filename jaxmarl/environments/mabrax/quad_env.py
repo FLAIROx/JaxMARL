@@ -442,7 +442,7 @@ class QuadEnv(PipelineEnv):
 
     collision = ground_collision_quad
 
-    out_of_bounds = jp.absolute(angle_q1)  > jp.radians(90) * jp.maximum(1.0, pipeline_state.time) # disable after 1s
+    out_of_bounds = jp.absolute(angle_q1)  > jp.radians(90) * jp.maximum(1.0, 0.5 * pipeline_state.time) # disable after 1s
 
     # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.05)
 
@@ -450,12 +450,12 @@ class QuadEnv(PipelineEnv):
 
   
     #out of bounds for pos error shrinking with time
-    # quad_error = self.target_position - quad1_pos
-    # quad_error_norm = jp.linalg.norm(quad_error)
-    # max_time_to_target = self.max_time
-    # time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
-    # max_quad_error = 10 * jp.exp(-8 * time_progress) # high error tolerance in the beginning, low error (1cm) at the end
-    # out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
+    quad_error = self.target_position - quad1_pos
+    quad_error_norm = jp.linalg.norm(quad_error)
+    max_time_to_target = self.max_time
+    time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
+    max_quad_error = 10 * jp.exp(-6 * time_progress) # high error tolerance in the beginning, low error (2cm) at the end
+    out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
 
 
 
@@ -669,7 +669,7 @@ class QuadEnv(PipelineEnv):
     # Safety and smoothness penalties.
     quad1_obs = obs   
 
-    collision_penalty = 1.0 * collision * jp.clip( 0.3 * sim_time, 0.5, 5.0)
+    collision_penalty = 1.0 * collision * jp.clip( 0.2 * sim_time, 0.5, 5.0)
     # out_of_bounds_penalty = 50.0 * out_of_bounds
 
     # Reward for quad orientations (encouraging them to remain upright).
