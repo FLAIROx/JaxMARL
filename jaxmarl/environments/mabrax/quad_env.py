@@ -428,7 +428,6 @@ class QuadEnv(PipelineEnv):
     data0 = data0.replace(xfrc_applied=forces)
 
     pipeline_state = self.pipeline_step(data0, motor_thusts_N)
-    jax.debug.print("Pipeline state: {pipeline_state}", pipeline_state=pipeline_state.xfrc_applied)  
 
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
