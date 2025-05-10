@@ -135,7 +135,7 @@ def main():
             "tau_up": 0.15/4,   # T = 150ms => approx: tau =4T 
             "tau_down":0.15/4,    #
             "sim_steps_per_action" : 2,
-            "disturbance_chance": 0.001,      
+            "disturbance_chance": 0.004,      
         },
         "TOTAL_TIMESTEPS": 10_000_000_000,
         "NUM_ENVS": 16384,
