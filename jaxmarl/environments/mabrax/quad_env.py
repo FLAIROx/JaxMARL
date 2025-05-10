@@ -55,6 +55,9 @@ class QuadEnv(PipelineEnv):
       debug: bool = False,
       tau_up: float = 0.0,      
       tau_down: float = 0.0,    
+      disturbance_chance: float = 0.0,      # chance per step to apply wrench
+      disturbance_force: float = 0.0,       # linear‐force scale
+      disturbance_torque: float = 0.0,      # angular‐torque scale
       **kwargs,
   ):
     print("Initializing QuadEnv")
@@ -80,6 +83,9 @@ class QuadEnv(PipelineEnv):
     self.debug = debug
     self.tau_up = tau_up           
     self.tau_down = tau_down       
+    self.disturbance_chance = disturbance_chance
+    self.disturbance_force = disturbance_force
+    self.disturbance_torque = disturbance_torque
    
     if reward_coeffs is None:
       reward_coeffs = {
@@ -329,6 +335,7 @@ class QuadEnv(PipelineEnv):
       'last_thrust': init_thrust,
       'tau_up': tau_up,
       'tau_down': tau_down,
+      'noise_key': noise_key,              
     }
     return State(pipeline_state, obs, reward, done, metrics)
 
@@ -382,10 +389,11 @@ class QuadEnv(PipelineEnv):
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
 
-     # Generate a dynamic noise_key using pipeline_state fields.
-    noise_key = jax.random.PRNGKey(0)
+    
+    noise_key = state.metrics['noise_key'] + 1
+
     noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.pipeline_state.time)))
-    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.obs[:6])))
+    noise_key = jax.random.fold_in(noise_key, jp.int32(jp.sum(state.obs[:6]) * 0.001))
 
     # get previous thrust and pass to motor model
     prev_thrust = state.metrics.get('last_thrust', jp.zeros_like(action))
@@ -401,10 +409,20 @@ class QuadEnv(PipelineEnv):
     )
 
     data0 = state.pipeline_state
-    pipeline_state = self.pipeline_step(data0, motor_thusts_N)
+    #External‐force disturbance via xfrc_applied
+    noise_key, chance_key, lin_key, ang_key = jax.random.split(noise_key, 4)
+    apply = jax.random.uniform(chance_key, ()) < self.disturbance_chance
+    dist_lin = jax.random.normal(lin_key, (3,)) * self.disturbance_force
+    dist_ang = jax.random.normal(ang_key, (3,)) * self.disturbance_torque
+    forces = jp.zeros(data0.xfrc_applied.shape)
+    forces = jax.lax.cond(
+      apply,
+      lambda f: f.at[self.q1_body_id].set(jp.concatenate([dist_ang, dist_lin])),
+      lambda f: f,
+      forces)
+    data0 = data0.replace(xfrc_applied=forces)
 
-   
-    
+    pipeline_state = self.pipeline_step(data0, motor_thusts_N)
 
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
@@ -424,7 +442,7 @@ class QuadEnv(PipelineEnv):
 
     collision = ground_collision_quad
 
-    out_of_bounds = jp.absolute(angle_q1) > jp.radians(90)
+    out_of_bounds = jp.absolute(angle_q1) > jp.radians(150)
                              
     # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.05)
 
@@ -491,6 +509,7 @@ class QuadEnv(PipelineEnv):
       'last_thrust': motor_thusts_N,
       'tau_up':  state.metrics['tau_up'],
       'tau_down': state.metrics['tau_down'],
+      'noise_key': noise_key,        
     }
     if self.debug:
       jax.debug.print("---------")
