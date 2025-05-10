@@ -412,17 +412,23 @@ class QuadEnv(PipelineEnv):
     #External‐force disturbance via xfrc_applied
     noise_key, chance_key, lin_key, ang_key = jax.random.split(noise_key, 4)
     apply = jax.random.uniform(chance_key, ()) < self.disturbance_chance
-    dist_lin = jax.random.normal(lin_key, (3,)) * self.disturbance_force
-    dist_ang = jax.random.normal(ang_key, (3,)) * self.disturbance_torque
+    wrench = jax.random.normal(lin_key, (6,))
+    wrench.at[-1].set(wrench[-1] * 10) # emphasize yaw
+    wrench = jp.where(jp.linalg.norm(wrench, ord=1) > 0.0001, wrench / jp.linalg.norm(wrench, ord=1), wrench)
+    # scale wrench uniformly between 0 and 1
+    wrench *= jax.random.uniform(noise_key, (), minval=0.0, maxval=1.0)
+
     forces = jp.zeros(data0.xfrc_applied.shape)
     forces = jax.lax.cond(
       apply,
-      lambda f: f.at[self.q1_body_id].set(jp.concatenate([dist_ang, dist_lin])),
+      lambda f: f.at[self.q1_body_id].set(wrench),
       lambda f: f,
       forces)
+ 
     data0 = data0.replace(xfrc_applied=forces)
 
     pipeline_state = self.pipeline_step(data0, motor_thusts_N)
+    jax.debug.print("Pipeline state: {pipeline_state}", pipeline_state=pipeline_state.xfrc_applied)  
 
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
@@ -442,7 +448,7 @@ class QuadEnv(PipelineEnv):
 
     collision = ground_collision_quad
 
-    out_of_bounds = jp.absolute(angle_q1)  > jp.radians(90) * jp.maximum(1.0, 0.5 * pipeline_state.time) # disable after 1s
+    out_of_bounds = jp.logical_and ( jp.absolute(angle_q1)  > jp.radians(90), pipeline_state.time > 0.5) # disable after 0.5s
 
     # out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.05)
 
@@ -454,7 +460,7 @@ class QuadEnv(PipelineEnv):
     quad_error_norm = jp.linalg.norm(quad_error)
     max_time_to_target = self.max_time
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
-    max_quad_error = 10 * jp.exp(-6 * time_progress) # high error tolerance in the beginning, low error (2cm) at the end
+    max_quad_error = 10 * jp.exp(-5 * time_progress) # high error tolerance in the beginning, low error (~6cm) at the end
     out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
 
 
