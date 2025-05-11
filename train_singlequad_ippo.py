@@ -137,7 +137,7 @@ def main():
             "sim_steps_per_action" : 2,
             "disturbance_chance": 0.001,      
         },
-        "TOTAL_TIMESTEPS": 15_000_000_000,
+        "TOTAL_TIMESTEPS": 10_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
