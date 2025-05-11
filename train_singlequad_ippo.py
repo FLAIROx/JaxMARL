@@ -119,7 +119,7 @@ def main():
         "collision_penalty_coef": -5.0,
         "out_of_bounds_penalty_coef": -5.0,
         "smooth_action_coef": -10.0,
-        "action_energy_coef": -0.5,
+        "action_energy_coef": -1.0,
         "yaw_reward_coef": 0.0,
     }
     # Build configuration for IPPO training on multiquad_2x4
@@ -129,7 +129,7 @@ def main():
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 1.0,
             "act_noise": 0.2,
-            "max_thrust_range": 0.2,
+            "max_thrust_range": 0.25,
             "episode_length": 3072,
             "policy_freq": 250,
             "tau_up": 0.15/4,   # T = 150ms => approx: tau =4T 
@@ -137,7 +137,7 @@ def main():
             "sim_steps_per_action" : 2,
             "disturbance_chance": 0.001,      
         },
-        "TOTAL_TIMESTEPS": 10_000_000_000,
+        "TOTAL_TIMESTEPS": 15_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
@@ -156,7 +156,7 @@ def main():
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
-        "ACTOR_ARCH": [64, 64, 64],
+        "ACTOR_ARCH": [64, 64],
         "CRITIC_ARCH": [128, 128, 128],
         "DISABLE_JIT": False,
         "PROJECT": "single_quad_rl",
