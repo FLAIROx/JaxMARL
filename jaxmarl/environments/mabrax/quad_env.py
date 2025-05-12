@@ -336,6 +336,7 @@ class QuadEnv(PipelineEnv):
       'tau_up': tau_up,
       'tau_down': tau_down,
       'noise_key': noise_key,              
+      'prev_linvel': jp.zeros(3),
     }
     return State(pipeline_state, obs, reward, done, metrics)
 
@@ -414,7 +415,7 @@ class QuadEnv(PipelineEnv):
     apply = jax.random.uniform(chance_key, ()) < self.disturbance_chance
     wrench = jax.random.normal(lin_key, (6,))
     wrench.at[-1].set(wrench[-1] * 10) # emphasize yaw
-    wrench = jp.where(jp.linalg.norm(wrench, ord=1) > 0.0001, wrench / jp.linalg.norm(wrench, ord=1), wrench)
+    wrench = jp.where(jp.linalg.norm(wrench, ord=1) > 0.00005, wrench / jp.linalg.norm(wrench, ord=1), wrench)
     # scale wrench uniformly between 0 and 1
     wrench *= jax.random.uniform(noise_key, (), minval=0.0, maxval=1.0)
 
@@ -477,7 +478,7 @@ class QuadEnv(PipelineEnv):
 
 
 
-    prev_linvel = data0.cvel[self.q1_body_id][3:6]
+    prev_linvel = state.metrics.get('prev_linvel', jp.zeros(3))
     obs = self._get_obs(
       pipeline_state,
       action,
@@ -518,6 +519,7 @@ class QuadEnv(PipelineEnv):
       'tau_up':  state.metrics['tau_up'],
       'tau_down': state.metrics['tau_down'],
       'noise_key': noise_key,        
+      'prev_linvel': pipeline_state.cvel[self.q1_body_id][3:6],
     }
     if self.debug:
       jax.debug.print("---------")
@@ -607,7 +609,11 @@ class QuadEnv(PipelineEnv):
     else:
       curr_linvel = data.cvel[self.q1_body_id][3:6]
       quad1_linear_acc = (curr_linvel - prev_linvel) / self.time_per_action
-    quad1_id = jp.array([1.0, 0.0])
+  
+      #add scaling normal noise
+      noise = jax.random.normal(noise_key, shape=quad1_linear_acc.shape) * 0.2
+      noise = jp.clip(noise, -0.4, 0.4)
+      quad1_linear_acc = quad1_linear_acc * (1 + noise * self.obs_noise)
 
     
 
@@ -639,7 +645,7 @@ class QuadEnv(PipelineEnv):
         jp.ones(9) * 0.01,   # quad rotation
         jp.ones(3) * 0.1,   # quad linear velocity
         jp.ones(3) * 0.2,   # quad angular velocity
-        jp.ones(3) * 0.5,   # quad linear acceleration
+        jp.ones(3) * 0.3,   # quad linear acceleration
         jp.ones(4) * 0.1,    # last action
     ])
 
