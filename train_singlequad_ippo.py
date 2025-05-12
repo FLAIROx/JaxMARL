@@ -116,8 +116,8 @@ def main():
         "ang_vel_reward_coef": 1.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 0.0,
-        "collision_penalty_coef": -5.0,
-        "out_of_bounds_penalty_coef": -5.0,
+        "collision_penalty_coef": -100.0,
+        "out_of_bounds_penalty_coef": -100.0,
         "smooth_action_coef": -10.0,
         "action_energy_coef": -0.5,
         "yaw_reward_coef": 0.0,
@@ -128,13 +128,13 @@ def main():
         "ENV_KWARGS": {
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 1.0,
-            "act_noise": 0.2,
+            "act_noise": 0.1,
             "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 500,
             "tau_up": 0.05,   # T = 150ms => approx: tau =4T 
             "tau_down":0.05,    #
-            "sim_steps_per_action" : 2,
+            "sim_steps_per_action" : 1,
             "disturbance_chance": 0.0001,       
         },
         # "TOTAL_TIMESTEPS": 15_000_000_000,
