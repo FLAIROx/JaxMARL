@@ -235,7 +235,9 @@ class QuadEnv(PipelineEnv):
     # randomize max_thrust between in range
     rng, mt_rng = jax.random.split(rng)
     factor = jax.random.uniform(mt_rng, (), minval=1.0 - self.max_thrust_range, maxval=1.0)
-    max_thrust = self.base_max_thrust * factor
+    asymmetry_factors = jax.random.normal(rng, (self.sys.nu,)) * 0.1 + 1.0
+    max_thrusts = self.base_max_thrust * factor * asymmetry_factors
+    max_thrusts = jp.clip(max_thrusts, 0.0, self.base_max_thrust)
 
     # randomize tau parameters between 0 and their original bounds
     rng, tu_rng = jax.random.split(rng)
@@ -325,12 +327,15 @@ class QuadEnv(PipelineEnv):
 
     # compute initial thrust and store it
     action_scaled = 0.5 * (last_action + 1.0)
-    init_thrust = self.motor_model(action_scaled, max_thrust, self.act_noise, noise_key,tau_up=tau_up, tau_down=tau_down, last_thrust=None)
+    init_thrust = self.motor_model(
+      action_scaled, max_thrusts, self.act_noise,
+      noise_key, tau_up=tau_up, tau_down=tau_down, last_thrust=None
+    )
 
     metrics = {
       'time': pipeline_state.time,
       'reward': reward,
-      'max_thrust': max_thrust,
+      'max_thrusts': max_thrusts,
       'last_action': last_action,
       'last_thrust': init_thrust,
       'tau_up': tau_up,
@@ -388,7 +393,7 @@ class QuadEnv(PipelineEnv):
     clipped_action = jp.clip(action, -1.0, 1.0)
 
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
-    max_thrust = state.metrics['max_thrust']
+    max_thrusts = state.metrics['max_thrusts']
 
     
     noise_key = state.metrics['noise_key'] + 1
@@ -399,9 +404,9 @@ class QuadEnv(PipelineEnv):
     # get previous thrust and pass to motor model
     prev_thrust = state.metrics.get('last_thrust', jp.zeros_like(action))
     action_scaled = 0.5 * (clipped_action + 1.0)
-    motor_thusts_N = self.motor_model(
+    motor_thrusts_N = self.motor_model(
       action_normalized=action_scaled,
-      max_thrust=max_thrust,
+      max_thrust=max_thrusts,
       act_noise=self.act_noise,
       noise_key=noise_key,
       tau_up= state.metrics['tau_up'],
@@ -428,7 +433,7 @@ class QuadEnv(PipelineEnv):
  
     data0 = data0.replace(xfrc_applied=forces)
 
-    pipeline_state = self.pipeline_step(data0, motor_thusts_N)
+    pipeline_state = self.pipeline_step(data0, motor_thrusts_N)
 
     # Compute orientation and collision/out-of-bound checks.
     q1_orientation = pipeline_state.xquat[self.q1_body_id]
@@ -489,7 +494,7 @@ class QuadEnv(PipelineEnv):
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action,
         angle_q1, last_action, self.target_position,
-        pipeline_state, max_thrust
+        pipeline_state, max_thrusts
     )
 
     # dont terminate ground collision on ground start
@@ -513,9 +518,9 @@ class QuadEnv(PipelineEnv):
     metrics = {
       'time': pipeline_state.time,
       'reward': reward,
-      'max_thrust': state.metrics['max_thrust'],
+      'max_thrusts': state.metrics['max_thrusts'],
       'last_action': clipped_action,
-      'last_thrust': motor_thusts_N,
+      'last_thrust': motor_thrusts_N,
       'tau_up':  state.metrics['tau_up'],
       'tau_down': state.metrics['tau_down'],
       'noise_key': noise_key,        
