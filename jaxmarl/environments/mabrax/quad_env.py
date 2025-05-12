@@ -564,7 +564,7 @@ class QuadEnv(PipelineEnv):
     noise_key, rot_key = jax.random.split(noise_key)
     R_true = jp_R_from_quat(quad1_quat)
     # sample noise angles ~ N(0, 5deg)
-    noise_angles = jax.random.normal(rot_key, (3,)) * (5 * jp.pi/180) * self.obs_noise
+    noise_angles = jax.random.normal(rot_key, (3,)) * (3 * jp.pi/180) * self.obs_noise
     def euler_to_mat(roll, pitch, yaw):
         cr, sr = jp.cos(roll), jp.sin(roll)
         cp, sp = jp.cos(pitch), jp.sin(pitch)
@@ -582,45 +582,16 @@ class QuadEnv(PipelineEnv):
     R_noise = euler_to_mat(*noise_angles)
     quad1_rot = (R_true @ R_noise).ravel()
 
+    # use Mujoco gyro & accelerometer, then remove gravity in local frame
+    sensor_data = data.sensordata             # [gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z]
+    quad1_angvel = sensor_data[:3]
+    raw_acc = sensor_data[3:6]
+    # gravity in world; rotate into body frame and subtract
+    gravity = jp.array([0.0, 0.0, -9.81])
+    local_gravity = R_true.T @ gravity
+    quad1_linear_acc = raw_acc - 2 * local_gravity # Mems accelerometers have a g in the + z direction
+    # keep linear velocity as before
     quad1_linvel = data.cvel[self.q1_body_id][3:6]
-    quad1_angvel = data.cvel[self.q1_body_id][:3]
-
-    # # target_quaternion zero
-    # target_quat = jp.array([1.0, 0.0, 0.0, 0.0])
-    # # compute quaternion error between current quad orientation and target
-    # def quat_conjugate(q):
-    #   # q = [w, x, y, z]
-    #   return jp.array([q[0], -q[1], -q[2], -q[3]])
-
-    # def quat_multiply(a, b):
-    #   # Hamilton product of quaternions a and b
-    #   w0, x0, y0, z0 = a
-    #   w1, x1, y1, z1 = b
-    #   return jp.array([
-    #     w0*w1 - x0*x1 - y0*y1 - z0*z1,
-    #     w0*x1 + x0*w1 + y0*z1 - z0*y1,
-    #     w0*y1 - x0*z1 + y0*w1 + z0*x1,
-    #     w0*z1 + x0*y1 - y0*x1 + z0*w1,
-    #   ])
-
-    # # error = q_target * conj(q_current)
-    # q_err = quat_multiply(target_quat, quat_conjugate(quad1_quat))
-    # # normalize to avoid drift
-    # quat_error = q_err / (jp.linalg.norm(q_err) + 1e-6)
-
-    # quad1_rel = quad1_pos - payload_pos
-    if prev_linvel is None:
-      quad1_linear_acc = jp.zeros(3)
-    else:
-      curr_linvel = data.cvel[self.q1_body_id][3:6]
-      quad1_linear_acc = (curr_linvel - prev_linvel) / self.time_per_action
-  
-      #add scaling normal noise
-      noise = jax.random.normal(noise_key, shape=quad1_linear_acc.shape) * 0.2
-      noise = jp.clip(noise, -0.4, 0.4)
-      quad1_linear_acc = quad1_linear_acc * (1 + noise * self.obs_noise)
-
-    
 
     obs = jp.concatenate([
       # ----                  # Shape  Slice
