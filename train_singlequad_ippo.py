@@ -128,8 +128,8 @@ def main():
         "ENV_KWARGS": {
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 1.0,
-            "act_noise": 0.2,
-            "max_thrust_range": 0.25,
+            "act_noise": 0.1,
+            "max_thrust_range": 0.2,
             "episode_length": 3072,
             "policy_freq": 500,
             "tau_up": 0.15/4,   # T = 150ms => approx: tau =4T 
