@@ -138,7 +138,7 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         init_x = (
             jnp.zeros(
-                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).n)
+                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape)
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n))

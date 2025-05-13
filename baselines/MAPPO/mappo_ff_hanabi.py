@@ -171,7 +171,7 @@ def make_train(config):
         critic_network = CriticFF(config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
         ac_init_x = (
-            jnp.zeros((env.observation_space(env.agents[0]).n,)),
+            jnp.zeros((env.observation_space(env.agents[0]).shape,)),
             jnp.zeros((env.action_space(env.agents[0]).n,)),
         )
         actor_network_params = actor_network.init(_rng_actor, ac_init_x)
