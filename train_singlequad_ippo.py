@@ -130,7 +130,7 @@ def main():
             "obs_noise": 1.0,
             "act_noise": 0.1,
             "max_thrust_range": 0.2,
-            "episode_length": 3072,
+            "episode_length": 8192,
             "policy_freq": 500,
             "tau_up": 0.045,   # T = 150ms => approx: tau =4T 
             "tau_down":0.045,    #
