@@ -564,7 +564,7 @@ class QuadEnv(PipelineEnv):
     noise_key, rot_key = jax.random.split(noise_key)
     R_true = jp_R_from_quat(quad1_quat)
     # sample noise angles ~ N(0, 5deg)
-    noise_angles = jax.random.normal(rot_key, (3,)) * (3 * jp.pi/180) * self.obs_noise
+    noise_angles = jax.random.normal(rot_key, (3,)) * (5 * jp.pi/180) * self.obs_noise
     def euler_to_mat(roll, pitch, yaw):
         cr, sr = jp.cos(roll), jp.sin(roll)
         cp, sp = jp.cos(pitch), jp.sin(pitch)
@@ -585,12 +585,8 @@ class QuadEnv(PipelineEnv):
     # use Mujoco gyro & accelerometer, then remove gravity in local frame
     sensor_data = data.sensordata             # [gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z]
     quad1_angvel = sensor_data[:3]
-    raw_acc = sensor_data[3:6]
-    # gravity in world; rotate into body frame and subtract
-    gravity = jp.array([0.0, 0.0, -9.81])
-    local_gravity = R_true.T @ gravity
-    quad1_linear_acc = raw_acc - 2 * local_gravity # Mems accelerometers have a g in the + z direction
-    # keep linear velocity as before
+    quad1_linear_acc = sensor_data[3:6]
+   
     quad1_linvel = data.cvel[self.q1_body_id][3:6]
 
     obs = jp.concatenate([
@@ -620,9 +616,9 @@ class QuadEnv(PipelineEnv):
         jp.ones(3) * 0.002,  # quad position
         jp.ones(9) * 0.01,   # quad rotation
         jp.ones(3) * 0.1,   # quad linear velocity
-        jp.ones(3) * 0.2,   # quad angular velocity
-        jp.ones(3) * 0.3,   # quad linear acceleration
-        jp.ones(4) * 0.1,    # last action
+        jp.ones(3) * 0.3,   # quad angular velocity
+        jp.ones(3) * 0.5,   # quad linear acceleration
+        jp.ones(4) * 0.05,    # last action
     ])
 
     if self.obs_noise != 0.0:

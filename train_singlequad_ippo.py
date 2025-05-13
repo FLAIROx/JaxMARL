@@ -131,13 +131,13 @@ def main():
             "act_noise": 0.1,
             "max_thrust_range": 0.2,
             "episode_length": 3072,
-            "policy_freq": 250,
+            "policy_freq": 500,
             "tau_up": 0.045,   # T = 150ms => approx: tau =4T 
             "tau_down":0.045,    #
             "sim_steps_per_action" : 1,
-            "disturbance_chance": 0.0001,       
+            "disturbance_chance": 0.001,       
         },
-        "TOTAL_TIMESTEPS": 15_000_000_000,
+        "TOTAL_TIMESTEPS": 10_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
