@@ -135,7 +135,7 @@ def main():
             "tau_up": 0.045,   # T = 150ms => approx: tau =4T 
             "tau_down":0.045,    #
             "sim_steps_per_action" : 1,
-            "disturbance_chance": 0.001,       
+            "disturbance_chance": 0.0001,       
         },
         "TOTAL_TIMESTEPS": 10_000_000_000,
         "NUM_ENVS": 16384,
@@ -153,7 +153,7 @@ def main():
         "CLIP_EPS": 0.2,
         "VF_COEF": 0.5,
         "ENT_COEF": 0.01,
-        "GAMMA": 0.99,
+        "GAMMA": 0.995,
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
         "ACTOR_ARCH": [64, 64],
