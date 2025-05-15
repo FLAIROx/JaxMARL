@@ -235,7 +235,7 @@ class QuadEnv(PipelineEnv):
     # randomize max_thrust between in range
     rng, mt_rng = jax.random.split(rng)
     factor = jax.random.uniform(mt_rng, (), minval=1.0 - self.max_thrust_range, maxval=1.0)
-    asymmetry_factors = jax.random.normal(rng, (self.sys.nu,)) * 0.1 + 1.0
+    asymmetry_factors = jax.random.normal(rng, (self.sys.nu,)) * 0.05 + 1.0
     max_thrusts = self.base_max_thrust * factor * asymmetry_factors
     max_thrusts = jp.clip(max_thrusts, 0.0, self.base_max_thrust)
 
