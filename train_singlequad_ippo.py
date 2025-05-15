@@ -132,8 +132,8 @@ def main():
             "max_thrust_range": 0.2,
             "episode_length": 8192,
             "policy_freq": 500,
-            "tau_up": 0.045,   # T = 150ms => approx: tau =4T 
-            "tau_down":0.045,    #
+            "tau_up": 0.04,   # T = 150ms => approx: tau =4T 
+            "tau_down":0.04,    #
             "sim_steps_per_action" : 1,
             "disturbance_chance": 0.0001,       
         },
