@@ -615,9 +615,9 @@ class QuadEnv(PipelineEnv):
     noise_lookup = jp.concatenate([
         jp.ones(3) * 0.002,  # quad position
         jp.ones(9) * 0.01,   # quad rotation
-        jp.ones(3) * 0.1,   # quad linear velocity
+        jp.ones(3) * 0.05,   # quad linear velocity
         jp.ones(3) * 0.3,   # quad angular velocity
-        jp.ones(3) * 0.5,   # quad linear acceleration
+        jp.ones(3) * 0.3,   # quad linear acceleration
         jp.ones(4) * 0.05,    # last action
     ])
 

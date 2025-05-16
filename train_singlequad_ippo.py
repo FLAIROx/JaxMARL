@@ -153,7 +153,7 @@ def main():
         "CLIP_EPS": 0.2,
         "VF_COEF": 0.5,
         "ENT_COEF": 0.01,
-        "GAMMA": 0.99,
+        "GAMMA": 0.999,
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
         "ACTOR_ARCH": [64, 64],
