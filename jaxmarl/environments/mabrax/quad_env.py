@@ -40,9 +40,6 @@ class QuadEnv(PipelineEnv):
   The environment is initialized from a MuJoCo XML model and then converted into a Brax
   system using the MJX backend. The control actions (in [-1, 1]) are scaled into thrust commands.
   """
-  # total obs dims: 3(pos_error)+9(rot)+3(linvel)+3(angvel)+3(lin_acc)+4(last_action)
-  OBS_SIZE = 3 + 9 + 3 + 3 + 3 +4
-
   def __init__(
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
@@ -58,6 +55,7 @@ class QuadEnv(PipelineEnv):
       disturbance_chance: float = 0.0,      # chance per step to apply wrench
       disturbance_force: float = 0.0,       # linear‐force scale
       disturbance_torque: float = 0.0,      # angular‐torque scale
+      action_history_length: int = 1, # number of past actions in the observation
       **kwargs,
   ):
     print("Initializing QuadEnv")
@@ -86,6 +84,7 @@ class QuadEnv(PipelineEnv):
     self.disturbance_chance = disturbance_chance
     self.disturbance_force = disturbance_force
     self.disturbance_torque = disturbance_torque
+    self.action_history_length = action_history_length
    
     if reward_coeffs is None:
       reward_coeffs = {
@@ -139,9 +138,10 @@ class QuadEnv(PipelineEnv):
     # self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
     self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
 
+    # Override OBS_SIZE to account for history
+    base_dim = 3 + 9 + 3 + 3 + 3
+    self.OBS_SIZE = base_dim + self.sys.nu * self.action_history_length
 
-
-    
     print("IDs:")
     # print("Payload body ID:", self.payload_body_id)
     print("Quad 1 body ID:", self.q1_body_id)
@@ -314,10 +314,13 @@ class QuadEnv(PipelineEnv):
     last_action = jax.random.normal(rng1, shape=last_action.shape) * 0.4
     last_action = jp.clip(last_action, -1.0, 1.0)
 
+    # Build initial history = [last_action,...] repeated
+    last_action_history = jp.concatenate([last_action] * self.action_history_length)
+
     rng, noise_key = jax.random.split(rng)       # new: split for observation noise
     obs = self._get_obs(
       pipeline_state,
-      last_action,
+      last_action_history,
       self.target_position,
       noise_key,
       prev_linvel=jp.zeros(3)
@@ -336,7 +339,7 @@ class QuadEnv(PipelineEnv):
       'time': pipeline_state.time,
       'reward': reward,
       'max_thrusts': max_thrusts,
-      'last_action': last_action,
+      'last_action_history': last_action_history,
       'last_thrust': init_thrust,
       'tau_up': tau_up,
       'tau_down': tau_down,
@@ -383,14 +386,20 @@ class QuadEnv(PipelineEnv):
     Returns:
         The next state.
     """
-    # Extract previous action from the observation.
-    last_action =  state.obs[-self.sys.nu:]#state.metrics['last_action']
+    # Extract previous action history from the metrics.
+    prev_hist = state.metrics['last_action_history']
     
     if self.debug:
-      jax.debug.print("last_action: {last_action}", last_action=last_action)
+      jax.debug.print("prev_hist: {prev_hist}", prev_hist=prev_hist)
       jax.debug.print("action: {action}", action=action)
 
     clipped_action = jp.clip(action, -1.0, 1.0)
+
+    # Retrieve history and append new action
+    new_hist = jp.concatenate([
+      prev_hist[self.sys.nu:],
+      clipped_action
+    ]) if self.action_history_length > 1 else clipped_action
 
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrusts = state.metrics['max_thrusts']
@@ -486,14 +495,14 @@ class QuadEnv(PipelineEnv):
     prev_linvel = state.metrics.get('prev_linvel', jp.zeros(3))
     obs = self._get_obs(
       pipeline_state,
-      action,
+      new_hist,
       self.target_position,
       noise_key,
       prev_linvel
     )
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds, action,
-        angle_q1, last_action, self.target_position,
+        angle_q1, prev_hist[-self.sys.nu:], self.target_position,
         pipeline_state, max_thrusts
     )
 
@@ -519,7 +528,7 @@ class QuadEnv(PipelineEnv):
       'time': pipeline_state.time,
       'reward': reward,
       'max_thrusts': state.metrics['max_thrusts'],
-      'last_action': clipped_action,
+      'last_action_history': new_hist,
       'last_thrust': motor_thrusts_N,
       'tau_up':  state.metrics['tau_up'],
       'tau_down': state.metrics['tau_down'],
@@ -532,7 +541,7 @@ class QuadEnv(PipelineEnv):
 
   def _get_obs(self,
                data: base.State,
-               last_action: jp.ndarray,
+               last_action_history: jp.ndarray,
                target_position: jp.ndarray,
                noise_key,
                prev_linvel: jp.ndarray = None
@@ -596,7 +605,7 @@ class QuadEnv(PipelineEnv):
         quad1_linvel,         # (3,)  12:15
         quad1_angvel,         # (3,)  15:18
         quad1_linear_acc,     # (3,)  18:21
-        last_action,          # (4,)  21:25
+        last_action_history,  # (4 * action_history_length,)  21:...
     ])
 
     if self.debug:
@@ -605,7 +614,7 @@ class QuadEnv(PipelineEnv):
       jax.debug.print("quad1_linvel: {quad1_linvel}", quad1_linvel=quad1_linvel)
       jax.debug.print("quad1_angvel: {quad1_angvel}", quad1_angvel=quad1_angvel)
       jax.debug.print("quad1_linear_acc: {quad1_linear_acc}", quad1_linear_acc=quad1_linear_acc)
-     # jax.debug.print("last_action: {last_action}", last_action=last_action)
+     # jax.debug.print("last_action_history: {last_action_history}", last_action_history=last_action_history)
 
 
     # runtime check
@@ -618,7 +627,7 @@ class QuadEnv(PipelineEnv):
         jp.ones(3) * 0.05,   # quad linear velocity
         jp.ones(3) * 0.3,   # quad angular velocity
         jp.ones(3) * 0.3,   # quad linear acceleration
-        jp.ones(4) * 0.05,    # last action
+        jp.ones(self.sys.nu * self.action_history_length) * 0.0,  # action history
     ])
 
     if self.obs_noise != 0.0:
