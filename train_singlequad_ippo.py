@@ -118,8 +118,8 @@ def main():
         "taut_reward_coef": 0.0,
         "collision_penalty_coef": -10.0,
         "out_of_bounds_penalty_coef": -10.0,
-        "smooth_action_coef": -5.0,
-        "action_energy_coef": -0.1,
+        "smooth_action_coef": -10.0,
+        "action_energy_coef": -0.3,
         "yaw_reward_coef": 0.0,
     }
     # Build configuration for IPPO training on multiquad_2x4
