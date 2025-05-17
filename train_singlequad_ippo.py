@@ -135,7 +135,7 @@ def main():
             "tau_up": 0.05,   # T = 150ms => approx: tau =4T 
             "tau_down":0.05,    #
             "sim_steps_per_action" : 1,
-            "disturbance_chance": 0.0, #1/(500*5),  # one every  5 seconds    
+            "disturbance_chance": 1/(500*5),  # one every  5 seconds    
             "action_history_length": 32,
         },
         "TOTAL_TIMESTEPS": 10_000_000_000,
