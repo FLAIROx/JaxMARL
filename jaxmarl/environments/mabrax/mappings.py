@@ -179,7 +179,7 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
          (18,20)],
     },
     "quad_1x4": {
-        "agent_0": [(0, 24)],  # 24 with actions
+        "agent_0": [(0, 20 + 32*4)],  # 20 + 128 with actions
     },
 }
 
