@@ -704,7 +704,8 @@ class QuadEnv(PipelineEnv):
     vel_dir = jp.where(jp.abs(vel) > 1e-6, linvel_q1 / vel, jp.zeros_like(linvel_q1))
   
 
-    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
+    #aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
+    aligned_vel = 1 - jp.abs(1 - jp.dot(vel_dir, target_dir))* dis * 3 
     velocity_towards_target = aligned_vel
   
     # vel_cap = 3.45 - 0.115 * vel**4
@@ -719,7 +720,8 @@ class QuadEnv(PipelineEnv):
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
     smooth_action_penalty /= self.time_per_action * 1000  # normlize for frequency
 
-    action_energy_penalty = jp.mean((0.5 * (action + 1))**2)
+    action_energy_penalty = jp.mean((0.5 * (action + 1))**2) * jp.clip(sim_time * 0.2, 0.0, 1.0)
+
 
     # Yaw‐angle penalty: extract yaw from quaternion and penalize its magnitude
     quat = data.xquat[self.q1_body_id]
