@@ -310,7 +310,7 @@ class QuadEnv(PipelineEnv):
     
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
-    last_action = jp.ones(self.sys.nu) * 1.1 # start with 1.1 to signal uninitialized
+    last_action = jp.zeros(self.sys.nu)
     # last_action = jax.random.normal(rng1, shape=last_action.shape) * 0.4
     # last_action = jp.clip(last_action, -1.0, 1.0)
 
@@ -664,8 +664,8 @@ class QuadEnv(PipelineEnv):
     # Safety and smoothness penalties.
     quad1_obs = obs   
 
-    collision_penalty = 1.0 * collision * jp.clip( 0.2 * sim_time, 0.5, 5.0)
-    # out_of_bounds_penalty = 50.0 * out_of_bounds
+    collision_penalty = 1.0 * collision 
+    out_of_bounds_penalty = 1.0 * out_of_bounds
 
     # Reward for quad orientations (encouraging them to remain upright).
     up_reward = er(angle_q1) 
@@ -759,7 +759,7 @@ class QuadEnv(PipelineEnv):
 
     #penalties
     safety_reward = self.reward_coeffs["collision_penalty_coef"] * collision_penalty
-    safety_reward += self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
+    safety_reward += self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds_penalty
     safety_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
     safety_reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
     #safety_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
