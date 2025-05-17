@@ -720,7 +720,7 @@ class QuadEnv(PipelineEnv):
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
     smooth_action_penalty /= self.time_per_action * 1000  # normlize for frequency
 
-    action_energy_penalty = jp.mean((0.5 * (action + 1))**2) * jp.clip(sim_time * 0.2, 0.0, 1.0)
+    action_energy_penalty = jp.mean((0.5 * (action + 1))**2) * jp.clip(sim_time - 5.0, 0.0, 1.0)
 
 
     # Yaw‐angle penalty: extract yaw from quaternion and penalize its magnitude
