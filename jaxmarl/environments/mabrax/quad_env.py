@@ -767,7 +767,7 @@ class QuadEnv(PipelineEnv):
   
     # Combine all rewards and penalties.
    
-    reward = tracking_reward * (stability_reward + safety_reward)
+    reward = tracking_reward + stability_reward + safety_reward
     
   
 
