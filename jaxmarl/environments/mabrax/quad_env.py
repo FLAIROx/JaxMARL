@@ -310,7 +310,7 @@ class QuadEnv(PipelineEnv):
     
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
-    last_action = - jp.ones(self.sys.nu) * 1.1 # start with -1.1 to signal uninitialized
+    last_action = jp.zeros(self.sys.nu)
     # last_action = jax.random.normal(rng1, shape=last_action.shape) * 0.4
     # last_action = jp.clip(last_action, -1.0, 1.0)
 
