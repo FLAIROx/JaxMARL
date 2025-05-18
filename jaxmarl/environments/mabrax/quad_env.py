@@ -690,6 +690,8 @@ class QuadEnv(PipelineEnv):
     # #linvel_quad_reward = er(jp.linalg.norm(linvel_q1)) # lower linvel range closer to target
 
     ang_vel_reward = er(jp.linalg.norm(ang_vel_q1), 20) - 0.1 * jp.abs(ang_vel_q1[2])
+
+    yaw_reward = er(ang_vel_q1[2], 20)
     
     linvel_q1 = quad1_obs[12:15] 
 
@@ -704,8 +706,7 @@ class QuadEnv(PipelineEnv):
     vel_dir = jp.where(jp.abs(vel) > 1e-6, linvel_q1 / vel, jp.zeros_like(linvel_q1))
   
 
-    #aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
-    aligned_vel = 1 - jp.abs(1 - jp.dot(vel_dir, target_dir))* dis * 3 
+    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
     velocity_towards_target = aligned_vel
   
     # vel_cap = 3.45 - 0.115 * vel**4
@@ -720,14 +721,14 @@ class QuadEnv(PipelineEnv):
     smooth_action_penalty = jp.mean(jp.abs(action - last_action))
     smooth_action_penalty /= self.time_per_action * 1000  # normlize for frequency
 
-    action_energy_penalty = jp.mean((0.5 * (action + 1))**2) * jp.clip(sim_time - 5.0, 0.0, 1.0)
+    action_energy_penalty = jp.mean((0.5 * (action + 1))**2)
 
 
     # Yaw‐angle penalty: extract yaw from quaternion and penalize its magnitude
     quat = data.xquat[self.q1_body_id]
     w, x, y, z = quat
     yaw = jp.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
-    yaw_reward =  er(yaw)
+    #yaw_reward =  er(yaw)
 
     quad_mass =  0.033 
     # Compute thrust to compensate for gravity.
@@ -737,6 +738,7 @@ class QuadEnv(PipelineEnv):
     action_gravity = jp.clip(thrust_gravity_per_motor / max_thrust, 0.0, 1.0)
     # compute thrust to compensate for gravity and thrust from motor model
     thrust_reward = jp.mean(er(action_gravity - action))
+
 
 
 
@@ -756,6 +758,7 @@ class QuadEnv(PipelineEnv):
     #stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
     stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
     #stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
+    stability_reward += self.reward_coeffs["yaw_reward_coef"] * yaw_reward
     #stability_reward += thrust_reward
     
 
