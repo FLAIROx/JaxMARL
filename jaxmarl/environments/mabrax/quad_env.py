@@ -44,7 +44,7 @@ class QuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      episode_length: int = 3072,                  # Maximum simulation time per episode.
+      episode_length: int = 8192, # number of steps in an episode
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
@@ -154,6 +154,12 @@ class QuadEnv(PipelineEnv):
     # print("Quad 2 qpos start:", self.q2_qpos_start)
     print("Noise_level:", self.obs_noise)
     print("QuadEnv initialized successfully.")
+
+    print("Episode length:", episode_length)
+    print("Policy frequency:", policy_freq)
+    print("Simulation steps per action:", sim_steps_per_action)
+    print("Time per action:", self.time_per_action)
+    print("Max time:", self.max_time)
 
         # Throw error if any ids are not found in a short way
     # if self.payload_body_id == -1 or self.q1_body_id == -1 or self.q2_body_id == -1:
@@ -478,7 +484,10 @@ class QuadEnv(PipelineEnv):
     max_time_to_target = self.max_time
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
     max_quad_error = 10 * jp.exp(-5 * time_progress) # high error tolerance in the beginning, low error (~6cm) at the end
+    jax.debug.print("max_quad_error: {max_quad_error}", max_quad_error=max_quad_error)
     out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
+    jax.debug.print("quad_error_norm: {quad_error_norm}", quad_error_norm=quad_error_norm)
+    jax.debug.print("out_of_bounds: {out_of_bounds}", out_of_bounds=out_of_bounds)
 
 
 
@@ -717,7 +726,7 @@ class QuadEnv(PipelineEnv):
     # target_reward *= jp.exp(-1.4 * jp.abs(dis))
 
 
-    smooth_action_penalty = jp.mean(jp.abs(action - last_action))
+    smooth_action_penalty = jp.sum(jp.abs(action - last_action))
     smooth_action_penalty /= self.time_per_action * 1000  # normlize for frequency
 
     action_energy_penalty = jp.mean((0.5 * (action + 1))**2)
