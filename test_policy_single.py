@@ -30,7 +30,7 @@ config = {
         "obs_noise": 1.0,
         "act_noise": 0.1,
         "debug": True,
-        "episode_length": 3072,
+        "episode_length": 8192,
         "policy_freq": 500,
         "tau_up": 0.15/4,   # 60ms   
         "tau_down": 0.15/4,    # 5ms

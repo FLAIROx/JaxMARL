@@ -44,7 +44,7 @@ class QuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      episode_length: int = 3072, # number of steps in an episode
+      episode_length: int = 8192, # number of steps in an episode
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
@@ -484,10 +484,7 @@ class QuadEnv(PipelineEnv):
     max_time_to_target = self.max_time
     time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
     max_quad_error = 10 * jp.exp(-5 * time_progress) # high error tolerance in the beginning, low error (~6cm) at the end
-    jax.debug.print("max_quad_error: {max_quad_error}", max_quad_error=max_quad_error)
     out_of_bounds = jp.logical_or(out_of_bounds, quad_error_norm > max_quad_error)
-    jax.debug.print("quad_error_norm: {quad_error_norm}", quad_error_norm=quad_error_norm)
-    jax.debug.print("out_of_bounds: {out_of_bounds}", out_of_bounds=out_of_bounds)
 
 
 
