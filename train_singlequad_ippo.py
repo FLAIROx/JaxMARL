@@ -129,7 +129,7 @@ def main():
             "reward_coeffs": default_reward_coeffs,
             "obs_noise": 1.0,
             "act_noise": 0.1,
-            "max_thrust_range": 0.2,
+            "max_thrust_range": 0.3,
             "episode_length": 8192,
             "policy_freq": 500,
             "tau_up": 0.05,   # T = 150ms => approx: tau =4T 

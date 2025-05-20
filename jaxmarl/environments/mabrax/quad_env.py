@@ -404,8 +404,8 @@ class QuadEnv(PipelineEnv):
     # Retrieve history and append new action
     new_hist = jp.concatenate([
       prev_hist[self.sys.nu:],
-      clipped_action
-    ]) if self.action_history_length > 1 else clipped_action
+      action
+    ]) if self.action_history_length > 1 else action
 
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrusts = state.metrics['max_thrusts']
@@ -628,11 +628,11 @@ class QuadEnv(PipelineEnv):
 
     # Lookup for noise scale factors (each multiplied with self.obs_noise):
     noise_lookup = jp.concatenate([
-        jp.ones(3) * 0.002,  # quad position
+        jp.ones(3) * 0.005,  # quad position
         jp.ones(9) * 0.01,   # quad rotation
-        jp.ones(3) * 0.05,   # quad linear velocity
-        jp.ones(3) * 0.3,   # quad angular velocity
-        jp.ones(3) * 0.3,   # quad linear acceleration
+        jp.ones(3) * 0.1,   # quad linear velocity
+        jp.ones(3) * 0.1,   # quad angular velocity
+        jp.ones(3) * 0.1,   # quad linear acceleration
         jp.ones(self.sys.nu * self.action_history_length) * 0.0,  # action history
     ])
 
