@@ -44,7 +44,7 @@ class QuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      episode_length: int = 8192, # number of steps in an episode
+      episode_length: int = 6144, # number of steps in an episode
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
