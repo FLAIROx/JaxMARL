@@ -199,7 +199,7 @@ def make_train(config, env):
         )
 
         def create_agent(rng):
-            init_x = jnp.zeros((1, *env.observation_space().shape))
+            init_x = jnp.zeros((1, *env.observation_space("agent_0").shape))
             network_variables = network.init(rng, init_x, train=False)
 
             lr_scheduler = optax.linear_schedule(
