@@ -86,9 +86,9 @@ class SimpleFacmacMPE(SimpleMPE):
 
         # Overwrite action and observation spaces
         self.observation_spaces = {
-            i: Box(-jnp.inf, jnp.inf, (16,)) for i in self.adversaries
+            i: Box(-jnp.inf, jnp.inf, (16,)) for i in agents
         }
-        self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in self.adversaries}
+        self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in agents}
 
         # Introduce partial observability by limiting the agents' view radii
         self.view_radius = jnp.concatenate(

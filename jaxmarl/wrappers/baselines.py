@@ -320,12 +320,6 @@ class CTRolloutManager(JaxMARLWrapper):
         # it's important to know it in order to compute properly the default global rewards and state
         self.training_agents = self.agents if training_agents is None else training_agents  
         self.preprocess_obs = preprocess_obs  
-
-        # TOREMOVE: this is because overcooked doesn't follow other envs conventions
-        if len(env.observation_spaces) == 0:
-            self.observation_spaces = {agent:self.observation_space() for agent in self.agents}
-        if len(env.action_spaces) == 0:
-            self.action_spaces = {agent:env.action_space() for agent in self.agents}
         
         # batched action sampling
         self.batch_samplers = {agent: jax.jit(jax.vmap(self.action_space(agent).sample, in_axes=0)) for agent in self.agents}
