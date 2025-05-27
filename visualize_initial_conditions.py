@@ -34,7 +34,9 @@ def main():
     # Minimal configuration for generating initial states
     config = {
         "ENV_NAME": "multiquad_2x4",
-        "ENV_KWARGS": {},
+        "ENV_KWARGS": {
+            "num_quads":3,
+        },
         "SEED": 0,
     }
 

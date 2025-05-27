@@ -49,12 +49,13 @@ class MultiQuadEnv(PipelineEnv):
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
       max_thrust_range: float = 0.3,               # range for randomizing thrust
+      num_quads = 2,
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
     # Load the MJX model from the XML file.
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    xml_path = os.path.join(current_dir, "mujoco", "two_quad_payload.xml")
+    xml_path = os.path.join(current_dir, "mujoco", "three_quad_payload.xml")
     mj_model = mujoco.MjModel.from_xml_path(xml_path)
     # Convert the MuJoCo model to a Brax system.
     sys = mjcf.load_model(mj_model)
@@ -103,122 +104,119 @@ class MultiQuadEnv(PipelineEnv):
     self.max_thrust_range = max_thrust_range
     # Define the target goal for the payload.
     self.goal_center = jp.array([0.0, 0.0, 1.5])
-    self.target_position = self.goal_center
+    self.target_position = self.goal_center 
 
-    # Cache body IDs (if still needed)
+    # Cache body IDs
+
+    # add number-of-quads from env var (default=2)
+    self.num_quads = num_quads
+
+    # cache quad body/joint/qpos-start indices in lists
+    # assumes model has bodies "q0_container", ..., joints "q0_joint", ...
+    self.quad_body_ids = [
+      mujoco.mj_name2id(sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, f"q{i}_container")
+      for i in range(self.num_quads)
+    ]
+    self.quad_joint_ids = [
+      mujoco.mj_name2id(sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, f"q{i}_joint")
+      for i in range(self.num_quads)
+    ]
+    self.quad_qpos_starts = [sys.mj_model.jnt_qposadr[j] for j in self.quad_joint_ids]
+
     self.payload_body_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "payload")
-    self.q1_body_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q0_container")
-    self.q2_body_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "q1_container")
-
-    # Cache joint IDs using the new API.
     self.payload_joint_id = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "payload_joint")
-    self.q1_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q0_joint")
-    self.q2_joint_id = mujoco.mj_name2id(
-        sys.mj_model, mujoco.mjtObj.mjOBJ_JOINT.value, "q1_joint")
-
-    # Cache the starting indices in qpos from the model.
     self.payload_qpos_start = sys.mj_model.jnt_qposadr[self.payload_joint_id]
-    self.q1_qpos_start = sys.mj_model.jnt_qposadr[self.q1_joint_id]
-    self.q2_qpos_start = sys.mj_model.jnt_qposadr[self.q2_joint_id]
 
+    # --- ADD THESE HELPERS SO q1_/q2_ attrs exist ---
+    self.q1_body_id     = self.quad_body_ids[0]
+    self.q2_body_id     = self.quad_body_ids[1] if self.num_quads > 1 else self.quad_body_ids[0]
+    self.q1_qpos_start  = self.quad_qpos_starts[0]
+    self.q2_qpos_start  = self.quad_qpos_starts[1] if self.num_quads > 1 else self.quad_qpos_starts[0]
+    # --- end helpers ---
 
-    
     print("IDs:")
     print("Payload body ID:", self.payload_body_id)
-    print("Quad 1 body ID:", self.q1_body_id)
-    print("Quad 2 body ID:", self.q2_body_id)
     print("Payload joint ID:", self.payload_joint_id)
-    print("Quad 1 joint ID:", self.q1_joint_id)
-    print("Quad 2 joint ID:", self.q2_joint_id)
     print("Payload qpos start:", self.payload_qpos_start)
-    print("Quad 1 qpos start:", self.q1_qpos_start)
-    print("Quad 2 qpos start:", self.q2_qpos_start)
+
+    print("Quadrotor body IDs and joint IDs:")
+    for i in range(self.num_quads):
+      print(f"Quad {i} body ID:", self.quad_body_ids[i])
+      print(f"Quad {i} joint ID:", self.quad_joint_ids[i])
+      print(f"Quad {i} qpos start:", self.quad_qpos_starts[i])
+
+
+
     print("Noise_level:", self.obs_noise)
     print("MultiQuadEnv initialized successfully.")
 
-        # Throw error if any ids are not found in a short way
-    if self.payload_body_id == -1 or self.q1_body_id == -1 or self.q2_body_id == -1:
-      raise ValueError("One or more body IDs not found in the model.")
-    if self.payload_joint_id == -1 or self.q1_joint_id == -1 or self.q2_joint_id == -1:
-      raise ValueError("One or more joint IDs not found in the model.")
+
+
+    if (any(id == -1 for id in self.quad_body_ids) or
+        any(id == -1 for id in self.quad_joint_ids) or
+        self.payload_body_id == -1 or
+        self.payload_joint_id == -1):
+      raise ValueError("One or more body/joint IDs not found in the model.")
 
   @staticmethod
-  def generate_configuration(key, target_position):
-    subkeys = jax.random.split(key, 11)
-    min_quad_z = 0.008 # quad on ground
-    min_payload_z = 0.0055 # payload on ground
+  def generate_configuration(key, num_quads, cable_length):
+    # split once for payload and quads
+    subkeys = jax.random.split(key, 5)
+    min_qz, min_pz = 0.008, 0.0055
 
-    payload_xy = jax.random.uniform(subkeys[0], (2,), minval=-1.5, maxval=1.5)
-    payload_z = jax.random.uniform(subkeys[1], (), minval=-1.0, maxval=3.0)
-    uniform_payload_pos = jp.array([payload_xy[0], payload_xy[1], payload_z])
-    
-  
-    # mask: if True use uniform sample, if False use normal sample.
-    mask = jax.random.uniform(subkeys[9], (), minval=0.0, maxval=1.0) < 0.9
-    normal_payload_pos = target_position + jax.random.normal(subkeys[10], (3,)) * 0.1
-    
-    # Choose payload position based on mask.
-    payload_pos = jp.where(mask, uniform_payload_pos, normal_payload_pos)
+    # payload
+    xy = jax.random.uniform(subkeys[0], (2,), minval=-1.5, maxval=1.5)
+    pz = jax.random.uniform(subkeys[1], (), minval=-1.0, maxval=3.0)
+    payload = jp.array([xy[0], xy[1], pz.clip(min_pz, 3.0)])
 
-    # Parameters for Quad positions.
-    mean_r   = 0.3
-    std_r    = 0.1
-    clip_min = 0.05
-    clip_max = 0.3
-    mean_theta  = jp.pi / 7
-    mean_theta2 = -jp.pi / 7
-    std_theta   = jp.pi / 8
-    std_phi     = jp.pi / 3
+    # spherical params
+    mean_r, std_r = cable_length, cable_length/3
+    clip_r = (0.05, cable_length)
+    mean_th, std_th = jp.pi/7, jp.pi/8
+    std_phi = jp.pi/(num_quads+1)
+    # sample per-quad
+    r     = jp.clip(mean_r + std_r*jax.random.normal(subkeys[2], (num_quads,)), *clip_r)
+    th    = mean_th + std_th*jax.random.normal(subkeys[3], (num_quads,))
+    offset= jax.random.uniform(subkeys[4], (), minval=-jp.pi, maxval=jp.pi)
+    phi   = jp.arange(num_quads)*(2*jp.pi/num_quads) + std_phi*jax.random.normal(subkeys[4], (num_quads,)) + offset
 
-    # Quad 1.
-    r1     = jp.clip(mean_r + std_r * jax.random.normal(subkeys[2], ()), clip_min, clip_max)
-    theta1 = mean_theta + std_theta * jax.random.normal(subkeys[4], ())
-    # Quad 2.
-    r2     = jp.clip(mean_r + std_r * jax.random.normal(subkeys[3], ()), clip_min, clip_max)
-    theta2 = mean_theta2 + std_theta * jax.random.normal(subkeys[5], ())
+    # to Cartesian
+    x = r*jp.sin(th)*jp.cos(phi) + payload[0]
+    y = r*jp.sin(th)*jp.sin(phi) + payload[1]
+    z = jp.clip(r*jp.cos(th) + payload[2], min_qz, 3.0)
+    quads = jp.stack([x, y, z], axis=1)
 
-    # Common phi offset and individual noise.
-    phi_offset = jax.random.uniform(subkeys[6], (), minval=-jp.pi, maxval=jp.pi)
-    phi1 = std_phi * jax.random.normal(subkeys[7], ()) + phi_offset
-    phi2 = std_phi * jax.random.normal(subkeys[8], ()) + phi_offset
+    return payload, quads
 
-    # Convert spherical to Cartesian for Quad 1.
-    quad1_x = r1 * jp.sin(theta1) * jp.cos(phi1) + payload_pos[0]
-    quad1_y = r1 * jp.sin(theta1) * jp.sin(phi1) + payload_pos[1]
-    quad1_z = jp.clip(r1 * jp.cos(theta1) + payload_pos[2], min_quad_z, 3)
-    quad1_pos = jp.array([quad1_x, quad1_y, quad1_z])
-    
-    # Convert spherical to Cartesian for Quad 2.
-    quad2_x = r2 * jp.sin(theta2) * jp.cos(phi2) + payload_pos[0]
-    quad2_y = r2 * jp.sin(theta2) * jp.sin(phi2) + payload_pos[1]
-    quad2_z = jp.clip(r2 * jp.cos(theta2) + payload_pos[2], min_quad_z, 3)
-    quad2_pos = jp.array([quad2_x, quad2_y, quad2_z])
-
-    # Ensure payload is above ground.
-    payload_pos = payload_pos.at[2].set(jp.clip(payload_pos[2], min_payload_z, 3))
-    
-    return payload_pos, quad1_pos, quad2_pos
 
   @staticmethod
-  def generate_valid_configuration(key, target_position, oversample=5):
-    candidate_keys = jax.random.split(key, oversample)
-    # Use in_axes=(0, None) to broadcast target_position.
-    candidate_payload, candidate_quad1, candidate_quad2 = jax.vmap(
-        MultiQuadEnv.generate_configuration, in_axes=(0, None)
-    )(candidate_keys, target_position)
-    dist_quads = jp.linalg.norm(candidate_quad1 - candidate_quad2, axis=1)
-    dist_q1_payload = jp.linalg.norm(candidate_quad1 - candidate_payload, axis=1)
-    dist_q2_payload = jp.linalg.norm(candidate_quad2 - candidate_payload, axis=1)
-    
-    valid_mask = (dist_quads >= 0.16) & (dist_q1_payload >= 0.07) & (dist_q2_payload >= 0.07)
-    valid_index = jp.argmax(valid_mask)  # returns 0 if none are valid
-    
-    return candidate_payload[valid_index], candidate_quad1[valid_index], candidate_quad2[valid_index]
+  def generate_filtered_configuration_batch(key, batch_size, num_quads, cable_length):
+    # 1) oversample_factor=2
+    M = 2 * batch_size
+    keys = jax.random.split(key, M)
+    payloads, quadss = jax.vmap(
+      MultiQuadEnv.generate_configuration, in_axes=(0, None, None)
+    )(keys, num_quads, cable_length)  # shapes (M,3), (M,num_quads,3)
+
+    # 2) quad‐to‐quad min‐dist
+    diffs = quadss[:, :, None, :] - quadss[:, None, :, :]
+    dists = jp.linalg.norm(diffs, axis=-1)
+    eye = jp.eye(num_quads, dtype=bool)[None]
+    dists = jp.where(eye, jp.inf, dists)
+    min_quad = jp.min(dists, axis=(1,2))
+
+    # 3) quad‐to‐payload
+    pd = quadss - payloads[:, None, :]
+    min_payload = jp.min(jp.linalg.norm(pd, axis=-1), axis=1)
+
+    # 4) mask & pick top batch_size
+    mask = (min_quad>=0.16)&(min_payload>=0.07)
+    idx = jp.argsort(-mask.astype(jp.int32))[:batch_size]
+
+    return payloads[idx], quadss[idx]
+
 
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
@@ -234,57 +232,45 @@ class MultiQuadEnv(PipelineEnv):
     qvel = jp.clip(qvel, a_min=-5.0, a_max=5.0)
 
     # Get new positions for payload and both quadrotors.
-    payload_pos, quad1_pos, quad2_pos = MultiQuadEnv.generate_valid_configuration(rng_config, self.target_position)
+    payload_pos, quad_positions = MultiQuadEnv.generate_filtered_configuration_batch(
+      rng_config, 1, self.num_quads, self.cable_length
+    )
+    payload_pos = payload_pos[0]
+    quad_positions = quad_positions[0]  # shape (num_quads, 3)
 
-    # Generate new orientations (as quaternions) for the quadrotors.
+    # Generate orientations per quad and convert to quaternions
     rng, rng_euler = jax.random.split(rng, 2)
-    keys = jax.random.split(rng_euler, 6)
-    std_dev = 10 * jp.pi / 180   # 5° in radians.
-    clip_val = 60 * jp.pi / 180  # 60° in radians.
-
-    # Quadrotor 1: sample roll and pitch (clipped) and yaw uniformly.
-    roll_q1 = jp.clip(jax.random.normal(keys[0]) * std_dev, -clip_val, clip_val)
-    pitch_q1 = jp.clip(jax.random.normal(keys[1]) * std_dev, -clip_val, clip_val)
-    yaw_q1 = jax.random.uniform(keys[2], minval=-jp.pi, maxval=jp.pi)
-    # Quadrotor 2: similarly.
-    roll_q2 = jp.clip(jax.random.normal(keys[3]) * std_dev, -clip_val, clip_val)
-    pitch_q2 = jp.clip(jax.random.normal(keys[4]) * std_dev, -clip_val, clip_val)
-    yaw_q2 = jax.random.uniform(keys[5], minval=-jp.pi, maxval=jp.pi)
-
-    # Set roll and pitch to 0 if the quad's z value is below 0.01.
-    roll_q1 = jp.where(quad1_pos[2] < 0.02, 0.0, roll_q1)
-    pitch_q1 = jp.where(quad1_pos[2] < 0.02, 0.0, pitch_q1)
-    roll_q2 = jp.where(quad2_pos[2] < 0.02, 0.0, roll_q2)
-    pitch_q2 = jp.where(quad2_pos[2] < 0.02, 0.0, pitch_q2)
-
+    keys = jax.random.split(rng_euler, self.num_quads * 3)
+    std_dev = 10 * jp.pi / 180
+    clip_val = 60 * jp.pi / 180
+    quats = []
     def euler_to_quat(roll, pitch, yaw):
-      cr = jp.cos(roll * 0.5)
-      sr = jp.sin(roll * 0.5)
-      cp = jp.cos(pitch * 0.5)
-      sp = jp.sin(pitch * 0.5)
-      cy = jp.cos(yaw * 0.5)
-      sy = jp.sin(yaw * 0.5)
-      # MuJoCo now expects quaternions in (w, x, y, z) order.
-      return jp.array([
-          cr * cp * cy + sr * sp * sy,  # w
-          sr * cp * cy - cr * sp * sy,  # x
-          cr * sp * cy + sr * cp * sy,  # y
-          cr * cp * sy - sr * sp * cy,  # z
-      ])
+      cr = jp.cos(roll * 0.5); sr = jp.sin(roll * 0.5)
+      cp = jp.cos(pitch * 0.5); sp = jp.sin(pitch * 0.5)
+      cy = jp.cos(yaw * 0.5); sy = jp.sin(yaw * 0.5)
+      return jp.array([cr*cp*cy+sr*sp*sy,
+                       sr*cp*cy-cr*sp*sy,
+                       cr*sp*cy+sr*cp*sy,
+                       cr*cp*sy-sr*sp*cy])
+    for i in range(self.num_quads):
+      k0, k1, k2 = keys[3*i], keys[3*i+1], keys[3*i+2]
+      roll  = jp.clip(jax.random.normal(k0) * std_dev, -clip_val, clip_val)
+      pitch = jp.clip(jax.random.normal(k1) * std_dev, -clip_val, clip_val)
+      yaw   = jax.random.uniform(k2, minval=-jp.pi, maxval=jp.pi)
+      # zero out if too close to ground
+      roll  = jp.where(quad_positions[i][2] < 0.02, 0.0, roll)
+      pitch = jp.where(quad_positions[i][2] < 0.02, 0.0, pitch)
+      quats.append(euler_to_quat(roll, pitch, yaw))
+    quats = jp.stack(quats)
 
-    quat_q1 = euler_to_quat(roll_q1, pitch_q1, yaw_q1)
-    quat_q2 = euler_to_quat(roll_q2, pitch_q2, yaw_q2)
-
-    # Build the full qpos vector.
+    # Build the full qpos vector dynamically
     new_qpos = base_qpos
-    # Update payload position.
-    new_qpos = new_qpos.at[self.payload_qpos_start:self.payload_qpos_start+3].set(payload_pos)
-    # Update quadrotor positions.
-    new_qpos = new_qpos.at[self.q1_qpos_start:self.q1_qpos_start+3].set(quad1_pos)
-    new_qpos = new_qpos.at[self.q2_qpos_start:self.q2_qpos_start+3].set(quad2_pos)
-    # Update quadrotor orientations (starting 3 elements later).
-    new_qpos = new_qpos.at[self.q1_qpos_start+3:self.q1_qpos_start+7].set(quat_q1)
-    new_qpos = new_qpos.at[self.q2_qpos_start+3:self.q2_qpos_start+7].set(quat_q2)
+    new_qpos = new_qpos.at[self.payload_qpos_start:
+                           self.payload_qpos_start+3].set(payload_pos)
+    for i in range(self.num_quads):
+      start = self.quad_qpos_starts[i]
+      new_qpos = new_qpos.at[start:start+3].set(quad_positions[i])
+      new_qpos = new_qpos.at[start+3:start+7].set(quats[i])
     
     
     pipeline_state = self.pipeline_init(new_qpos, qvel)
