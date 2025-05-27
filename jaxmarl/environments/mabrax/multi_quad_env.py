@@ -152,13 +152,27 @@ class MultiQuadEnv(PipelineEnv):
     print("Noise_level:", self.obs_noise)
     print("MultiQuadEnv initialized successfully.")
 
+    # --- dynamic obs/action index table printout ---
+    obs_table = []
+    idx = 0
+    obs_table.append((f"{idx}-{idx+2}", "payload_error")); idx += 3
+    obs_table.append((f"{idx}-{idx+2}", "payload_linvel")); idx += 3
+    for i in range(self.num_quads):
+      for name, length in [
+        ("rel", 3), ("rot", 9),
+        ("linvel", 3), ("angvel", 3),
+        ("linear_acc", 3), ("angular_acc", 3)
+      ]:
+        obs_table.append((f"{idx}-{idx+length-1}", f"quad{i}_{name}"))
+        idx += length
+    start = idx
+    end = start + self.sys.nu - 1
+    obs_table.append((f"{start}-{end}", "last_action"))
 
-
-    if (any(id == -1 for id in self.quad_body_ids) or
-        any(id == -1 for id in self.quad_joint_ids) or
-        self.payload_body_id == -1 or
-        self.payload_joint_id == -1):
-      raise ValueError("One or more body/joint IDs not found in the model.")
+    print("Observation indices:")
+    for r, nm in obs_table:
+      print(f"  {r}: {nm}")
+    # --- end table ---
 
   @staticmethod
   def generate_configuration(key, num_quads, cable_length):
@@ -397,142 +411,42 @@ class MultiQuadEnv(PipelineEnv):
     distance = jp.linalg.norm(payload_error)
     payload_error = payload_error / jp.maximum(distance, 1.0)  # Normalize if distance > 1
 
-    # Convert payload_error from Cartesian to spherical global coordinates.
-    def cartesian_to_spherical(vec):
-        r = jp.linalg.norm(vec)
-        theta = jp.arccos(vec[2] / (r + 1e-6))
-        phi = jp.arctan2(vec[1], vec[0])
-        return jp.array([r, theta, phi])
-    #payload_error_sph = cartesian_to_spherical(payload_error)
 
-    # Quad 1 state.
-    quad1_pos = data.xpos[self.q1_body_id]
-    quad1_quat = data.xquat[self.q1_body_id]
-    quad1_linvel = data.cvel[self.q1_body_id][3:6]
-    quad1_angvel = data.cvel[self.q1_body_id][:3]
-    quad1_rel = quad1_pos - payload_pos
-    quad1_rot = jp_R_from_quat(quad1_quat).ravel()
-    quad1_linear_acc = data.cacc[self.q1_body_id][3:6]
-    quad1_angular_acc = data.cacc[self.q1_body_id][:3]
-    quad1_id = jp.array([1.0, 0.0])
+    # build dynamic obs list
+    obs_list = [payload_error, payload_linvel]
+    for i in range(self.num_quads):
+      pos = data.xpos[self.quad_body_ids[i]]
+      quat = data.xquat[self.quad_body_ids[i]]
+      rel = pos - payload_pos
+      rot = jp_R_from_quat(quat).ravel()
+      linvel = data.cvel[self.quad_body_ids[i]][3:6]
+      angvel = data.cvel[self.quad_body_ids[i]][:3]
+      linear_acc = data.cacc[self.quad_body_ids[i]][3:6]
+      angular_acc = data.cacc[self.quad_body_ids[i]][:3]
+      obs_list += [rel, rot, linvel, angvel, linear_acc, angular_acc]
+    obs_list.append(last_action)
+    obs = jp.concatenate(obs_list)
 
-    # Quad 2 state.
-    quad2_pos = data.xpos[self.q2_body_id]
-    quad2_quat = data.xquat[self.q2_body_id]
-    quad2_linvel = data.cvel[self.q2_body_id][3:6]
-    quad2_angvel = data.cvel[self.q2_body_id][:3]
-    quad2_rel = quad2_pos - payload_pos
-    quad2_rot = jp_R_from_quat(quad2_quat).ravel()
-    quad2_linear_acc = data.cacc[self.q2_body_id][3:6]
-    quad2_angular_acc = data.cacc[self.q2_body_id][:3]
-    quad2_id = jp.array([0.0, 1.0])
-
-
-
-    # # local-frame observations for each quad.
-    # # For quad1:
-    # R1 = jp_R_from_quat(quad1_quat)      # rotation matrix: local -> global
-    # R1_T = jp.transpose(R1)              # global -> local
-    # local_quad1_rel         = jp.matmul(R1_T, quad1_rel)
-    # local_quad1_linvel      = jp.matmul(R1_T, quad1_linvel)
-    # local_quad1_angvel      = jp.matmul(R1_T, quad1_angvel)
-    # local_quad1_linear_acc  = jp.matmul(R1_T, quad1_linear_acc)
-    # local_quad1_angular_acc = jp.matmul(R1_T, quad1_angular_acc)
-    # q1_q2_rel = quad2_pos - quad1_pos
-    # local_q1_q2_rel = jp.matmul(R1_T, q1_q2_rel)
-    # local_q1_payload_error = jp.matmul(R1_T, payload_error)
-    # local_q1_payload_linvel = jp.matmul(R1_T, payload_linvel)
-
-    # # For quad2:
-    # R2 = jp_R_from_quat(quad2_quat)
-    # R2_T = jp.transpose(R2)
-    # local_quad2_rel         = jp.matmul(R2_T, quad2_rel)
-    # local_quad2_linvel      = jp.matmul(R2_T, quad2_linvel)
-    # local_quad2_angvel      = jp.matmul(R2_T, quad2_angvel)
-    # local_quad2_linear_acc  = jp.matmul(R2_T, quad2_linear_acc)
-    # local_quad2_angular_acc = jp.matmul(R2_T, quad2_angular_acc)
-    # local_q2_q1_rel = jp.matmul(R2_T, -q1_q2_rel)
-    # local_q2_payload_error = jp.matmul(R2_T, payload_error)
-    # local_q2_payload_linvel = jp.matmul(R2_T, payload_linvel)
-    
-    # # Helper function to convert Cartesian to spherical coordinates.
-    # def cartesian_to_spherical(vec):
-    #     r = jp.linalg.norm(vec) + 1e-6
-    #     theta = jp.arccos(vec[2] / r)
-    #     phi = jp.arctan2(vec[1], vec[0])
-    #     return jp.array([r, theta, phi])
-    
-    # # Compute spherical coordinates for the relevant local vectors.
-    # sph_local_quad1_rel = cartesian_to_spherical(local_quad1_rel)
-    # sph_local_quad2_rel = cartesian_to_spherical(local_quad2_rel)
-    # sph_local_q1_payload_error = cartesian_to_spherical(local_q1_payload_error)
-    # sph_local_q2_payload_error = cartesian_to_spherical(local_q2_payload_error)
-    # sph_local_q1_q2_rel = cartesian_to_spherical(local_q1_q2_rel)
-    # sph_local_q2_q1_rel = cartesian_to_spherical(local_q2_q1_rel)
-
-    obs = jp.concatenate([
-      # ----                  # Shape  Index
-        payload_error,        # (3,)  0-2
-        payload_linvel,       # (3,)  3-5
-        quad1_rel,            # (3,)  6-8
-        quad1_rot,            # (9,)  9-17
-        quad1_linvel,         # (3,)  18-20
-        quad1_angvel,         # (3,)  21-23
-        quad1_linear_acc,     # (3,)  24-26
-        quad1_angular_acc,    # (3,)  27-29
-        quad2_rel,            # (3,)  30-32
-        quad2_rot,            # (9,)  33-41
-        quad2_linvel,         # (3,)  42-44
-        quad2_angvel,         # (3,)  45-47
-        quad2_linear_acc,     # (3,)  48-50
-        quad2_angular_acc,    # (3,)  51-53
-        last_action,          # (8,)  54-61
-        # local_quad1_rel,      # (3,)  62-64
-        # local_quad1_linvel,   # (3,)  65-67
-        # local_quad1_angvel,   # (3,)  68-70
-        # local_quad1_linear_acc, # (3,) 71-73
-        # local_quad1_angular_acc, # (3,) 74-76
-        # local_quad2_rel,      # (3,)  77-79
-        # local_quad2_linvel,   # (3,)  80-82
-        # local_quad2_angvel,   # (3,)  83-85
-        # local_quad2_linear_acc, # (3,) 86-88
-        # local_quad2_angular_acc, # (3,) 89-91
-        # local_q1_q2_rel,      # (3,)  92-94
-        # local_q2_q1_rel,      # (3,)  95-97
-        # local_q1_payload_error, # (3,) 98-100
-        # local_q1_payload_linvel, # (3,) 101-103
-        # local_q2_payload_error, # (3,) 104-106
-        # local_q2_payload_linvel, # (3,) 107-109
-        # sph_local_quad1_rel,        # (3,) 110-112
-        # sph_local_quad2_rel,        # (3,) 113-115
-        # sph_local_q1_payload_error, # (3,) 116-118
-        # sph_local_q2_payload_error, # (3,) 119-121
-        # sph_local_q1_q2_rel,        # (3,) 122-124
-        # sph_local_q2_q1_rel,        # (3,) 125-127
-    ])
-
-    # Lookup for noise scale factors (each multiplied with self.obs_noise):
-    noise_lookup = jp.concatenate([
-        jp.ones(3) * 0.005,  # indices 0-2: payload_error noise scale
-        jp.ones(3) * 0.05,  # indices 3-5: payload_linvel noise scale
-        jp.ones(3) * 0.02,  # indices 6-8: quad1_rel noise scale
-        jp.ones(9) * 0.005, # indices 9-17: quad1_rot noise scale
-        jp.ones(3) * 0.05,  # indices 18-20: quad1_linvel noise scale
-        jp.ones(3) * 0.08,  # indices 21-23: quad1_angvel noise scale
-        jp.ones(3) * 0.05,  # indices 24-26: quad1_linear_acc noise scale
-        jp.ones(3) * 0.05,  # indices 27-29: quad1_angular_acc noise scale
-        jp.ones(3) * 0.02,  # indices 30-32: quad2_rel noise scale
-        jp.ones(9) * 0.005, # indices 33-41: quad2_rot noise scale
-        jp.ones(3) * 0.05,  # indices 42-44: quad2_linvel noise scale
-        jp.ones(3) * 0.08,  # indices 45-47: quad2_angvel noise scale
-        jp.ones(3) * 0.05,  # indices 48-50: quad2_linear_acc noise scale
-        jp.ones(3) * 0.05,  # indices 51-53: quad2_angular_acc noise scale
-        jp.ones(8) * 0.0,   # indices 54-61: last_action noise scale
-    ])
+    # build dynamic noise lookup
+    noise_list = [
+      jp.ones(3)*0.005,  # payload_error
+      jp.ones(3)*0.05    # payload_linvel
+    ]
+    for _ in range(self.num_quads):
+      noise_list += [
+        jp.ones(3)*0.02,    # rel
+        jp.ones(9)*0.005,   # rot
+        jp.ones(3)*0.05,    # linvel
+        jp.ones(3)*0.08,    # angvel
+        jp.ones(3)*0.05,    # linear_acc
+        jp.ones(3)*0.05     # angular_acc
+      ]
+    noise_list.append(jp.ones(self.sys.nu)*0.0)  # last_action
+    noise_lookup = jp.concatenate(noise_list)
 
     if self.obs_noise != 0.0:
-        noise = self.obs_noise * noise_lookup * jax.random.normal(noise_key, shape=obs.shape)
-        obs = obs + noise
+      noise = self.obs_noise * noise_lookup * jax.random.normal(noise_key, obs.shape)
+      obs = obs + noise
     return obs
 
   def calc_reward(self, obs, sim_time, collision, out_of_bounds, action,
