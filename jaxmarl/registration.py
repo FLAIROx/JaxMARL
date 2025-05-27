@@ -93,6 +93,8 @@ def make(env_id: str, **env_kwargs):
         env = Walker2d(**env_kwargs)
     elif env_id == "multiquad_2x4":
         env = MultiQuad(**env_kwargs)
+    elif env_id == "multiquad_ix4":
+        env = MultiQuad(**env_kwargs)
     elif env_id == "quad_1x4":
         env = Quad(**env_kwargs)
 
