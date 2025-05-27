@@ -149,6 +149,7 @@ registered_envs = [
     "humanoid_9|8",
     "walker2d_2x3",
     "multiquad_2x4",
+    "multiquad_ix4",
     "quad_1x4",
     "storm",
     "storm_2p",

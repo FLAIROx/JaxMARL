@@ -41,10 +41,10 @@ _agent_action_mapping = {
         "agent_0": jnp.array([0, 1, 2, 3]),
     },
     "multiquad_3x4": {
-        "agent_0": jnp.array([0, 1, 2, 3]),
-        "agent_1": jnp.array([4, 5, 6, 7]),
-        "agent_2": jnp.array([8, 9, 10, 11])
-    }
+        "agent_0": jnp.array([0,  1,  2,  3]),
+        "agent_1": jnp.array([4,  5,  6,  7]),
+        "agent_2": jnp.array([8,  9, 10, 11]),
+    },
 }
 
 
@@ -183,7 +183,7 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     },
 }
 
-# dynamic mapping for i quad agents
+# dynamic mapping for ix4 observations
 _NUM_QUADS    = 3  
 _OBS_OFF      = 6       # payload_error (0–2) + payload_linvel (3–5)
 _STATE_BLOCK  = 24      # per-quad features total
@@ -211,6 +211,12 @@ for i in range(_NUM_QUADS):
     _dyn_ix4[f"agent_{i}"] = idxs
 print(f"Dynamic ix4 mapping: {_dyn_ix4}")
 ranges["multiquad_ix4"] = _dyn_ix4
+
+# --- ADD DYNAMIC ACTION MAPPING FOR ix4 ---
+_agent_action_mapping["multiquad_ix4"] = {
+    f"agent_{i}": jnp.arange(i * _NU_PER_AGENT, (i + 1) * _NU_PER_AGENT)
+    for i in range(_NUM_QUADS)
+}
 
 _agent_observation_mapping = {
     k: {k_: jnp.array(listerize(v_)) for k_, v_ in v.items()} for k, v in ranges.items()

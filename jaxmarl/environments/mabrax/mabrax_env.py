@@ -246,7 +246,7 @@ class Walker2d(MABraxEnv):
 
 class MultiQuad(MABraxEnv):
     def __init__(self, episode_length=8192, **kwargs):
-        super().__init__("multiquad_2x4", episode_length=episode_length, **kwargs)
+        super().__init__("multiquad_ix4", episode_length=episode_length, **kwargs)
 
 class Quad(MABraxEnv):
     def __init__(self, episode_length=8192, **kwargs):
