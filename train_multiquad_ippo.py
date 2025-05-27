@@ -222,7 +222,7 @@ def main():
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
 
     # Simulation: run an episode using the trained policy
-    sim_steps = 1000
+    sim_steps = 20000
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
     rollout = [state[1]]

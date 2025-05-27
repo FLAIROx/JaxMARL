@@ -348,10 +348,10 @@ class MultiQuadEnv(PipelineEnv):
     min_dist = jp.min(jp.where(eye, jp.inf, dists))
     quad_collision = min_dist < 0.15
 
-    # ground collision if all quads AND payload near ground
-    ground_collision_quad    = jp.all(qp[:, 2] < 0.03)
+    # ground collision if any quads AND payload near ground
+    ground_collision_quad    = jp.any(qp[:, 2] < 0.03)
     ground_collision_payload = pipeline_state.xpos[self.payload_body_id][2] < 0.03
-    ground_collision = jp.logical_and(ground_collision_quad, ground_collision_payload)
+    ground_collision = jp.logical_or(ground_collision_quad, ground_collision_payload)
     collision       = jp.logical_or(quad_collision, ground_collision)
 
     # out-of-bounds if any quad tilts too far or goes under payload
@@ -381,7 +381,7 @@ class MultiQuadEnv(PipelineEnv):
     ground_collision = jp.logical_and(
       ground_collision,
       jp.logical_or(
-        pipeline_state.time > 3,
+        pipeline_state.time > 3, # allow 3 seconds for takeoff
         pipeline_state.cvel[self.payload_body_id][2] < -3.0,
       )
     )
