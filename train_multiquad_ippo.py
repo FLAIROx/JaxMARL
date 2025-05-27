@@ -128,7 +128,7 @@ def main():
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
-        "NUM_STEPS": 256,
+        "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
         # "TOTAL_TIMESTEPS": 1_000_000_000,
         # "NUM_ENVS": 2048, # 16384,
