@@ -183,6 +183,35 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     },
 }
 
+# dynamic mapping for i quad agents
+_NUM_QUADS    = 3  
+_OBS_OFF      = 6       # payload_error (0–2) + payload_linvel (3–5)
+_STATE_BLOCK  = 24      # per-quad features total
+_NU_PER_AGENT = 4       # last_action per agent
+
+_dyn_ix4: Dict[str, List[Union[int, Tuple[int, int]]]] = {}
+_last_start = _OBS_OFF + _NUM_QUADS * _STATE_BLOCK
+
+for i in range(_NUM_QUADS):
+    idxs: List[Union[int, Tuple[int, int]]] = [
+        (0, 2),   # payload_error
+        (3, 5),   # payload_linvel
+    ]
+    # other agents' rel-pos slices
+    for j in range(_NUM_QUADS):
+        if j != i:
+            off = _OBS_OFF + j * _STATE_BLOCK
+            idxs.append((off, off + 2))
+    # own full state block
+    base = _OBS_OFF + i * _STATE_BLOCK
+    idxs.append((base, base + _STATE_BLOCK - 1))
+    # own last_action slice
+    idxs.append((_last_start + i * _NU_PER_AGENT,
+                 _last_start + (i + 1) * _NU_PER_AGENT - 1))
+    _dyn_ix4[f"agent_{i}"] = idxs
+print(f"Dynamic ix4 mapping: {_dyn_ix4}")
+ranges["multiquad_ix4"] = _dyn_ix4
+
 _agent_observation_mapping = {
     k: {k_: jnp.array(listerize(v_)) for k_, v_ in v.items()} for k, v in ranges.items()
 }
