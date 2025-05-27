@@ -330,37 +330,36 @@ class MultiQuadEnv(PipelineEnv):
         noise = jax.random.normal(noise_key, shape=action_scaled.shape)
         action_scaled = action_scaled + self.act_noise * max_thrust * noise
 
-    # Compute orientation and collision/out-of-bound checks.
-    q1_orientation = pipeline_state.xquat[self.q1_body_id]
-    q2_orientation = pipeline_state.xquat[self.q2_body_id]
     up = jp.array([0.0, 0.0, 1.0])
-    q1_local_up = jp_R_from_quat(q1_orientation)[:, 2]
-    q2_local_up = jp_R_from_quat(q2_orientation)[:, 2]
-    angle_q1 = jp_angle_between(q1_local_up, up)
-    angle_q2 = jp_angle_between(q2_local_up, up)
+    # collect orientations & positions
+    angles = []
+    quad_positions = []
+    for qb in self.quad_body_ids:
+        quat = pipeline_state.xquat[qb]
+        local_up = jp_R_from_quat(quat)[:, 2]
+        angles.append(jp_angle_between(local_up, up))
+        quad_positions.append(pipeline_state.xpos[qb])
+    angles = jp.stack(angles)                           # (num_quads,)
+    qp = jp.stack(quad_positions)                       # (num_quads,3)
 
-    quad1_pos = pipeline_state.xpos[self.q1_body_id]
-    quad2_pos = pipeline_state.xpos[self.q2_body_id]
-    quad_distance = jp.linalg.norm(quad1_pos - quad2_pos)
-    
-    quad_collision = quad_distance < 0.15 # quad is square with 5cm so radius is 0.0707m
+    # pairwise quad-quad collision TODO: make this use proper mjx collision detection
+    dists = jp.linalg.norm(qp[:, None, :] - qp[None, :, :], axis=-1)
+    eye  = jp.eye(self.num_quads, dtype=bool)
+    min_dist = jp.min(jp.where(eye, jp.inf, dists))
+    quad_collision = min_dist < 0.15
 
-    ground_collision_quad = jp.logical_and(pipeline_state.xpos[self.q2_body_id][2] < 0.03, pipeline_state.xpos[self.q1_body_id][2] < 0.03)
+    # ground collision if all quads AND payload near ground
+    ground_collision_quad    = jp.all(qp[:, 2] < 0.03)
     ground_collision_payload = pipeline_state.xpos[self.payload_body_id][2] < 0.03
-    
     ground_collision = jp.logical_and(ground_collision_quad, ground_collision_payload)
+    collision       = jp.logical_or(quad_collision, ground_collision)
 
-    collision = jp.logical_or(quad_collision, ground_collision)
+    # out-of-bounds if any quad tilts too far or goes under payload
+    too_tilted = jp.any(jp.abs(angles) > jp.radians(90))
+    below_pl   = jp.any(qp[:, 2] < pipeline_state.xpos[self.payload_body_id][2] - 0.05)
+    out_of_bounds = jp.logical_or(too_tilted, below_pl)
 
-    out_of_bounds = jp.logical_or(jp.absolute(angle_q1) > jp.radians(90),
-                                  jp.absolute(angle_q2) > jp.radians(90))
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q1_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.05)
-    out_of_bounds = jp.logical_or(out_of_bounds, pipeline_state.xpos[self.q2_body_id][2] < pipeline_state.xpos[self.payload_body_id][2]-0.05)
-
-
-
-  
-    #out of bounds for pos error shrinking with time
+    # out of bounds for pos error shrinking with time
     payload_pos = pipeline_state.xpos[self.payload_body_id]
     payload_error = self.target_position - payload_pos
     payload_error_norm = jp.linalg.norm(payload_error)
@@ -373,9 +372,9 @@ class MultiQuadEnv(PipelineEnv):
 
     obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
-        obs, pipeline_state.time, collision, out_of_bounds, action_scaled,
-        angle_q1, angle_q2, prev_last_action, self.target_position,
-        pipeline_state, max_thrust
+        obs, pipeline_state.time, collision, out_of_bounds,
+        action_scaled, angles, prev_last_action,
+        self.target_position, pipeline_state, max_thrust
     )
 
     # dont terminate ground collision on ground start
@@ -449,112 +448,65 @@ class MultiQuadEnv(PipelineEnv):
       obs = obs + noise
     return obs
 
-  def calc_reward(self, obs, sim_time, collision, out_of_bounds, action,
-                  angle_q1, angle_q2, last_action, target_position, data,
+  def calc_reward(self, obs, sim_time, collision, out_of_bounds,
+                  action, angles, last_action, target_position, data,
                   max_thrust) -> (jp.ndarray, None, dict):
-    """
-    Computes the reward by combining several factors such as payload tracking, quad safety,
-    and energy penalties.
-    """
-    # lambda for exponential reward
+    
     er = lambda x, s=2: jp.exp(-s * jp.abs(x))
 
-    # Team observations: payload error and linear velocity.
-    team_obs = obs[:6]
-    payload_error = team_obs[:3]
-    payload_linvel = team_obs[3:6]
-    linvel_reward = er(jp.linalg.norm(payload_linvel))
-
-
-    dis = jp.linalg.norm(payload_error)
-    z_error = jp.abs(payload_error[2])
-    distance_reward =  er(dis)#, 2 + sim_time)
-    z_distance_reward =  er(z_error)#, 2 + sim_time)
+    # payload tracking rewards
+    team_obs      = obs[:6]
+    payload_err   = team_obs[:3]
+    payload_linlv = team_obs[3:6]
+    dis = jp.linalg.norm(payload_err)
+    tracking_reward = self.reward_coeffs["distance_reward_coef"] * er(dis)
 
     
+    quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
+    rels     = jp.stack([q[:3]     for q in quad_obs])  # (num_quads,3)
+    linvels  = [q[9:12]  for q in quad_obs]
+    angvels  = [q[15:18] for q in quad_obs]
 
+    # safe-distance reward (mean over all pairs)
+    if self.num_quads > 1:
+        d = jp.linalg.norm(rels[:, None, :] - rels[None, :, :], axis=-1)
+        eye = jp.eye(self.num_quads, dtype=bool)
+        pairwise = jp.where(eye, jp.inf, d)
+        safe_distance = jp.mean(jp.clip((pairwise - 0.15) / 0.02, 0, 1))
+    else:
+        safe_distance = 1.0
 
-    # Safety and smoothness penalties.
-    quad1_obs = obs[6:29]
-    quad2_obs = obs[30:54]
-    quad_distance = jp.linalg.norm(quad1_obs[:3] - quad2_obs[:3])
-    safe_distance_reward = jp.clip((quad_distance - 0.15) / (0.17 - 0.15), 0, 1)
-    collision_penalty = 1.0 * collision
-    # out_of_bounds_penalty = 50.0 * out_of_bounds
+    # upright reward = mean over all quads
+    up_reward = jp.mean(er(angles))
 
-    # Reward for quad orientations (encouraging them to remain upright).
-    up_reward = 0.5 * er(angle_q1) + 0.5 * er(angle_q2)
+    # taut-string reward = sum of distances + heights
+    quad_dists   = jp.linalg.norm(rels, axis=-1)
+    quad_heights = rels[:, 2]
+    taut_reward  = (jp.mean(quad_dists) + jp.mean(quad_heights)) / self.cable_length
 
-    # taut string reward
-    quad1_dist = jp.linalg.norm(quad1_obs[:3]) # payload to quad1
-    quad2_dist = jp.linalg.norm(quad2_obs[:3]) # payload to quad2
-    taut_reward = quad1_dist + quad2_dist # Maximize the string length
-    taut_reward += quad1_obs[2] + quad2_obs[2] # Maximize the height of the quads
-    taut_reward /= self.cable_length
+    # angular and linear velocity rewards summed
+    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * jp.mean(
+        er(jp.linalg.norm(jvp, axis=-1)) for jvp in angvels
+    )
+    linvel_quad_reward = (0.5 + 6 * er(dis, 20)) * jp.mean(
+        er(jp.linalg.norm(jvp, axis=-1)) for jvp in linvels
+    )
 
-    # Reward for quad velocities.
-    # The reward is higher for lower angular velocities.
-    # The reward is higher for lower linear velocities. 
-    ang_vel_q1 = quad1_obs[15:18]
-    ang_vel_q2 = quad2_obs[15:18]
-    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * (er(jp.linalg.norm(ang_vel_q1)) + er(jp.linalg.norm(ang_vel_q2)))
-    linvel_q1 = quad1_obs[9:12]
-    linvel_q2 = quad2_obs[9:12]
-    linvel_quad_reward =  (0.5 + 6 * er(dis, 20)) * (er(jp.linalg.norm(linvel_q1)) + er(jp.linalg.norm(linvel_q2)) )
+    # penalties
+    collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
+    oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
+    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action) / max_thrust)
+    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(action) / max_thrust)
 
-    # Velocity alignment.
-    target_dir  = payload_error / (dis + 1e-6)
-    vel = jp.linalg.norm(payload_linvel)
-    # Avoid division by zero. 
-    vel_dir = jp.where(jp.abs(vel) > 1e-6, payload_linvel / vel, jp.zeros_like(payload_linvel))
-  
+    stability = (self.reward_coeffs["up_reward_coef"] * up_reward
+                 + self.reward_coeffs["taut_reward_coef"] * taut_reward
+                 + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
+                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward)
+    safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
+           + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
-    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis) # dotprod = 1  => vel is perfectly aligned
-    velocity_towards_target = aligned_vel
-  
-
-    vel_cap = 3.45 - 0.115 * vel**4
-    zero_at_target = 14.7 * dis * jp.exp(-10.5 * dis * jp.abs(vel))
-    no_zero_while_error = jp.exp(- (0.5 / (26.0 * dis + 0.3)) * jp.abs(vel))
-    target_reward = no_zero_while_error * (vel_cap - zero_at_target)
-    target_reward = jp.exp(0.4 * target_reward)
-    target_reward *= aligned_vel
-    target_reward *= jp.exp(-1.4 * jp.abs(dis))
-
-
-    smooth_action_penalty = jp.mean(jp.abs(action - last_action) / max_thrust)
-    action_energy_penalty = jp.mean(jp.abs(action)) / max_thrust
-
-
-
-    tracking_reward = self.reward_coeffs["distance_reward_coef"] * distance_reward
-    #tracking_reward += self.reward_coeffs["z_distance_reward_coef"] * z_distance_reward
-    tracking_reward += self.reward_coeffs["velocity_reward_coef"] * velocity_towards_target
-    # tracking_reward += self.reward_coeffs.get("target_reward_coef", 1.0) * target_reward
-    #tracking_reward = target_reward
-
-    stability_reward = self.reward_coeffs["up_reward_coef"] * up_reward
-    stability_reward += self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
-    stability_reward += self.reward_coeffs["linvel_reward_coef"] * linvel_reward
-    stability_reward += self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-    stability_reward += self.reward_coeffs["taut_reward_coef"] * taut_reward
-    
-
-    #penalties
-    safety_reward = self.reward_coeffs["collision_penalty_coef"] * collision_penalty
-    safety_reward += self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
-    safety_reward += self.reward_coeffs["smooth_action_coef"] * smooth_action_penalty
-    safety_reward += self.reward_coeffs["action_energy_coef"] * action_energy_penalty
-    safety_reward += self.reward_coeffs["safe_distance_coef"] * safe_distance_reward
-
-  
-    # Combine all rewards and penalties.
-   
-    reward = tracking_reward * (stability_reward + safety_reward)
-    
-    # Normalize the reward by the divisor.
+    reward = tracking_reward * (stability + safety)
     reward /= self.reward_divisor
-
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
