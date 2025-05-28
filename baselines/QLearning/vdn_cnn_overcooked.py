@@ -77,6 +77,8 @@ class QNetwork(nn.Module):
             activation = nn.tanh
             
         embedding = CNN()(x)
+        # no activation here as a nonlinearity has already
+        # been applied to the embedding
         x = nn.Dense(self.hidden_size)(embedding)
         x = activation(x)
         x = nn.Dense(self.action_dim)(x)
