@@ -35,7 +35,7 @@ def main():
     config = {
         "ENV_NAME": "multiquad_2x4",
         "ENV_KWARGS": {
-            "num_quads":3,
+            "num_quads":6,
         },
         "SEED": 0,
     }
