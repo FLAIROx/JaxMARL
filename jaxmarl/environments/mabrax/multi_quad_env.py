@@ -482,7 +482,7 @@ class MultiQuadEnv(PipelineEnv):
     # taut-string reward = sum of distances + heights
     quad_dists   = jp.linalg.norm(rels, axis=-1)
     quad_heights = rels[:, 2]
-    taut_reward  = (jp.mean(quad_dists) + jp.mean(quad_heights)) / self.cable_length
+    taut_reward  = (jp.sum(quad_dists) + jp.sum(quad_heights)) / self.cable_length
 
     # angular and linear velocity rewards summed
     ang_vel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in angvels])
