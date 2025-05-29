@@ -125,6 +125,7 @@ def main():
             "act_noise": 0.0,
             "max_thrust_range": 0.0,
             "num_quads": 3,
+            "episode_length": 4096,
         },
         "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
@@ -226,7 +227,7 @@ def main():
         return {a: jp.squeeze(v, axis=0) for a, v in unbatched.items()}
 
     # Simulation: run an episode using the trained policy
-    sim_steps = 20000
+    sim_steps = 40000
     rng, rng_sim = jax.random.split(rng)
     state = env.reset(rng_sim)
     rollout = [state[1]]
