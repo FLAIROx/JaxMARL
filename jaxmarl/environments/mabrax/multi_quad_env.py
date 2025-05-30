@@ -50,11 +50,12 @@ class MultiQuadEnv(PipelineEnv):
       act_noise: float = 0.0,         # Parameter for actuator noise
       max_thrust_range: float = 0.3,               # range for randomizing thrust
       num_quads = 2,
+      cable_length: float = 0.4,  # Length of the cable connecting the payload to the quadrotors.
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
     # Dynamically generate the MuJoCo XML via QuadEnvGenerator
-    gen = QuadEnvGenerator(n_quads=num_quads)
+    gen = QuadEnvGenerator(n_quads=num_quads, cable_length=cable_length)
     xml = gen.generate_xml()
     mj_model = mujoco.MjModel.from_xml_string(xml)
     # Convert the MuJoCo model to a Brax system.
@@ -63,7 +64,7 @@ class MultiQuadEnv(PipelineEnv):
     kwargs['backend'] = 'mjx'
     super().__init__(sys, **kwargs)
 
-    self.cable_length = 0.3
+    self.cable_length = cable_length
 
     # Save environment parameters.
     self.policy_freq = policy_freq
@@ -208,7 +209,8 @@ class MultiQuadEnv(PipelineEnv):
   @staticmethod
   def generate_filtered_configuration_batch(key, batch_size, num_quads, cable_length):
     # 1) oversample_factor=2
-    M = 2 * batch_size
+    os_factor = round(num_quads / 2) + 1
+    M = os_factor * batch_size
     keys = jax.random.split(key, M)
     payloads, quadss = jax.vmap(
       MultiQuadEnv.generate_configuration, in_axes=(0, None, None)
