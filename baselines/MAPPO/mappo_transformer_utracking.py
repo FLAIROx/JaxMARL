@@ -1,20 +1,22 @@
 import os
 import time
+import copy
+import numpy as np
+
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
 from flax import struct
-import numpy as np
-import optax
 from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
-import wandb
-import functools
 from flax.training.train_state import TrainState
 import distrax
+import optax
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
+from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
+import wandb
 
 from jaxmarl import make
 from jaxmarl.wrappers.baselines import LogWrapper, SMAXLogWrapper, JaxMARLWrapper
@@ -562,7 +564,6 @@ def make_train(config):
                         actor_loss = (
                             loss_actor
                             - config["ENT_COEF"] * entropy
-                            + config["KL_COEF"] * approx_kl
                         )
 
                         return actor_loss, (
@@ -706,7 +707,7 @@ def make_train(config):
             # report on wandb if required
             if config["WANDB_MODE"] != "disabled":
 
-                def callback(metrics, original_seed, render_infos=None):
+                def callback(metrics, original_seed, render_infos=None, model_state=None):
                     if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
                             {
@@ -747,6 +748,30 @@ def make_train(config):
                     else:
                         # log without animation
                         wandb.log(metrics, step=metrics["update_steps"])
+
+                    # save params
+                    if (
+                        config.get("CHECKPOINT_INTERVAL", None) is not None
+                        and config.get("SAVE_PATH", None) is not None
+                        and metrics["update_steps"]
+                        % int(config["NUM_UPDATES"] * config["CHECKPOINT_INTERVAL"])
+                        == 0
+                    ):
+                        
+                        env_name = f'utracking_{config["ENV_KWARGS"]["num_agents"]}_vs_{config["ENV_KWARGS"]["num_landmarks"]}'
+                        alg_name = config.get("ALG_NAME", "mappo_rnn_utracking")
+                        
+                        print('Saving Checkpoint')
+    
+                        model_state = {"actor": model_state[0].params, "critic": model_state[1].params}
+                        save_dir = os.path.join(config["SAVE_PATH"], env_name, alg_name)
+                        os.makedirs(save_dir, exist_ok=True)
+
+                        save_path = os.path.join(
+                            save_dir,
+                            f"{alg_name}_{env_name}_step{int(metrics['update_steps'])}_rng{int(original_seed)}.safetensors",
+                        )
+                        save_params(model_state, save_path)
 
                 if config.get("ANIMATION_LOG_INTERVAL", None) is not None:
 
@@ -837,7 +862,7 @@ def make_train(config):
                 else:
                     render_infos = None
 
-                jax.debug.callback(callback, metrics, original_seed, render_infos)
+                jax.debug.callback(callback, metrics, original_seed, render_infos, train_states)
 
             update_steps = update_steps + 1
             runner_state = (train_states, env_state, last_obs, last_done, hstates, rng)
@@ -878,7 +903,7 @@ def single_run(config):
     
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_jit = jax.jit(make_train(config))
+    train_jit = jax.jit(make_train(copy.deepcopy(config)))
     t0 = time.time()
     outs = jax.vmap(train_jit)(rngs)
     print("time taken:", time.time() - t0)
@@ -888,7 +913,7 @@ def single_run(config):
 
         model_state = outs["runner_state"][0]
         model_state = {"actor": model_state[0].params, "critic": model_state[1].params}
-        save_dir = os.path.join(config["SAVE_PATH"], env_name)
+        save_dir = os.path.join(config["SAVE_PATH"], env_name, alg_name)
         os.makedirs(save_dir, exist_ok=True)
         OmegaConf.save(
             config,
@@ -908,7 +933,6 @@ def single_run(config):
 
 def tune(default_config):
     """Hyperparameter sweep with wandb."""
-    import copy
 
     default_config = OmegaConf.to_container(default_config)
 

@@ -20,7 +20,7 @@ from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 
 @jax.jit
 def fill_diagonal_zeros(arr):
-    # at the moment I haven't found a better way to fill the diagonal with 0s of unsquarred matrices
+    # at the moment I haven't found a better way to fill the diagonal with 0s of not-squared matrices
     return arr - arr * (jnp.eye(arr.shape[0], arr.shape[1]))
 
 
@@ -76,7 +76,6 @@ class UTracking(MultiAgentEnv):
         dt: int = 30,
         max_steps: int = 128,
         discrete_actions: bool = True,
-        actions_as_angles: bool = False,
         agent_depth: Tuple[float, float] = (0.0, 0.0003),  # defines the range of depth for spawning agents
         landmark_depth: Tuple[float, float] = (5.0, 20.0),  # defines the range of depth for spawning landmarks
         landmark_depth_known: bool = True, # agents know the depth of the landmarks 
@@ -86,21 +85,24 @@ class UTracking(MultiAgentEnv):
         max_range_dist: float = 450.0,  # above this distance can't recieve landmark ranges
         max_comm_dist: float = 1500.0,  # above this distance can't communicate
         prop_agent: int = 30,  # rpm of agent's propellor, defines the speeds for agents (30rpm is ~1m/s)
-        prop_range_landmark: Tuple[int] = (0, 5, 6, 7, 8, 9, 10, 11, 12),  # defines the possible (propellor) speeds for landmarks (only some speeds are alid for now)
+        landmark_rel_speed: float = (0.1, 0.5),  # min and maximum relative speed of landmarks to agents
+        difficulty: str = "manual", # difficulty of the environment (manual, easy, medium, hard)
         rudder_range_landmark: Tuple[float, float] = (0.10, 0.25),  # defines the angle of movement change for landmarks
-        dirchange_time_range_landmark: Tuple[int, int] = (5, 15,),  # defines how many random steps to wait for changing the landmark directions
+        dirchange_time_range_landmark: Tuple[int, int] = (5, 15,),  # defines min and max random steps to wait for changing the landmark directions
         tracking_method: str = "pf",  # method for tracking the landmarks positions (ls, pf)
         tracking_buffer_len: int = 32,  # maximum number of range observations kept for predicting the landmark positions
         range_noise_std: float = 10.0,  # standard deviation of the gaussian noise added to range measurements (meters)
-        traj_noise_std: float = 0.1,  # standard deviation of the gaussian noise added to the traj models (radians)
-        lost_comm_prob=0.1,  # probability of loosing communications
+        traj_noise_std: float = 0.02,  # standard deviation of the gaussian noise added to the traj models (radians)
+        lost_comm_prob=0.1,  # probability of loosing communications (range measurements and intra-agent communication)
         min_steps_ls: int = 2,  # minimum steps for collecting data and start predicting landmarks positions with least squares
-        rew_type: str = "tracking",  # type of reward (follow, tracking_threshold, tracking)
+        rew_dist_thr: float = 150.0,  # distance threshold for the follow reward
+        rew_pred_ideal: float = 10.0, # ideal prediction error for tracking reward (in meters)
+        rew_pred_thr: float = 50.0,  # tracking error threshold for tracking reward
+        rew_norm_landmarks: bool = True,  # if true, the reward is normalized by the number of landmarks
+        rew_follow_coeff: float = 1.0,  # reward coefficient for following landmarks
+        rew_tracking_coeff: float = 1.0,  # reward coefficient for tracking landmarks
         truncate_failed_episode: bool = False, # if true, the episode is truncated when a crash or lost landmark is detected
         penalty_for_crashing: bool = True,  # if true, the reward at end of episode is negative of the cumulative reward, so failed episodes will have a 0 sum reward
-        rew_pred_ideal: float = 5.0, # ideal prediction error for tracking reward (in meters)
-        rew_pred_thr: float = 30.0,  # tracking error threshold for tracking reward
-        rew_norm_landmarks: bool = True,  # if true, the reward is normalized by the number of landmarks
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
         seed_init_pos: int = 0,  # random seed for precomputing initial distance
         pre_init_pos_len: int = 100000,  # how many initial positions precompute
@@ -108,10 +110,10 @@ class UTracking(MultiAgentEnv):
         matrix_obs: bool = False,  # if true, the obs is a matrix with vertex features relative to all the entities, otherwise flattened
         matrix_state: bool = False,  # if true, the state is represented with vertex features relative to all the entities
         state_as_edges: bool = False,  # if true, the matrix state is represented as edge features, otherwise as vertex features
-        debug_obs: bool = False,
         space_unit: float = 1e-3,  # unit of space for space observations (default to hundreds of meters)
         infos_for_render: bool = False,  # if true, additional infos are returned for rendering porpouses
         pf_num_particles: int = 5000,  # number of particles for the particle filter
+        actions_as_angles: bool = False,  # if true, the actions are interpreted as angles
         **pf_kwargs,  # kwargs for the particle filter
     ):
         assert (
@@ -122,17 +124,31 @@ class UTracking(MultiAgentEnv):
         assert (
             f"prop_{prop_agent}" in self.traj_model.keys()
         ), f"the propulsor velocity for agents must be in {self.traj_model.keys()}"
-        assert all(
-            f"prop_{prop}" in self.traj_model.keys() for prop in prop_range_landmark
-        ), f"the propulsor choices for landmarks must be in {self.traj_model.keys()}"
         assert tracking_method in [
             "ls",
             "pf",
         ], "tracking method must be ls (Least Squares) or pf (Particle Filter)"
-        assert rew_type in [
-            "follow",
-            "tracking",
-        ], "reward type must be 'follow' or 'tracking'"
+        assert difficulty in [
+            "manual",
+            "easy",
+            "medium",
+            "hard",
+            "expert",
+        ], "difficulty must be manual, easy, medium, hard or expert"
+
+        if difficulty != 'manual':
+            if difficulty == 'easy':
+                landmark_rel_speed = (0., 0.35)
+                dirchange_time_range_landmark=(5, 15)
+            elif difficulty == 'medium':
+                landmark_rel_speed = (0.15, 0.5)
+                dirchange_time_range_landmark=(2, 10)
+            elif difficulty == 'hard':
+                landmark_rel_speed = (0.5, 0.7)
+                dirchange_time_range_landmark=(5, 15)
+            elif difficulty == 'expert':
+                landmark_rel_speed = (0.83, 0.86)
+                dirchange_time_range_landmark=(5, 15)
 
         self.max_steps = max_steps
         self.num_agents = num_agents
@@ -141,10 +157,10 @@ class UTracking(MultiAgentEnv):
         self.agents = [f"agent_{i}" for i in range(1, num_agents + 1)]
         self.landmarks = [f"landmark_{i}" for i in range(1, num_landmarks + 1)]
         self.entities = self.agents + self.landmarks
-
         self.discrete_actions = discrete_actions
         self.actions_as_angles = actions_as_angles
         self.agent_depth = agent_depth
+        self.landmark_rel_speed = landmark_rel_speed
         self.landmark_depth = landmark_depth
         self.landmark_depth_known = landmark_depth_known
         self.min_valid_distance = min_valid_distance
@@ -153,7 +169,6 @@ class UTracking(MultiAgentEnv):
         self.max_range_dist = max_range_dist
         self.max_comm_dist = max_comm_dist
         self.prop_agent = prop_agent
-        self.prop_range_landmark = prop_range_landmark
         self.rudder_range_landmark = np.array(rudder_range_landmark)
         self.dirchange_time_range_landmark = dirchange_time_range_landmark
         self.tracking_method = tracking_method
@@ -162,10 +177,12 @@ class UTracking(MultiAgentEnv):
         self.traj_noise_std = traj_noise_std
         self.lost_comm_prob = lost_comm_prob
         self.min_steps_ls = min_steps_ls
+        self.rew_dist_thr = rew_dist_thr
         self.rew_pred_ideal = rew_pred_ideal
         self.rew_pred_thr = rew_pred_thr
         self.rew_norm_landmarks = rew_norm_landmarks
-        self.rew_type = rew_type
+        self.rew_follow_coeff = rew_follow_coeff
+        self.rew_tracking_coeff = rew_tracking_coeff
         self.penalty_for_crashing = penalty_for_crashing
         self.truncate_failed_episode = truncate_failed_episode
         self.pre_init_pos = pre_init_pos
@@ -175,7 +192,6 @@ class UTracking(MultiAgentEnv):
         self.matrix_state = matrix_state
         self.state_as_edges = state_as_edges
         self.space_unit = space_unit
-        self.debug_obs = debug_obs
         self.infos_for_render = infos_for_render
 
         if tracking_method == "pf":
@@ -193,7 +209,7 @@ class UTracking(MultiAgentEnv):
             self.action_spaces = {i: Box(-0.24, 0.24, (1,)) for i in self.agents}
 
         # obs space
-        self.obs_feats = 6
+        self.obs_feats = 6 # feat for each entity, [obs_delta_x, obs_delta_y, obs_delta_z, range, is_agent, is_self]
         if self.matrix_obs:
             self.observation_spaces = {
                 i: Box(-jnp.inf, jnp.inf, (self.num_entities, self.obs_feats)) for i in self.agents
@@ -204,10 +220,6 @@ class UTracking(MultiAgentEnv):
             }
 
         # world state shape
-        self.num_edges = (
-            self.num_agents * (self.num_agents - 1)  # undirected graph agent<->agent
-            + self.num_agents * self.num_landmarks  # directed graph agent->landmark
-        )
         # if edges: [delta_x, delta_y, delta_z, obs_delta_x, obs_delta_y, obs_delta_z, range, is_self(oh)]
         # else: [pos_x, pos_y, pos_z, direction, vel, pred_error, is_agent]
         self.state_features = 9 if self.state_as_edges else 7
@@ -249,11 +261,12 @@ class UTracking(MultiAgentEnv):
         )  # safe distance that agents should keep between them
 
         # index of the trajectory models valid for landmarks
+        valid_prop = lambda p : p >= self.prop_agent*self.landmark_rel_speed[0] and p <= self.prop_agent*self.landmark_rel_speed[1]
         self.idx_valid_traj_model_landmarks = jnp.array(
             [
                 i
                 for i, p in enumerate(self.traj_model_prop)
-                if p in self.prop_range_landmark
+                if valid_prop(p)
             ]
         )
 
@@ -375,14 +388,6 @@ class UTracking(MultiAgentEnv):
 
         # first observation
         obs = self.get_obs(delta_xyz, ranges, comm_drop, pos, land_pred_pos)
-        if self.debug_obs:
-            obs = {
-                a: self.space_unit
-                * jnp.concatenate(
-                    (pos[i], delta_xyz[i].ravel(), ranges_real_2d[i].ravel())
-                )
-                for i, a in enumerate(self.agents)
-            }
         obs["world_state"] = self.get_global_state(
             delta_xyz, ranges, comm_drop, pos, vel, land_pred_pos
         )
@@ -436,38 +441,28 @@ class UTracking(MultiAgentEnv):
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool]]:
         
 
-        if False:
-            pos = jnp.stack([actions[a] for a in self.entities])
-            landmark_actions, steps_next_land_action = self.get_landmarks_actions(
-                rng, state.steps_next_land_action, state.t
-            )
-            last_actions = jnp.zeros(self.num_agents).astype(float)
-
-
-        # update physical positions
+        # preprocess actions
+        agent_actions = jnp.array([actions[a] for a in self.agents])
+        last_actions = agent_actions.astype(float)
+        agent_actions = self.preprocess_actions(agent_actions)
+        landmark_actions, steps_next_land_action = self.get_landmarks_actions(
+            rng, state.steps_next_land_action, state.t
+        )
+        
+        if self.actions_as_angles: # this is used to inject angle actions in the environment (mainly for debugging)
+            actions = jnp.array([actions[a] for a in self.entities])
         else:
-            # preprocess actions
-            agent_actions = jnp.array([actions[a] for a in self.agents])
-            last_actions = agent_actions.astype(float)
-            agent_actions = self.preprocess_actions(agent_actions)
-            landmark_actions, steps_next_land_action = self.get_landmarks_actions(
-                rng, state.steps_next_land_action, state.t
-            )
-            
-            if self.actions_as_angles: # this is used to inject angle actions in the environment for debugging
-                actions = jnp.array([actions[a] for a in self.entities])
-            else:
-                actions = jnp.concatenate((agent_actions, landmark_actions))
+            actions = jnp.concatenate((agent_actions, landmark_actions))
 
-            rng, _rng = jax.random.split(rng)
-            pos = self.world_step(
-                _rng,
-                actions,
-                state.pos,
-                state.vel,
-                state.traj_coeffs,
-                state.traj_intercepts,
-            )
+        rng, _rng = jax.random.split(rng)
+        pos = self.world_step(
+            _rng,
+            actions,
+            state.pos,
+            state.vel,
+            state.traj_coeffs,
+            state.traj_intercepts,
+        )
 
         # update tracking
         rng, key_ranges, key_comm = jax.random.split(rng, 3)
@@ -491,14 +486,6 @@ class UTracking(MultiAgentEnv):
 
         # agents obs and global state
         obs = self.get_obs(delta_xyz, ranges, comm_drop, pos, land_pred_pos)
-        if self.debug_obs:
-            obs = {
-                a: self.space_unit
-                * jnp.concatenate(
-                    (pos[i], delta_xyz[i].ravel(), ranges_real_2d[i].ravel())
-                )
-                for i, a in enumerate(self.agents)
-            }
         obs["world_state"] = self.get_global_state(
             delta_xyz, ranges, comm_drop, pos, state.vel, land_pred_pos
         )
@@ -559,15 +546,7 @@ class UTracking(MultiAgentEnv):
             a: feats[i] if self.matrix_obs else feats[i].ravel()
             for i, a in enumerate(self.agents)
         }
-
-        # temporary adding id
-        agent_ids = jnp.eye(self.num_agents)
-        return {
-            a: jnp.concatenate((feats[i].ravel(), agent_ids[i]), axis=-1)
-            for i, a in enumerate(self.agents)
-        }
-
-        
+    
     
     @partial(jax.jit, static_argnums=0)
     def get_vertex_state(
@@ -734,22 +713,21 @@ class UTracking(MultiAgentEnv):
         )  # distance between agents and other agents
 
 
-        # rewards
-        if self.rew_type == "follow":
-            # reward based on number of landmarks followed, i.e. that have at least one agent at min distance
-            rew = (min_land_dist <= self.min_agent_dist * 2).sum()
+        # REWARDS
+        # reward based on number of landmarks followed, i.e. that have at least one agent at min distance
+        follow_rew = (min_land_dist <= self.rew_dist_thr).sum()
 
-        elif self.rew_type == "tracking":
-            # reward based on the tracking error
-            # exponential decay of the reward based on the tracking error
-            # goes to 0 if the tracking error is above the threshold
-            # goes to 1 if the tracking error is 0
-            def exponential_decay(x, x1=self.rew_pred_ideal, x2=self.rew_pred_thr):
-                t = (x - x1) / (x2 - x1)
-                t = jnp.clip(t, 0, 1 - 1e-10)  # Avoid division by zero
-                return jnp.where(x < x1, 1, jnp.where(x > x2, 0, jnp.exp(-2*t / (1 - t))))
-            rew = jax.vmap(exponential_decay)(pred_2d_err)
-            rew = rew.sum()
+        # reward based on the tracking error
+        # exponential decay of the reward based on the tracking error
+        # goes to 0 if the tracking error is above the threshold
+        # goes to 1 if the tracking error is 0
+        def exponential_decay(x, x1=self.rew_pred_ideal, x2=self.rew_pred_thr):
+            t = (x - x1) / (x2 - x1)
+            t = jnp.clip(t, 0, 1 - 1e-10)  # Avoid division by zero
+            return jnp.where(x < x1, 1, jnp.where(x > x2, 0, jnp.exp(-2*t / (1 - t))))
+        tracking_rew = (jax.vmap(exponential_decay)(pred_2d_err)).sum()
+
+        rew = self.rew_follow_coeff*follow_rew + self.rew_tracking_coeff*tracking_rew
 
         if self.rew_norm_landmarks:
             rew /= self.num_landmarks
@@ -758,6 +736,8 @@ class UTracking(MultiAgentEnv):
         if self.penalty_for_crashing:
             rew = jnp.where((agent_dist < self.min_valid_distance).any(), -1.0, rew)
 
+
+        # DONE
         done = t == self.max_steps
 
         # truncate the episode if failed (if a landmark is lost)
@@ -767,9 +747,12 @@ class UTracking(MultiAgentEnv):
             ).any() # failed episode if a landmark is lost
             done = done | failed_episode
 
+        # INFO
         # return different infos if the env is gonna be used for rendering or training
         info = {
-            "landmarks_covered": (min_land_dist <= self.min_agent_dist * 2).sum(
+            "follow_rew": follow_rew,
+            "tracking_rew": tracking_rew,
+            "landmarks_covered": (min_land_dist <= self.rew_dist_thr).sum(
                 keepdims=True
             )
             / self.num_landmarks,

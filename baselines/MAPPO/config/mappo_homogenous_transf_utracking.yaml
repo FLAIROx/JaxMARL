@@ -1,62 +1,75 @@
-"LR": 0.0005
-"NUM_ENVS": 1024
+"LR": 0.0001
+"NUM_ENVS": 128
 "NUM_STEPS": 128
-"TOTAL_TIMESTEPS": 1e8
+"TOTAL_TIMESTEPS": 5e8
 "HIDDEN_DIM": 64
 "NUM_LAYERS": 2 
 "NUM_HEADS": 8
 "FF_DIM": 128
 "UPDATE_EPOCHS": 4
-"NUM_MINIBATCHES": 8
+"NUM_MINIBATCHES": 4
 "GAMMA": 0.99
 "GAE_LAMBDA": 0.95
 "CLIP_EPS": 0.2
 "SCALE_CLIP_EPS": False
 "ENT_COEF": 0.01
 "VF_COEF": 0.5
-"KL_COEF": 0.1
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
-"ANNEAL_LR": False
+"ANNEAL_LR": True
 
 # ENV
 "ENV_NAME": "utracking"
 "ENV_KWARGS": {
-  "num_agents": 1,
-  "num_landmarks": 1,
-  "max_steps": 512,
+  "num_agents": 2,
+  "num_landmarks": 2,
+  "max_steps": 128,
   "dt": 30,
-  "prop_range_landmark": [0, 5, 10, 15], # possible propulsor velocities of the landmarks
-  "rew_type": "tracking_error",
-  "penalty_failed_episode": True,
-  "rew_pred_thr": 20,
-  "min_valid_distance": 5,
+  "difficulty": "hard",
+  "range_noise_std": 10.0,
+  "traj_noise_std": 0.02,
+  "lost_comm_prob": 0.1,
+  "rew_follow_coeff": 1.0,
+  "rew_tracking_coeff": 0.0,
+  "penalty_for_crashing": True,
+  "truncate_failed_episode": False,
+  "rew_dist_thr": 150,
+  "rew_pred_ideal": 10,
+  "rew_pred_thr": 50,
+  "min_valid_distance": 10,
   "min_init_distance": 30,
-  "max_init_distance": 100,
-  "pre_init_pos_len": 1000000,
-  "max_range_dist": 600,
+  "max_init_distance": 180,
+  "pre_init_pos_len": 3000000,
+  "max_range_dist": 450,
+  "max_comm_dist": 1500,
   "tracking_method": "pf",
-  "matrix_obs": True, # essential for transformer
+  "ranges_in_obs": False,
+  "matrix_obs": True, 
   "matrix_state": True,
   "state_as_edges": False,
-  "pf_num_particles": 2000,
+  "pf_num_particles": 5000,
+  "mu_init_vel": 0.6,
+  "std_init_vel": 0.4,
+  "turn_noise": 0.5,
+  "vel_noise": 0.05,
+  "ess_threshold": 0.01,
+  "std_range": 10.0,
 }
 
 # EXP
 "SEED": 0
 "NUM_SEEDS": 1
 "TUNE": False
-"SAVE_PATH": "models/utracking_curr"
-"LOAD_PATH": "models/utracking_curr/utracking_1v1/mappo_transforme_curr_utracking_1_vs_1_seed0_vmap0.safetensors"
-"LOAD_CRITIC": True
-"ALG_NAME": "mappo_transformer_curr_tracking_error_from_follow"
-"ANIMATION_LOG_INTERVAL": 0.3 # percentage of total update steps. animating will slow down training and use more memory
-"ANIMATION_MAX_STEPS": 256 # should be the same of the env
+"SAVE_PATH": #"models/utracking_release"
+"LOAD_PATH": # "models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_step19825_rng637334850.safetensors" # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed1_vmap0.safetensors # models/utracking_post/utracking_2_vs_2/mappo_transformer_expert/mappo_transformer_expert_utracking_2_vs_2_step27459_rng1948878966.safetensors
+"LOAD_CRITIC": # True
+"ALG_NAME": "mappo_transformer"
+"CHECKPOINT_INTERVAL": 0.05
+"ANIMATION_LOG_INTERVAL": 0.1 # percentage of total update steps, leave blank for no animating during training. Animating will slow down training and use more memory
+"ANIMATION_MAX_STEPS": 128 # should be the same of the env
 
 # WANDB
 "WANDB_MODE": "online"
 "ENTITY": "mttga"
-"PROJECT": "utracking_curr"
+"PROJECT": "utracking_release"
 "WANDB_LOG_ALL_SEEDS": False
-
-

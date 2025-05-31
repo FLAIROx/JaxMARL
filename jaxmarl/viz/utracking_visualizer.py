@@ -1,19 +1,16 @@
 import jax
 from jax import numpy as jnp
 import numpy as np
-
-# for plot
-import logging
-
-logging.getLogger("matplotlib").setLevel(logging.CRITICAL)
-from matplotlib import pyplot as plt
-from matplotlib import cm
+import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.ticker import MaxNLocator
 import contextlib
+import os
+from matplotlib.colors import to_rgba
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
-
-class UTrackingAnimator(animation.TimedAnimation):
+class UTrackingAnimator(animation.FuncAnimation):
 
     def __init__(
         self,
@@ -23,274 +20,343 @@ class UTrackingAnimator(animation.TimedAnimation):
         episode_rewards,
         episode_errors,
         lags=None,
+        interval=100,
+        legend=True,
+        fps=30
     ):
-        """
-        agent_positions: np.array (n_agents, frames, 2)
-        landmark_positions: np.array (n_landmarks, frames, 2)
-        landmark_predictions: np.array (n_landmarks, frames, 2)
-        episode_rewards: np.array (frames,)
-        episode_errors: np.array (n_landmarks, frames)
-        lags: int, number of frames to show in the past, default is the number of frames
-        """
-
-        # general parameters
-        self.frames = agent_positions.shape[1]
+        # Convert JAX arrays to NumPy for Matplotlib compatibility
+        self.agent_positions = np.asarray(agent_positions)
+        self.landmark_positions = np.asarray(landmark_positions)
+        self.landmark_predictions = np.asarray(landmark_predictions)
+        self.episode_rewards = np.asarray(episode_rewards)
+        self.episode_errors = np.asarray(episode_errors)
+        
+        # General parameters
+        self.frames = self.agent_positions.shape[1]
         self.n_agents = len(agent_positions)
         self.n_landmarks = len(landmark_positions)
+        self.lags = lags if lags is not None else self.frames
+        self.fps = fps
 
-        self.agent_positions = agent_positions
-        self.landmark_positions = landmark_positions
-        self.landmark_predictions = landmark_predictions
-        self.episode_rewards = episode_rewards
-        self.episode_errors = episode_errors
-        if lags is None:
-            self.lags = self.frames
-        else:
-            self.lags = self.lags
-
-        # create the subplots
+        # Create the figure and subplots
         self.fig = plt.figure(figsize=(20, 10), dpi=120)
+        # Adjust subplot widths: 60% for trajectory, 40% for metrics
         self.ax_episode = self.fig.add_subplot(1, 2, 1)
         self.ax_reward = self.fig.add_subplot(2, 2, 2)
         self.ax_error = self.fig.add_subplot(2, 2, 4)
 
-        self.ax_episode.set_title("Episode")
-        self.ax_reward.set_title("Reward")
-        self.ax_error.set_title("Prediction Error")
+        # Set titles
+        self.ax_episode.set_title("Agent and Landmark Trajectories")
+        self.ax_reward.set_title("Episode Reward")
+        self.ax_error.set_title("Landmark Prediction Error")
 
-        # colors
-        self.agent_colors = cm.Dark2.colors
-        self.landmark_colors = [
-            cm.summer(l * 10) for l in range(self.n_landmarks)
-        ]  # pastl greens
-        self.prediction_colors = [
-            cm.PiYG(l * 10) for l in range(self.n_landmarks)
-        ]  # pinks
+        # legend
+        self.legend = legend
 
-        # init the lines
-        self.lines_episode = self._init_episode_animation(self.ax_episode)
-        self.lines_reward = self._init_reward_animation(self.ax_reward)
-        self.lines_error = self._init_error_animation(self.ax_error)
+        # Initialize artists
+        self._init_episode_animation()
+        self._init_reward_animation()
+        self._init_error_animation()
 
-        animation.TimedAnimation.__init__(self, self.fig, interval=100, blit=True)
+        # Call parent constructor
+        super().__init__(self.fig, self._update, frames=self.frames, 
+                         interval=interval, blit=True)
 
-    def save_animation(self, savepath="episode"):
-        with contextlib.redirect_stdout(None):
-            self.save(savepath + ".gif")
-            self.fig.savefig(savepath + ".png")
+    def _init_episode_animation(self):
+        # Set up color schemes
+        self.agent_colors = plt.cm.tab10(np.linspace(0, 1, self.n_agents))
+        self.landmark_colors = plt.cm.Set2(np.linspace(0, 1, self.n_landmarks))
+        self.prediction_colors = plt.cm.Set1(np.linspace(0, 1, self.n_landmarks))
 
-    def _episode_update(self, data, line, frame, lags, name=None):
-        line.set_data(
-            data[max(0, frame - lags) : frame, 0], data[max(0, frame - lags) : frame, 1]
+        # Calculate boundaries with padding
+        all_positions = np.concatenate([
+            self.agent_positions.reshape(-1, 2),
+            self.landmark_positions.reshape(-1, 2),
+            self.landmark_predictions.reshape(-1, 2)
+        ])
+        
+        x_min, x_max = all_positions[:, 0].min(), all_positions[:, 0].max()
+        y_min, y_max = all_positions[:, 1].min(), all_positions[:, 1].max()
+        
+        # Calculate range and center for square aspect
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        max_range = max(x_range, y_range)
+        padding = max_range * 0.1
+        
+        center_x = (x_min + x_max) / 2
+        center_y = (y_min + y_max) / 2
+        
+        # Set equal range for both axes to ensure square aspect
+        half_range = max_range / 2 + padding
+        self.ax_episode.set_xlim(center_x - half_range, center_x + half_range)
+        self.ax_episode.set_ylim(center_y - half_range, center_y + half_range)
+        
+        # Set equal aspect ratio (makes plot square)
+        self.ax_episode.set_aspect('equal')
+        
+        # Styling
+        self.ax_episode.grid(True, ls='--', alpha=0.5)
+        self.ax_episode.set_xlabel('X Position')
+        self.ax_episode.set_ylabel('Y Position')
+        self.ax_episode.set_facecolor('#f0f8ff')  # Light blue background
+
+        # Create artists for agents
+        self.agent_trajectories = []
+        self.agent_start_markers = []
+        self.agent_end_markers = []
+        
+        for i, color in enumerate(self.agent_colors):
+            # Trajectory line
+            traj, = self.ax_episode.plot(
+                [], [], color=color, lw=1.8, alpha=0.9,
+                label=f"Agent {i+1} Trajectory"
+            )
+            self.agent_trajectories.append(traj)
+            
+            # Start marker (static)
+            start_marker = self.ax_episode.scatter(
+                self.agent_positions[i, 0, 0],
+                self.agent_positions[i, 0, 1],
+                color=color, marker='*', s=120, 
+                edgecolor='k', zorder=10,
+                label=f"Agent {i+1} Start"
+            )
+            self.agent_start_markers.append(start_marker)
+            
+            # End marker (current position)
+            end_marker, = self.ax_episode.plot(
+                [], [], 'o', color=color, markersize=10,
+                markeredgecolor='k', markeredgewidth=1,
+                label=f"Agent {i+1} Current"
+            )
+            self.agent_end_markers.append(end_marker)
+
+        # Create artists for landmarks
+        self.landmark_true_lines = []
+        self.landmark_pred_lines = []
+        self.landmark_true_points = []
+        self.landmark_pred_points = []
+        
+        for i, (true_color, pred_color) in enumerate(zip(self.landmark_colors, self.prediction_colors)):
+            # True positions
+            true_line, = self.ax_episode.plot(
+                [], [], 'o-', color=true_color, 
+                markersize=5, alpha=0.7, lw=1.5,
+                label=f"Landmark {i+1} True Path"
+            )
+            self.landmark_true_lines.append(true_line)
+            
+            # Predicted positions
+            pred_line, = self.ax_episode.plot(
+                [], [], '--', color=pred_color, 
+                markersize=0, alpha=0.9, lw=2,
+                label=f"Landmark {i+1} Prediction"
+            )
+            self.landmark_pred_lines.append(pred_line)
+            
+            # Current true position
+            true_point, = self.ax_episode.plot(
+                [], [], 's', color=true_color, 
+                markersize=8, alpha=1.0, markeredgecolor='k'
+            )
+            self.landmark_true_points.append(true_point)
+            
+            # Current prediction
+            pred_point, = self.ax_episode.plot(
+                [], [], 'D', color=pred_color, 
+                markersize=6, alpha=1.0, markeredgecolor='k'
+            )
+            self.landmark_pred_points.append(pred_point)
+
+        # Create a comprehensive legend
+        if self.legend:
+            legend_handles = []
+            legend_labels = []
+            
+            # Agent elements
+            for i in range(self.n_agents):
+                legend_handles.append(Line2D([0], [0], color=self.agent_colors[i], lw=2))
+                legend_labels.append(f"Agent {i+1} Path")
+                legend_handles.append(Line2D([0], [0], marker='*', color=self.agent_colors[i], 
+                                        markersize=10, linestyle=''))
+                legend_labels.append(f"Agent {i+1} Start")
+                legend_handles.append(Line2D([0], [0], marker='o', color=self.agent_colors[i], 
+                                        markersize=8, linestyle='', markeredgecolor='k'))
+                legend_labels.append(f"Agent {i+1} Current")
+            
+            # Landmark elements
+            for i in range(self.n_landmarks):
+                legend_handles.append(Line2D([0], [0], color=self.landmark_colors[i], 
+                                            marker='s', markersize=8, linestyle='-'))
+                legend_labels.append(f"Landmark {i+1} True Path")
+                legend_handles.append(Line2D([0], [0], color=self.prediction_colors[i], 
+                                            linestyle='--', lw=2))
+                legend_labels.append(f"Landmark {i+1} Prediction")
+            
+            # Position legend outside the plot area
+            self.ax_episode.legend(
+                legend_handles, legend_labels, 
+                # loc='upper left', 
+                # bbox_to_anchor=(1.02, 1),
+                # borderaxespad=0.,
+                frameon=True,
+                framealpha=0.8,
+                ncol=1
+            )
+            
+            # Adjust layout to accommodate legend
+            # plt.tight_layout()
+            # self.fig.subplots_adjust(right=0.8)
+
+    def _init_reward_animation(self):
+        self.ax_reward.grid(True, ls='--', alpha=0.5)
+        self.ax_reward.set_xlim(0, self.frames)
+        self.ax_reward.set_ylim(
+            self.episode_rewards.min() - 0.1, 
+            self.episode_rewards.max() + 0.1
         )
-        if name is not None:
-            line.set_label(name)
+        self.ax_reward.set_xlabel("Timestep")
+        self.ax_reward.set_ylabel("Reward")
+        
+        # Reward line
+        self.reward_line, = self.ax_reward.plot([], [], color='#2ca02c', lw=2)
 
-    def _frameline_update(self, data, line, frame, name=None):
-        line.set_data(np.arange(1, frame + 1), data[:frame])
-        if name is not None:
-            line.set_label(name)
-
-    def _draw_frame(self, frame):
-
-        # Update the episode subplot
-        line_episode = 0
-        # update agents heads
-        for n in range(self.n_agents):
-            self._episode_update(
-                self.agent_positions[n],
-                self.lines_episode[line_episode],
-                frame,
-                1,
-                f"Agent_{n+1}",
+    def _init_error_animation(self):
+        self.ax_error.grid(True, ls='--', alpha=0.5)
+        self.ax_error.set_xlim(0, self.frames)
+        self.ax_error.set_ylim(
+            self.episode_errors.min() - 0.1, 
+            self.episode_errors.max() + 0.1
+        )
+        self.ax_error.set_xlabel("Timestep")
+        self.ax_error.set_ylabel("Prediction Error")
+        
+        # Error lines
+        self.error_lines = []
+        for i, color in enumerate(self.prediction_colors):
+            line, = self.ax_error.plot(
+                [], [], color=color, lw=1.5,
+                label=f"Landmark {i+1}"
             )
-            line_episode += 1
-
-        # update agents trajectories
-        for n in range(self.n_agents):
-            self._episode_update(
-                self.agent_positions[n],
-                self.lines_episode[line_episode],
-                max(0, frame - 1),
-                self.lags,
-            )
-            line_episode += 1
-
-        # landmark real positions
-        for n in range(self.n_landmarks):
-            self._episode_update(
-                self.landmark_positions[n],
-                self.lines_episode[line_episode],
-                frame,
-                self.lags,
-                f"Landmark_{n+1}_real",
-            )
-            line_episode += 1
-
-        # landmark predictions
-        for n in range(self.n_landmarks):
-            self._episode_update(
-                self.landmark_predictions[n],
-                self.lines_episode[line_episode],
-                frame,
-                self.lags,
-                f"Landmark_{n+1}_predictions",
-            )
-            line_episode += 1
-
-        self.ax_episode.legend()
-
-        # Update the reward subplot
-        self._frameline_update(self.episode_rewards, self.lines_reward[0], frame)
-
-        # Update the error subplot
-        for n in range(self.n_landmarks):
-            self._frameline_update(
-                self.episode_errors[n],
-                self.lines_error[n],
-                frame,
-                f"Landmark_{n+1}_error",
-            )
+            self.error_lines.append(line)
         self.ax_error.legend()
 
-        self._drawn_artists = self.lines_episode + self.lines_reward + self.lines_error
+    def _update(self, frame):
+        # Update agents
+        for i in range(self.n_agents):
+            # Update trajectory
+            x = self.agent_positions[i, :frame+1, 0]
+            y = self.agent_positions[i, :frame+1, 1]
+            self.agent_trajectories[i].set_data(x, y)
+            
+            # Update end marker
+            if frame < self.frames:
+                self.agent_end_markers[i].set_data(
+                    [self.agent_positions[i, frame, 0]],
+                    [self.agent_positions[i, frame, 1]]
+                )
 
-    def _init_episode_animation(self, ax):
-        # retrieve the episode dimensions
-        x_max = max(
-            self.agent_positions[:, :, 0].max(), self.landmark_positions[:, :, 0].max()
+        # Update landmarks
+        for i in range(self.n_landmarks):
+            # True positions
+            true_x = self.landmark_positions[i, :frame+1, 0]
+            true_y = self.landmark_positions[i, :frame+1, 1]
+            self.landmark_true_lines[i].set_data(true_x, true_y)
+            
+            # Current true position
+            if frame < self.frames:
+                self.landmark_true_points[i].set_data(
+                    [self.landmark_positions[i, frame, 0]],
+                    [self.landmark_positions[i, frame, 1]]
+                )
+            
+            # Predicted positions
+            pred_x = self.landmark_predictions[i, :frame+1, 0]
+            pred_y = self.landmark_predictions[i, :frame+1, 1]
+            self.landmark_pred_lines[i].set_data(pred_x, pred_y)
+            
+            # Current prediction
+            if frame < self.frames:
+                self.landmark_pred_points[i].set_data(
+                    [self.landmark_predictions[i, frame, 0]],
+                    [self.landmark_predictions[i, frame, 1]]
+                )
+
+        # Update reward plot
+        self.reward_line.set_data(np.arange(frame+1), self.episode_rewards[:frame+1])
+
+        # Update error plot
+        for i in range(self.n_landmarks):
+            self.error_lines[i].set_data(
+                np.arange(frame+1), 
+                self.episode_errors[i, :frame+1]
+            )
+
+        # Return all artists that need redrawing
+        return (
+            self.agent_trajectories + 
+            self.agent_end_markers +
+            self.landmark_true_lines +
+            self.landmark_true_points +
+            self.landmark_pred_lines +
+            self.landmark_pred_points +
+            [self.reward_line] +
+            self.error_lines
         )
 
-        x_min = min(
-            self.agent_positions[:, :, 0].min(), self.landmark_positions[:, :, 0].min()
-        )
+    def save_animation(self, savepath="episode", save_gif=True):
+        
+        if save_gif:
+            full_path = savepath + ".gif"
+            writer = 'pillow'  # Use pillow for GIF
+            self.save(full_path, writer=writer, fps=self.fps)
+            print(f"Animation saved to {full_path}")
+        else:
+            full_path = savepath + ".mp4"
+            writer = 'ffmpeg'
+            self.save(full_path, writer=writer, fps=self.fps)
+            print(f"Animation saved to {full_path}")
+        
+        # Also save static image
+        self.save_fig(savepath + ".png")
 
-        y_max = max(
-            self.agent_positions[:, :, 1].max(), self.landmark_positions[:, :, 1].max()
-        )
-
-        y_min = min(
-            self.agent_positions[:, :, 1].min(), self.landmark_positions[:, :, 1].min()
-        )
-
-        abs_min = min(x_min, y_min)
-        abs_max = max(x_max, y_max)
-
-        ax.set_xlim(abs_min - 1, abs_max + 1)
-        ax.set_ylim(abs_min - 1, abs_max + 1)
-        ax.set_ylabel("Y Position")
-
-        # remove frame
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["bottom"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-
-        # lines:
-        # 1. agent head
-        # 2. agent trajectory
-        # 3. landmark real
-        # 4. landmark prediction
-        lines = (
-            [
-                ax.plot(
-                    [], [], "o", color=self.agent_colors[a], alpha=0.8, markersize=8
-                )[0]
-                for a in range(self.n_agents)
-            ]
-            + [
-                ax.plot(
-                    [], [], "o", color=self.agent_colors[a], alpha=0.2, markersize=4
-                )[0]
-                for a in range(self.n_agents)
-            ]
-            + [
-                ax.plot(
-                    [], [], "s", color=self.landmark_colors[l], alpha=0.8, markersize=8
-                )[0]
-                for l in range(self.n_landmarks)
-            ]
-            + [
-                ax.plot(
-                    [],
-                    [],
-                    "s",
-                    color=self.prediction_colors[l],
-                    alpha=0.2,
-                    markersize=4,
-                )[0]
-                for l in range(self.n_landmarks)
-            ]
-        )
-
-        return lines
-
-    def _init_reward_animation(self, ax):
-        ax.set_xlim(0, self.frames)
-        ax.set_ylim(self.episode_rewards.min(), self.episode_rewards.max() + 1)
-        ax.set_xlabel("Timestep")
-        ax.set_ylabel("Reward")
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # force integer ticks
-
-        # remove frame
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["bottom"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-
-        lines = [ax.plot([], [], color="green")[0]]
-        return lines
-
-    def _init_error_animation(self, ax):
-        ax.set_xlim(0, self.frames)
-        ax.set_ylim(self.episode_errors.min(), self.episode_errors.max())
-        ax.set_xlabel("Timestep")
-        ax.set_ylabel("Prediction error")
-
-        # remove frame
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["bottom"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-
-        lines = [
-            ax.plot([], [], color=self.prediction_colors[l])[0]
-            for l in range(self.n_landmarks)
-        ]
-        return lines
-
-    def new_frame_seq(self):
-        return iter(range(self.frames))
-
-    def _init_draw(self):
-        lines = self.lines_episode + self.lines_reward + self.lines_error
-        for l in lines:
-            l.set_data([], [])
+    def save_fig(self, savepath="episode.png"):
+        # Update to last frame
+        self._update(self.frames - 1)
+        self.fig.savefig(savepath, bbox_inches='tight', dpi=150)
+        plt.close(self.fig)
+        print(f"Static image saved to {savepath}")
 
 
-def animate_from_infos(infos, num_agents=3, save_path="./outputs"):
+def animate_from_infos(infos, num_agents=3, save_path="./outputs", save_gif=True, fps=10):
     """
     Animate an episode from the infos dictionary. Remember to set 'infos_for_render' to True in the environment.
     """
+    assert "render" in infos, "Set infos_for_render=True in environment"
 
-    assert (
-        "render" in infos
-    ), "Missing information in infos. Make sure to set infos_for_render=True in the environment."
-
-    # preprocess
+    # Preprocess data
     x = infos['render']
     dones = x["done"]
-    first_done = jax.lax.select(
-        (jnp.argmax(dones) == 0) & (dones[0] != True), dones.size, jnp.argmax(dones)
-    )
-    first_episode_mask = jnp.where(jnp.arange(dones.size) <= first_done, True, False)
-    x = jax.tree_map(lambda x: x[first_episode_mask], x)
-
+    first_done = np.argmax(dones) if np.any(dones) else len(dones)
+    
+    # Create mask for first complete episode
+    first_episode_mask = np.arange(len(dones)) <= first_done
+    
+    # Filter data for first episode
+    filtered = {}
+    for key, val in x.items():
+        if isinstance(val, (jnp.ndarray, np.ndarray)):
+            filtered[key] = np.asarray(val)[first_episode_mask]
+    
     viz = UTrackingAnimator(
-        agent_positions=jnp.swapaxes(x["pos"], 0, 1)[:num_agents, :, :2], # (num_agents, frames, 2)
-        landmark_positions=jnp.swapaxes(x["pos"], 0, 1)[num_agents:, :, :2], # (num_landmarks, frames, 2)
-        landmark_predictions=jnp.swapaxes(x["tracking_pred"], 0, 1), # (num_landmarks, frames, 2)
-        episode_rewards=x["reward"], # (frames,)
-        episode_errors=jnp.swapaxes(x["tracking_error"], 0, 1), # (num_landmarks, frames)
+        agent_positions=np.swapaxes(filtered["pos"], 0, 1)[:num_agents, :, :2],
+        landmark_positions=np.swapaxes(filtered["pos"], 0, 1)[num_agents:, :, :2],
+        landmark_predictions=np.swapaxes(filtered["tracking_pred"], 0, 1),
+        episode_rewards=filtered["reward"],
+        episode_errors=np.swapaxes(filtered["tracking_error"], 0, 1),
+        fps=10,
     )
-    viz.save_animation(save_path)
+    
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    viz.save_animation(save_path, save_gif=save_gif)

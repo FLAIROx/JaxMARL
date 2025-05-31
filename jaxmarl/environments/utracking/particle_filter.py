@@ -27,11 +27,11 @@ class ParticleFilter:
         self,
         num_particles=5000,
         std_range=10,  # m (standard deviation error of the range measurements)
-        mu_init_vel=0.1,  # m/s
-        std_init_vel=0.1,  # m/s
-        turn_noise=0.1,  # rad
+        mu_init_vel=0.6,  # m/s
+        std_init_vel=0.4,  # m/s
+        turn_noise=0.5,  # rad
         vel_noise=0.05,  # m/s
-        ess_threshold=0.15, # percentage of the total number of particles
+        ess_threshold=0.01, # percentage of the total number of particles
     ):
         self.num_particles = num_particles
         self.std_range = std_range
@@ -54,7 +54,7 @@ class ParticleFilter:
             # Randomly sample the initial position and velocity in the range around observer
             rng_a, rng_r, rng_v, rng_o = jax.random.split(rng, 4)
             angle = jax.random.uniform(rng_a, minval=0.0, maxval=2 * jnp.pi)
-            r = jax.random.uniform(rng_r) * self.std_range - self.std_range + range_obs
+            r = jax.random.normal(rng_r) * self.std_range + range_obs
             vel = jax.random.normal(rng_v) * self.std_init_vel + self.mu_init_vel
             orientation = jax.random.uniform(rng_o, minval=0, maxval=2 * jnp.pi)
             return OneParticleState(
