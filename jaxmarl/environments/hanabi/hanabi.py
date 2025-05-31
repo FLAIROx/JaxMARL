@@ -9,7 +9,7 @@ from jax import lax
 import chex
 from typing import Tuple, Dict
 from functools import partial
-from gymnax.environments.spaces import Discrete
+from jaxmarl.environments.spaces import Discrete, Box
 from .hanabi_game import HanabiGame, State
 
 
@@ -133,7 +133,7 @@ class HanabiEnv(HanabiGame):
         if action_spaces is None:
             self.action_spaces = {i: Discrete(self.num_moves) for i in self.agents}
         if observation_spaces is None:
-            self.observation_spaces = {i: Discrete(self.obs_size) for i in self.agents}
+            self.observation_spaces = {i: Box(low=0, high=1, shape=self.obs_size) for i in self.agents}
 
     @partial(jax.jit, static_argnums=[0])
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
@@ -194,7 +194,7 @@ class HanabiEnv(HanabiGame):
         """Get all agents' observations."""
 
         # no agent-specific obs
-        board_fats = self.get_board_feats(new_state)
+        board_feats = self.get_board_feats(new_state)
         discard_feats = self._binarize_discard_pile(new_state.discard_pile)
 
         def _observe(aidx: int):
@@ -225,7 +225,7 @@ class HanabiEnv(HanabiGame):
             return jnp.concatenate(
                 (
                     hands_feats,
-                    board_fats,
+                    board_feats,
                     discard_feats,
                     last_action_feats,
                     belief_v0_feats,
@@ -532,7 +532,7 @@ class HanabiEnv(HanabiGame):
         """Binarize the discard pile to reduce dimensionality."""
 
         def binarize_ranks(n_ranks):
-            tree = jax.tree_util.tree_map(
+            tree = jax.tree.map(
                 lambda n_rank_present, max_ranks: jnp.where(
                     jnp.arange(max_ranks) >= n_rank_present,
                     jnp.zeros(max_ranks),

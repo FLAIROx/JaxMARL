@@ -10,7 +10,7 @@ import numpy as onp
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from jaxmarl.environments.mpe.default_params import *
 import chex
-from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.spaces import Box, Discrete
 from flax import struct
 from typing import Tuple, Optional, Dict
 from functools import partial

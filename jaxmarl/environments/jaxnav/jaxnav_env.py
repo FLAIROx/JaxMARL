@@ -494,7 +494,7 @@ class JaxNav(MultiAgentEnv):
         theta = wrap(theta + w*self.dt)
         
         out = (pos, theta, jnp.array([v, w], dtype=jnp.float32))
-        return jax.tree_map(lambda x, y: jax.lax.select(done, x, y), out_done, out)  
+        return jax.tree.map(lambda x, y: jax.lax.select(done, x, y), out_done, out)  
         
     @partial(jax.vmap, in_axes=(None, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
     def compute_reward(
@@ -598,10 +598,10 @@ class JaxNav(MultiAgentEnv):
             key, state, actions
         )
         obs_re, state_re = self.reset_to_level(level)  # todo maybe should be set state depending on PLR code
-        state = jax.tree_map(
+        state = jax.tree.map(
             lambda x, y: jax.lax.select(state_st.ep_done, x, y), state_re, state_st
         )
-        obs = jax.tree_map(
+        obs = jax.tree.map(
             lambda x, y: jax.lax.select(state_st.ep_done, x, y), obs_re, obs_st
         )
         #obs = jax.lax.select(state_st.ep_done, obs_re, obs_st)

@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/jax:23.10-py3
+FROM nvcr.io/nvidia/jax:24.10-py3
 
 # Create user
 ARG UID
@@ -17,7 +17,7 @@ RUN apt-get update && \
     apt-get install -y tmux
 
 #jaxmarl from source if needed, all the requirements
-RUN pip install -e .
+RUN pip install -e .[algs,dev]
 
 USER ${MYUSER}
 

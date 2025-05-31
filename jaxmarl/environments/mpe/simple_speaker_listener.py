@@ -4,7 +4,7 @@ import chex
 from typing import Tuple, Dict
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
 from jaxmarl.environments.mpe.default_params import *
-from gymnax.environments.spaces import Box, Discrete
+from jaxmarl.environments.spaces import Box, Discrete
 
 SPEAKER = "speaker_0"
 LISTENER = "listener_0"
@@ -18,6 +18,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
         num_agents=2,
         num_landmarks=3,
         action_type=DISCRETE_ACT,
+        **kwargs,
     ):
         assert num_agents == 2, "SimpleSpeakerListnerMPE only supports 2 agents"
         assert num_landmarks == 3, "SimpleSpeakerListnerMPE only supports 3 landmarks"
@@ -81,6 +82,7 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
             moveable=moveable,
             silent=silent,
             collide=collide,
+            **kwargs,
         )
 
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:

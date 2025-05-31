@@ -23,3 +23,7 @@ def test_random_rollout():
         rng_act = jax.random.split(rng_act, env.num_agents)
         actions = {a: env.action_space(a).sample(rng_act[i]) for i, a in enumerate(env.agents)}
         _, state, _, _, _ = env.step(rng, state, actions)
+
+
+if __name__ == "__main__":
+    test_random_rollout()

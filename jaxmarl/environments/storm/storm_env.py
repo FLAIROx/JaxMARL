@@ -891,7 +891,7 @@ class InTheGrid(MultiAgentEnv):
             # # # if inner episode is done, return start state for next game
             state_re = _reset_state(key)
             state_re = state_re.replace(outer_t=outer_t + 1)
-            state = jax.tree_map(
+            state = jax.tree.map(
                 lambda x, y: jax.lax.select(reset_inner, x, y),
                 state_re,
                 state_nxt,
