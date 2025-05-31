@@ -67,14 +67,22 @@ class CNN(nn.Module):
 class QNetwork(nn.Module):
     action_dim: int
     hidden_size: int = 64
+    activation: str = "relu"
 
     @nn.compact
     def __call__(self, x: jnp.ndarray):
+        if self.activation == "relu":
+            activation = nn.relu
+        else:
+            activation = nn.tanh
+            
         embedding = CNN()(x)
+        # no activation here as a nonlinearity has already
+        # been applied to the embedding
         x = nn.Dense(self.hidden_size)(embedding)
+        x = activation(x)
         x = nn.Dense(self.action_dim)(x)
         return x
-
 
 @chex.dataclass(frozen=True)
 class Timestep:
