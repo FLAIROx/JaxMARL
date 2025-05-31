@@ -1914,6 +1914,21 @@ class InTheMatrix(MultiAgentEnv):
         self.num_inner_steps = num_inner_steps
         self.num_outer_steps = num_outer_steps
 
+        _shape = (
+            (self.OBS_SIZE, self.OBS_SIZE, (len(Items)-1) + 10)
+            if self.cnn
+            else (self.OBS_SIZE**2 * ((len(Items)-1) + 10),)
+        )
+        self.observation_spaces = {
+            a: spaces.Box(
+                low=0, high=1E9, shape=_shape, dtype=jnp.uint8
+            ) for a in self.agents
+        }
+
+        self.action_spaces = {
+            a: spaces.Discrete(len(Actions)) for a in self.agents
+        }
+
     @property
     def name(self) -> str:
         """Environment name."""
@@ -1924,23 +1939,13 @@ class InTheMatrix(MultiAgentEnv):
         """Number of actions possible in environment."""
         return len(Actions)
 
-    def action_space(
-        self, agent_id: Union[int, None] = None
-    ) -> spaces.Discrete:
+    def action_space(self, agent: str) -> spaces.Discrete:
         """Action space of the environment."""
-        return spaces.Discrete(len(Actions))
+        return self.action_spaces[agent]
 
-    def observation_space(self) -> spaces.Dict:
+    def observation_space(self, agent:str) -> spaces.Box:
         """Observation space of the environment."""
-        _shape_obs = (
-            (self.OBS_SIZE, self.OBS_SIZE, (len(Items)-1) + 10)
-            if self.cnn
-            else (self.OBS_SIZE**2 * ((len(Items)-1) + 10),)
-        )
-
-        return spaces.Box(
-                low=0, high=1E9, shape=_shape_obs, dtype=jnp.uint8
-            ), _shape_obs
+        return self.observation_spaces[agent]
     
     def state_space(self) -> spaces.Dict:
         """State space of the environment."""
