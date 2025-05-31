@@ -8,28 +8,28 @@
       
       
       
-        <link rel="canonical" href="https://jaxmarl.foersterlab.com/Algorithms/QLearning/">
+        <link rel="canonical" href="https://jaxmarl.foersterlab.com/Installation/">
       
       
-        <link rel="prev" href="../PPO/">
+        <link rel="prev" href="..">
       
       
-        <link rel="next" href="../../Environments/coin_game/">
+        <link rel="next" href="../API/multi_agent_env/">
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.5">
     
     
       
-        <title>QLearning - JaxMARL Documentation</title>
+        <title>Installation - JaxMARL Documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.8608ea7d.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.8608ea7d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -48,9 +48,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#qlearning" class="md-skip">
+        <a href="#installation" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +92,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="JaxMARL Documentation" class="md-header__button md-logo" aria-label="JaxMARL Documentation" data-md-component="logo">
+    <a href=".." title="JaxMARL Documentation" class="md-header__button md-logo" aria-label="JaxMARL Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              QLearning
+              Installation
             
           </span>
         </div>
@@ -225,7 +225,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="JaxMARL Documentation" class="md-nav__button md-logo" aria-label="JaxMARL Documentation" data-md-component="logo">
+    <a href=".." title="JaxMARL Documentation" class="md-nav__button md-logo" aria-label="JaxMARL Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -255,7 +255,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -273,10 +273,31 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../Installation/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -286,6 +307,62 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environments 🌍
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#algorithms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Algorithms 🦉
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development 🔨
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dockerfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dockerfile 🐋
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -338,7 +415,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../API/multi_agent_env/" class="md-nav__link">
+      <a href="../API/multi_agent_env/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -364,8 +441,6 @@
       
   
   
-    
-  
   
   
     
@@ -377,11 +452,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
@@ -396,7 +471,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Algorithms
@@ -410,7 +485,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../PPO/" class="md-nav__link">
+      <a href="../Algorithms/PPO/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -429,31 +504,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    QLearning
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../Algorithms/QLearning/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -463,53 +517,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#implementation-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      ⚙️ Implementation Details
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#usage" class="md-nav__link">
-    <span class="md-ellipsis">
-      🚀 Usage
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#hyperparameter-tuning" class="md-nav__link">
-    <span class="md-ellipsis">
-      🎯 Hyperparameter tuning
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -570,7 +577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/coin_game/" class="md-nav__link">
+      <a href="../Environments/coin_game/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -592,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/hanabi/" class="md-nav__link">
+      <a href="../Environments/hanabi/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -614,7 +621,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/jaxnav/" class="md-nav__link">
+      <a href="../Environments/jaxnav/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -636,7 +643,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/mabrax/" class="md-nav__link">
+      <a href="../Environments/mabrax/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -658,7 +665,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/mpe/" class="md-nav__link">
+      <a href="../Environments/mpe/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -680,7 +687,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/overcooked/" class="md-nav__link">
+      <a href="../Environments/overcooked/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -702,7 +709,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/smax/" class="md-nav__link">
+      <a href="../Environments/smax/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -724,7 +731,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/storm/" class="md-nav__link">
+      <a href="../Environments/storm/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -746,7 +753,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Environments/switch_riddle/" class="md-nav__link">
+      <a href="../Environments/switch_riddle/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -795,27 +802,36 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#implementation-details" class="md-nav__link">
+  <a href="#environments" class="md-nav__link">
     <span class="md-ellipsis">
-      ⚙️ Implementation Details
+      Environments 🌍
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#usage" class="md-nav__link">
+  <a href="#algorithms" class="md-nav__link">
     <span class="md-ellipsis">
-      🚀 Usage
+      Algorithms 🦉
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#hyperparameter-tuning" class="md-nav__link">
+  <a href="#development" class="md-nav__link">
     <span class="md-ellipsis">
-      🎯 Hyperparameter tuning
+      Development 🔨
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dockerfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dockerfile 🐋
     </span>
   </a>
   
@@ -840,74 +856,33 @@
   
 
 
-<h1 id="qlearning">QLearning</h1>
-<p>Pure JAX implementations of:</p>
-<ul>
-<li>PQN-VDN (Prallelised Q-Network)</li>
-<li>IQL (Independent Q-Learners)</li>
-<li>VDN (Value Decomposition Network)</li>
-<li>QMIX</li>
-<li>TransfQMix (Transformers for Leveraging the Graph Structure of MARL Problems)</li>
-<li>SHAQ (Incorporating Shapley Value Theory into Multi-Agent Q-Learning)</li>
-</ul>
-<p>PQN implementation follows <a href="https://github.com/mttga/purejaxql">purejaxql</a>. IQL, VDN and QMix follow the original <a href="https://github.com/oxwhirl/pymarl/blob/master/src/learners/q_learner.py">Pymarl</a> codebase while SHAQ follows the <a href="https://github.com/hsvgbkhgbv/shapley-q-learning">paper code</a>. </p>
-<p>Standard algorithms (iql, vdn, qmix) support:</p>
-<ul>
-<li>MPE</li>
-<li>SMAX</li>
-<li>Overcooked (qmix not supported)</li>
-</ul>
-<p>PQN-VDN supports:</p>
-<ul>
-<li>MPE</li>
-<li>SMAX</li>
-<li>Hanabi</li>
-<li>Overcooked</li>
-</ul>
-<p><strong>At the moment, PQN-VDN should be the most performant baseline for Q-Learning in terms of returns and training speed.</strong></p>
-<p>❗ TransfQMix and Shaq still use an old implementation of the scripts and need refactoring to match the new format. </p>
-<h2 id="implementation-details">⚙️ Implementation Details</h2>
-<p>All the algorithms take advantage of the <code>CTRolloutManager</code> environment wrapper (found in <code>jaxmarl.wrappers.baselines</code>), which is used to:</p>
-<ul>
-<li>Batchify the step and reset functions to run parallel environments.</li>
-<li>Add a global observation (<code>obs["__all__"]</code>) and a global reward (<code>rewards["__all__"]</code>) to the returns of <code>env.step</code> for centralized training.</li>
-<li>Preprocess and uniform the observation vectors (flatten, pad, add additional features like id one-hot encoding, etc.).</li>
-</ul>
-<p>You might want to modify this wrapper for your needs.</p>
-<h2 id="usage">🚀 Usage</h2>
-<p>If you have cloned JaxMARL and you are in the repository root, you can run the algorithms as scripts. You will need to specify which parameter configurations will be loaded by Hydra by choosing them (or adding yours) in the config folder. Below are some examples:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># vdn rnn in in mpe spread</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>baselines/QLearning/vdn_rnn.py<span class="w"> </span>+alg<span class="o">=</span>ql_rnn_mpe
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># independent IQL rnn in competetive simple_tag (predator-prey)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>python<span class="w"> </span>baselines/QLearning/iql_rnn.py<span class="w"> </span>+alg<span class="o">=</span>ql_rnn_mpe<span class="w"> </span>alg.ENV_NAME<span class="o">=</span>MPE_simple_tag_v3
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># QMix with SMAX</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>python<span class="w"> </span>baselines/QLearning/qmix_rnn.py<span class="w"> </span>+alg<span class="o">=</span>ql_rnn_smax
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># VDN overcooked</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>python<span class="w"> </span>baselines/QLearning/vdn_cnn_overcooked.py<span class="w"> </span>+alg<span class="o">=</span>ql_cnn_overcooked<span class="w"> </span>alg.ENV_KWARGS.LAYOUT<span class="o">=</span>counter_circuit
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># TransfQMix</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>python<span class="w"> </span>baselines/QLearning/transf_qmix.py<span class="w"> </span>+alg<span class="o">=</span>transf_qmix_smax
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># pqn feed-forward in MPE</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>python<span class="w"> </span>baselines/QLearning/pqn_vdn_ff.py<span class="w"> </span>+alg<span class="o">=</span>pqn_vdn_ff_mpe
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="c1"># pqn feed-forward in hanabi</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>python<span class="w"> </span>baselines/QLearning/pqn_vdn_ff.py<span class="w"> </span>+alg<span class="o">=</span>pqn_vdn_ff_hanabi
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="c1"># pqn CNN in overcooked</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>python<span class="w"> </span>baselines/QLearning/pqn_vdn_cnn_overcooked.py<span class="w"> </span>+alg<span class="o">=</span>pqn_vdn_cnn_overcooked
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># pqn with RNN in SMAX</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>python<span class="w"> </span>baselines/QLearning/pqn_vdn_rnn.py<span class="w"> </span>+alg<span class="o">=</span>pqn_vdn_rnn_smax
+<h1 id="installation">Installation</h1>
+<h2 id="environments">Environments 🌍</h2>
+<p>Before installing, ensure you have the correct <a href="https://github.com/google/jax#installation">JAX installation</a> for your hardware accelerator. We have tested up to JAX version 0.4.36. The JaxMARL environments can be installed directly from PyPi:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>jaxmarl<span class="w"> </span>
 </span></code></pre></div>
-<p>Notice that with Hydra, you can modify parameters on the go in this way:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># change learning rate</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>baselines/QLearning/iql_rnn.py<span class="w"> </span>+alg<span class="o">=</span>ql_rnn_mpe<span class="w"> </span>alg.LR<span class="o">=</span><span class="m">0</span>.001
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># change overcooked layout</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>python<span class="w"> </span>baselines/QLearning/pqn_vdn_cnn_overcooked.py<span class="w"> </span>+alg<span class="o">=</span>pqn_vdn_cnn_overcooked<span class="w"> </span>alg.ENV_KWARGS.LAYOUT<span class="o">=</span>counter_circuit
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># change smax map</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>python<span class="w"> </span>baselines/QLearning/pqn_vdn_rnn.py<span class="w"> </span>+alg<span class="o">=</span>pqn_vdn_rnn_smax<span class="w"> </span>alg.MAP_NAME<span class="o">=</span>5m_vs_6m
+<h2 id="algorithms">Algorithms 🦉</h2>
+<p>If you would like to also run the algorithms, install the source code as follows:</p>
+<ol>
+<li>Clone the repository:
+    <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/FLAIROx/JaxMARL.git<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>JaxMARL
+</span></code></pre></div></li>
+<li>Install requirements:
+    <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>algs<span class="o">]</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="nv">PYTHONPATH</span><span class="o">=</span>./JaxMARL:<span class="nv">$PYTHONPATH</span>
+</span></code></pre></div></li>
+<li>For the fastest start, we reccoment using our Dockerfile, the usage of which is outlined below.</li>
+</ol>
+<h2 id="development">Development 🔨</h2>
+<p>If you would like to run our test suite, install the additonal dependencies as follows after cloning the repository:
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev<span class="o">]</span>
+</span></code></pre></div></p>
+<h2 id="dockerfile">Dockerfile 🐋</h2>
+<p>To help get experiments up and running we include a <a href="https://github.com/FLAIROx/JaxMARL/blob/main/Dockerfile">Dockerfile</a> and its corresponding <a href="https://github.com/FLAIROx/JaxMARL/blob/main/Makefile">Makefile</a>. With Docker and the <a href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html">Nvidia Container Toolkit</a> installed, the container can be built with:
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>make<span class="w"> </span>build
 </span></code></pre></div>
-<p>Take a look at <a href="./config/config.yaml"><code>config.yaml</code></a> for the default configuration when running these scripts. There you can choose how many seeds to vmap and you can setup WANDB. </p>
-<p><strong>❗Note on Transformers</strong>: TransfQMix currently supports only MPE_Spread and SMAX. You will need to wrap the observation vectors into matrices to use transformers in other environments. See: <code>jaxmarl.wrappers.transformers</code></p>
-<h2 id="hyperparameter-tuning">🎯 Hyperparameter tuning</h2>
-<p>All the scripts include a tune function to perform hyperparameter tuning. To use it, set <code>"HYP_TUNE": True</code> in the <code>config.yaml</code> and set the hyperparameters spaces in the tune function. For more information, check <a href="https://docs.wandb.ai/guides/sweeps">wandb documentation</a>.</p>
+The built container can then be run:
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>make<span class="w"> </span>run
+</span></code></pre></div></p>
 
 
 
@@ -954,10 +929,10 @@
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.f1b6f286.min.js"></script>
+      <script src="../assets/javascripts/bundle.f1b6f286.min.js"></script>
       
     
   </body>
