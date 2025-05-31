@@ -3,6 +3,10 @@ import time
 import copy
 import numpy as np
 
+import time
+import copy
+import numpy as np
+
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -12,9 +16,13 @@ from flax.training.train_state import TrainState
 import distrax
 import optax
 
+import optax
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
+from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
+import wandb
 from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
 import wandb
 
@@ -708,6 +716,7 @@ def make_train(config):
             if config["WANDB_MODE"] != "disabled":
 
                 def callback(metrics, original_seed, render_infos=None, model_state=None):
+                def callback(metrics, original_seed, render_infos=None, model_state=None):
                     if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
                             {
@@ -901,11 +910,15 @@ def single_run(config):
         name=f'{alg_name}_{env_name}_seed{config["SEED"]}',
     )
     
+    
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_jit = jax.jit(make_train(copy.deepcopy(config)))
     t0 = time.time()
+    train_jit = jax.jit(make_train(copy.deepcopy(config)))
+    t0 = time.time()
     outs = jax.vmap(train_jit)(rngs)
+    print("time taken:", time.time() - t0)
     print("time taken:", time.time() - t0)
 
     if config.get("SAVE_PATH", None) is not None:

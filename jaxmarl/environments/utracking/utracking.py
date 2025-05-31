@@ -62,6 +62,7 @@ class State:
     t: int  # step
     cum_rew: float  # cumulative episode reward
     last_actions: chex.Array  # last action taken by the agent
+    last_actions: chex.Array  # last action taken by the agent
 
 
 class UTracking(MultiAgentEnv):
@@ -159,14 +160,17 @@ class UTracking(MultiAgentEnv):
         self.entities = self.agents + self.landmarks
         self.discrete_actions = discrete_actions
         self.actions_as_angles = actions_as_angles
+        self.actions_as_angles = actions_as_angles
         self.agent_depth = agent_depth
         self.landmark_rel_speed = landmark_rel_speed
         self.landmark_depth = landmark_depth
+        self.landmark_depth_known = landmark_depth_known
         self.landmark_depth_known = landmark_depth_known
         self.min_valid_distance = min_valid_distance
         self.min_init_distance = min_init_distance
         self.max_init_distance = max_init_distance
         self.max_range_dist = max_range_dist
+        self.max_comm_dist = max_comm_dist
         self.max_comm_dist = max_comm_dist
         self.prop_agent = prop_agent
         self.rudder_range_landmark = np.array(rudder_range_landmark)
@@ -174,6 +178,7 @@ class UTracking(MultiAgentEnv):
         self.tracking_method = tracking_method
         self.tracking_buffer_len = tracking_buffer_len
         self.range_noise_std = range_noise_std
+        self.traj_noise_std = traj_noise_std
         self.traj_noise_std = traj_noise_std
         self.lost_comm_prob = lost_comm_prob
         self.min_steps_ls = min_steps_ls
@@ -406,6 +411,7 @@ class UTracking(MultiAgentEnv):
             t=t,
             cum_rew=0.0,
             last_actions=jnp.zeros(self.num_agents),
+            last_actions=jnp.zeros(self.num_agents),
         )
         return obs, state
 
@@ -419,6 +425,18 @@ class UTracking(MultiAgentEnv):
         traj_coeffs: chex.Array,
         traj_intercepts: chex.Array,
     ) -> chex.Array:
+        
+        if self.actions_as_angles:
+            pos = pos.at[:, -1].set(actions)
+        else:
+            # update the angle
+            angle_change = actions * traj_coeffs + traj_intercepts
+            # add noise
+            angle_change += jax.random.normal(rng, shape=angle_change.shape) * self.traj_noise_std
+            new_angles = (pos[:, -1] + angle_change + jnp.pi) % (2 * jnp.pi) - jnp.pi
+            # update the x-y position (depth remains constant)
+            pos = pos.at[:, -1].set(new_angles)
+            
         
         if self.actions_as_angles:
             pos = pos.at[:, -1].set(actions)
@@ -499,6 +517,7 @@ class UTracking(MultiAgentEnv):
             pf_state=pf_state,
             t=state.t + 1,
             cum_rew=state.cum_rew + reward,
+            last_actions=last_actions,
             last_actions=last_actions,
         )
         return obs, state, rewards, done, info
@@ -779,6 +798,8 @@ class UTracking(MultiAgentEnv):
     def preprocess_actions(self, actions: chex.Array) -> chex.Array:
         if self.actions_as_angles:
             return actions
+        if self.actions_as_angles:
+            return actions
         if self.discrete_actions:
             return self.discrete_actions_mapping[actions]
         else:
@@ -833,13 +854,24 @@ class UTracking(MultiAgentEnv):
             jax.random.normal(key_noise, shape=ranges_real.shape) * self.range_noise_std
         )
         
+        
         ranges = ranges_real + noise
         lost_range = (
             (jax.random.uniform(key_lost, shape=ranges.shape) <= self.lost_comm_prob)
             | (ranges_real > self.max_range_dist)
         ) # lost communication or landmark too far
         ranges = jnp.where(lost_range, 0., ranges) 
+        lost_range = (
+            (jax.random.uniform(key_lost, shape=ranges.shape) <= self.lost_comm_prob)
+            | (ranges_real > self.max_range_dist)
+        ) # lost communication or landmark too far
+        ranges = jnp.where(lost_range, 0., ranges) 
         ranges = fill_diagonal_zeros(ranges)  # reset to 0s the self-ranges
+
+        ranges_2d = ranges_real_2d + noise
+        ranges_2d = jnp.where(lost_range, 0., ranges_2d)
+        ranges_2d = fill_diagonal_zeros(ranges_2d)
+
 
         ranges_2d = ranges_real_2d + noise
         ranges_2d = jnp.where(lost_range, 0., ranges_2d)
@@ -865,6 +897,9 @@ class UTracking(MultiAgentEnv):
             jax.random.uniform(key_comm, shape=(self.num_agents, self.num_agents))
             < self.lost_comm_prob
         )
+
+        # communication is dropped also for the agents that are too far
+        comm_drop = comm_drop | (ranges_real[:, :self.num_agents] > self.max_comm_dist) # too far
 
         # communication is dropped also for the agents that are too far
         comm_drop = comm_drop | (ranges_real[:, :self.num_agents] > self.max_comm_dist) # too far
@@ -1008,6 +1043,13 @@ class UTracking(MultiAgentEnv):
                 pos[self.num_agents:, 2], (self.num_agents)
             ).reshape(self.num_agents, self.num_landmarks)
 
+
+        if self.landmark_depth_known:
+            # repeat the depth of the landmarks for each agent
+            return jnp.tile(
+                pos[self.num_agents:, 2], (self.num_agents)
+            ).reshape(self.num_agents, self.num_landmarks)
+
         # bad depth estimation using pitagora
         pos_xy = pos[: self.num_agents, :2]
         ranges = ranges[:, self.num_agents :]  # ranges between agents and landmarks
@@ -1021,6 +1063,25 @@ class UTracking(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0,))
     def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
 
+        if not self.discrete_actions:
+            raise NotImplementedError('"get_avail_actions" supports only discrete actions')
+
+        def close_action_valid(last_action_idx):
+            avail_actions = jnp.zeros(len(self.discrete_actions_mapping))
+            avail_actions = avail_actions.at[last_action_idx].set(1)
+            return jnp.where(
+                last_action_idx==0,
+                avail_actions.at[1].set(1),
+                jnp.where(
+                    last_action_idx==len(self.discrete_actions_mapping)-1,
+                    avail_actions.at[-2].set(1),
+                    jnp.minimum(avail_actions.at[last_action_idx-1].set(1)+avail_actions.at[last_action_idx+1].set(1),1)
+                )
+            )
+        
+        avail_actions = jax.vmap(close_action_valid)(state.last_actions.astype(int))
+        return {a: avail_actions[i] for i, a in enumerate(self.agents)}
+        
         if not self.discrete_actions:
             raise NotImplementedError('"get_avail_actions" supports only discrete actions')
 
