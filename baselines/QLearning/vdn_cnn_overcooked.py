@@ -67,14 +67,22 @@ class CNN(nn.Module):
 class QNetwork(nn.Module):
     action_dim: int
     hidden_size: int = 64
+    activation: str = "relu"
 
     @nn.compact
     def __call__(self, x: jnp.ndarray):
+        if self.activation == "relu":
+            activation = nn.relu
+        else:
+            activation = nn.tanh
+            
         embedding = CNN()(x)
+        # no activation here as a nonlinearity has already
+        # been applied to the embedding
         x = nn.Dense(self.hidden_size)(embedding)
+        x = activation(x)
         x = nn.Dense(self.action_dim)(x)
         return x
-
 
 @chex.dataclass(frozen=True)
 class Timestep:
@@ -224,7 +232,7 @@ def make_train(config, env):
             rewards=_rewards,
             dones=_dones,
         )
-        _tiemstep_unbatched = jax.tree_map(
+        _tiemstep_unbatched = jax.tree.map(
             lambda x: x[0], _timestep
         )  # remove the NUM_ENV dim
         buffer_state = buffer.init(_tiemstep_unbatched)
@@ -260,7 +268,7 @@ def make_train(config, env):
                 # add shaped reward
                 shaped_reward = infos.pop("shaped_reward")
                 shaped_reward["__all__"] = batchify(shaped_reward).sum(axis=0)
-                rewards = jax.tree_map(
+                rewards = jax.tree.map(
                     lambda x, y: x + y * rew_shaping_anneal(train_state.timesteps),
                     rewards,
                     shaped_reward,
@@ -291,7 +299,7 @@ def make_train(config, env):
             )  # update timesteps count
 
             # BUFFER UPDATE
-            timesteps = jax.tree_util.tree_map(
+            timesteps = jax.tree.map(
                 lambda x: x.reshape(-1, *x.shape[2:]), timesteps
             )  # (num_envs*num_steps, ...)
             buffer_state = buffer.add(buffer_state, timesteps)
@@ -385,7 +393,7 @@ def make_train(config, env):
                 "loss": loss.mean(),
                 "qvals": qvals.mean(),
             }
-            metrics.update(jax.tree_map(lambda x: x.mean(), infos))
+            metrics.update(jax.tree.map(lambda x: x.mean(), infos))
 
             if config.get("TEST_DURING_TRAINING", True):
                 rng, _rng = jax.random.split(rng)
@@ -545,7 +553,7 @@ def single_run(config):
         )
 
         for i, rng in enumerate(rngs):
-            params = jax.tree_map(lambda x: x[i], model_state.params)
+            params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
                 f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',

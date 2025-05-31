@@ -1,18 +1,17 @@
-"""
-Check that the environment can be reset and stepped with random actions.
-TODO: replace this with proper unit tests.
-"""
 import jax
-# import pytest 
+from jaxmarl import make
 
-from jaxmarl.environments.mabrax import MABraxEnv 
+env_parmas = {
+    "layout" : "grounded_coord_simple",
+    "agent_view_size": 2,
+    "negative_rewards": True,
+    "sample_recipe_on_delivery": True,
+    "random_agent_positions": True
+}
 
-env = MABraxEnv("ant_4x2")
+env = make("overcooked_v2", **env_parmas)
 
-def test_random_rollout():
-
-    
-
+def test_random_rollout_overcooked_v2():
     rng = jax.random.PRNGKey(0)
     rng, rng_reset = jax.random.split(rng)
 
@@ -23,7 +22,3 @@ def test_random_rollout():
         rng_act = jax.random.split(rng_act, env.num_agents)
         actions = {a: env.action_space(a).sample(rng_act[i]) for i, a in enumerate(env.agents)}
         _, state, _, _, _ = env.step(rng, state, actions)
-
-
-if __name__ == "__main__":
-    test_random_rollout()

@@ -143,7 +143,7 @@ def make_train(config, rng_init):
                     rng_step, env_state, env_act,
                 )
 
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 transition = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
                     action,
@@ -258,13 +258,13 @@ def make_train(config, rng_init):
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
-                batch = jax.tree_util.tree_map(
+                batch = jax.tree.map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
-                shuffled_batch = jax.tree_util.tree_map(
+                shuffled_batch = jax.tree.map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
                 )
-                minibatches = jax.tree_util.tree_map(
+                minibatches = jax.tree.map(
                     lambda x: jnp.reshape(
                         x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
                     ),
@@ -292,8 +292,8 @@ def make_train(config, rng_init):
 
             update_count = update_count + 1
             r0 = {"ratio0": loss_info["ratio"][0,0].mean()}
-            loss_info = jax.tree_map(lambda x: x.mean(), loss_info)
-            metric = jax.tree_map(lambda x: x.mean(), metric)
+            loss_info = jax.tree.map(lambda x: x.mean(), loss_info)
+            metric = jax.tree.map(lambda x: x.mean(), metric)
             metric["update_step"] = update_count
             metric["env_step"] = update_count * config["NUM_STEPS"] * config["NUM_ENVS"]
             metric = {**metric, **loss_info, **r0}

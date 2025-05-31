@@ -35,4 +35,4 @@ def test_auto_reset_to_specific_state():
     actions = {a: env.action_space(a).sample(rng_act[i]) for i, a in enumerate(env.agents)}
     _, next_state, _, dones, _ = env.step(rng, state1, actions, reset_state=state2)
     assert dones["__all__"]
-    jax.tree_map(_test_leaf, state2, next_state)
+    jax.tree.map(_test_leaf, state2, next_state)

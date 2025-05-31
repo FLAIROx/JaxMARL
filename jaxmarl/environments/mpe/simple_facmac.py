@@ -22,7 +22,8 @@ class SimpleFacmacMPE(SimpleMPE):
         num_adversaries=3,
         num_landmarks=2,
         view_radius=1.5,  # set -1 to deactivate
-        score_function="sum"
+        score_function="sum",
+        **kwargs,
     ):
         dim_c = 2  # NOTE follows code rather than docs
         action_type = CONTINUOUS_ACT
@@ -80,6 +81,7 @@ class SimpleFacmacMPE(SimpleMPE):
             accel=accel,
             max_speed=max_speed,
             collide=collide,
+            **kwargs,
         )
 
         # Overwrite action and observation spaces

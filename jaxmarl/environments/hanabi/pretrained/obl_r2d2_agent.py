@@ -26,7 +26,7 @@ class MultiLayerLSTM(nn.RNNCellBase):
         new_cs = []
         for l in range(self.num_layers):
             new_carry, y = nn.LSTMCell(self.features, name=f"l{l}")(
-                jax.tree_map(lambda x: x[l], carry), inputs
+                jax.tree.map(lambda x: x[l], carry), inputs
             )
             new_cs.append(new_carry[0])
             new_hs.append(new_carry[1])

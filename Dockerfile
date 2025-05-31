@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/jax:23.10-py3
+FROM nvcr.io/nvidia/jax:24.10-py3
 
 # Create user
 ARG UID
