@@ -104,7 +104,7 @@ def main():
     default_reward_coeffs = {
         "distance_reward_coef": 1.0,
         "z_distance_reward_coef": 0.0,
-        "velocity_reward_coef": 10.0,
+        "velocity_reward_coef": 1.0,
         "safe_distance_coef": 1.0,
         "up_reward_coef": 1.0,
         "linvel_reward_coef": 1.0,
@@ -127,7 +127,7 @@ def main():
             "num_quads": 6,
             "episode_length": 4096,
         },
-        "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 5_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
