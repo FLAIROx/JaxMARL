@@ -77,7 +77,7 @@ def get_rollout(train_state, config):
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
 
-    init_x = jnp.zeros(env.observation_space().shape)
+    init_x = jnp.zeros(env.observation_space("agent_0").shape)
     init_x = init_x.flatten()
 
     network.init(key_a, init_x)
@@ -158,7 +158,7 @@ def make_train(config):
         # INIT NETWORK
         network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros(env.observation_space().shape)
+        init_x = jnp.zeros(env.observation_space("agent_0").shape)
         
         init_x = init_x.flatten()
         

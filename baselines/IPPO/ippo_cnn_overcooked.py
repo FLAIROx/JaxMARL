@@ -120,7 +120,7 @@ def get_rollout(params, config):
     while not done:
         key, key_a0, key_a1, key_s = jax.random.split(key, 4)
 
-        obs_batch = jnp.stack([obs[a] for a in env.agents]).reshape(-1, *env.observation_space().shape)
+        obs_batch = jnp.stack([obs[a] for a in env.agents]).reshape(-1, *env.observation_space("agent_0").shape)
 
         pi, value = network.apply(params, obs_batch)
         action = pi.sample(seed=key_a0)
@@ -181,7 +181,7 @@ def make_train(config):
         # INIT NETWORK
         network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros((1, *env.observation_space().shape))
+        init_x = jnp.zeros((1, *env.observation_space("agent_0").shape))
 
         network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
@@ -214,7 +214,7 @@ def make_train(config):
                 # SELECT ACTION
                 rng, _rng = jax.random.split(rng)
 
-                obs_batch = jnp.stack([last_obs[a] for a in env.agents]).reshape(-1, *env.observation_space().shape)
+                obs_batch = jnp.stack([last_obs[a] for a in env.agents]).reshape(-1, *env.observation_space("agent_0").shape)
 
                 print("input_obs_shape", obs_batch.shape)
 
@@ -258,7 +258,7 @@ def make_train(config):
 
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, update_step, rng = runner_state
-            last_obs_batch = jnp.stack([last_obs[a] for a in env.agents]).reshape(-1, *env.observation_space().shape)
+            last_obs_batch = jnp.stack([last_obs[a] for a in env.agents]).reshape(-1, *env.observation_space("agent_0").shape)
             _, last_val = network.apply(train_state.params, last_obs_batch)
 
             def _calculate_gae(traj_batch, last_val):
