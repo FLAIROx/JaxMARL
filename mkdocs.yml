@@ -5,6 +5,7 @@ theme:
   name: material
   features:
     - navigation.sections
+    - content.code.copy
   palette:
     # Dark Mode
     - scheme: slate
@@ -41,3 +42,5 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.blocks.caption
+  - attr_list

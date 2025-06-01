@@ -1,6 +1,13 @@
 # SMAX
-## Description
-SMAX is a purely JAX SMAC-like environment. It, like SMAC, focuses on decentralised unit micromanagement across a range of scenarios. Each scenario features fixed teams.
+
+**SMAX is a purely JAX SMAC-like environment**. It, like SMAC, focuses on decentralised unit micromanagement across a range of scenarios. Each scenario features fixed teams.
+
+![SMAX](https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/smax.gif?raw=true){ width=300px }
+/// caption
+2s3z Scenario
+///
+
+
 
 ## Scenarios
 
