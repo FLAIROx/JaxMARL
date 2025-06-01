@@ -127,7 +127,7 @@ def main():
             "num_quads": 6,
             "episode_length": 4096,
         },
-        "TOTAL_TIMESTEPS": 5_000_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 3_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
         "NUM_STEPS": 128,
         "NUM_MINIBATCHES": 512,
