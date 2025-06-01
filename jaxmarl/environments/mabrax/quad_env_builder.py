@@ -18,7 +18,7 @@ class QuadEnvGenerator:
         cable_length: float = 0.5,
         tendon_width: float = 0.001,
         payload_height: float = 1.5,
-        payload_mass: float = 0.05,
+        payload_mass: float = 0.03,
         frame_radius: float = 0.15,
         mesh_dir: str = "jaxmarl/environments/mabrax/mujoco/assets",
         mesh_names: Optional[List[str]] = None,
@@ -64,7 +64,8 @@ class QuadEnvGenerator:
             "solver": "Newton",
             "jacobian": "dense",
             "iterations": "1",
-            "ls_iterations": "4",
+            "ls_iterations": "2",
+            "integrator": "euler",
         })
         ET.SubElement(opt, "flag", {"eulerdamp": "disable"})
 
