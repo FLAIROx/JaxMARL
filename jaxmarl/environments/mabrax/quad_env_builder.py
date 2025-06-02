@@ -65,7 +65,7 @@ class QuadEnvGenerator:
             "jacobian": "dense",
             "iterations": "1",
             "ls_iterations": "2",
-            "integrator": "implicitfast",
+            "integrator": "Euler",
         })
         ET.SubElement(opt, "flag", {"eulerdamp": "disable"})
 
