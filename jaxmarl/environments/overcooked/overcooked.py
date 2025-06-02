@@ -98,6 +98,13 @@ class Overcooked(MultiAgentEnv):
         self.random_reset = random_reset
         self.max_steps = max_steps
 
+        self.observation_spaces = {
+            a: spaces.Box(0, 255, self.obs_shape) for a in self.agents
+        }
+        self.action_spaces = {
+            a: spaces.Discrete(len(self.action_set), dtype=jnp.uint32) for a in self.agents
+        }
+
     def step_env(
             self,
             key: chex.PRNGKey,
@@ -647,16 +654,13 @@ class Overcooked(MultiAgentEnv):
         """Number of actions possible in environment."""
         return len(self.action_set)
 
-    def action_space(self, agent_id="") -> spaces.Discrete:
+    def action_space(self, agent: str) -> spaces.Discrete:
         """Action space of the environment. Agent_id not used since action_space is uniform for all agents"""
-        return spaces.Discrete(
-            len(self.action_set),
-            dtype=jnp.uint32
-        )
-
-    def observation_space(self) -> spaces.Box:
+        return self.action_spaces[agent]
+    
+    def observation_space(self, agent: str) -> spaces.Box:
         """Observation space of the environment."""
-        return spaces.Box(0, 255, self.obs_shape)
+        return self.observation_spaces[agent]
 
     def state_space(self) -> spaces.Dict:
         """State space of the environment."""

@@ -1,32 +1,27 @@
 # MPE
 
-Multi Particle Environments (MPE) are a set of communication oriented environment where particle agents can (sometimes) move, communicate, see each other, push each other around, and interact with fixed landmarks. We implement all of the [PettingZoo MPE Environments](https://pettingzoo.farama.org/environments/mpe/).
+Multi Particle Environments (MPE) are a set of communication oriented environment where particle agents can (sometimes) move, communicate, see each other, push each other around, and interact with fixed landmarks. 
 
+![MPE](https://github.com/FLAIROx/JaxMARL/blob/main/docs/imgs/qmix_MPE_simple_tag_v3.gif?raw=true){ width=300px }
+/// caption
+MPE Simple Tag
+///
 
-<div class="collage">
-  <div class="row" align="left">
-    <img src="docs/qmix_MPE_simple_tag_v3.gif" alt="MPE Simple Tag" width="30%"/>
-    <img src="docs/vdn_MPE_simple_spread_v3.gif" alt="MPE Simple Spread" width="30%"/>
-    <img src="docs/qmix_MPE_simple_speaker_listener_v4.gif" alt="MPE Speaker Listener" width="30%">
-  </div>
-</div>
+## Environments 
 
-
+We implement all of the [PettingZoo MPE Environments](https://pettingzoo.farama.org/environments/mpe/):
 
 | Envrionment  | JaxMARL Registry Name  |
 |---|---|
-| Simple  | `MPE_simple_v3` |
-| Simple Push  | `MPE_simple_push_v3`  |
-| Simple Spread  |  `MPE_simple_spread_v3` |
-| Simple Crypto  | `MPE_simple_crypto_v3`  |
-| Simple Speaker Listener  | `MPE_simple_speaker_listener_v4`  |
-| Simple Tag  | `MPE_simple_tag_v3`  |
-| Simple World Comm | `MPE_simple_world_comm_v3` |
-| Simple Reference | `MPE_simple_reference_v3` |
-| Simple Adversary | `MPE_simple_adversary_v3` |
-
-
-The implementations follow the PettingZoo code as closely as possible, including sharing variable names and version numbers. There are occasional discrepancies between the PettingZoo code and docs, where this occurs we have followed the code. As our implementation closely follows the PettingZoo code, please refer to their documentation for further information on the environments.
+| Simple  | MPE_simple_v3 |
+| Simple Push  | MPE_simple_push_v3  |
+| Simple Spread  |  MPE_simple_spread_v3 |
+| Simple Crypto  | MPE_simple_crypto_v3  |
+| Simple Speaker Listener  | MPE_simple_speaker_listener_v4  |
+| Simple Tag  | MPE_simple_tag_v3  |
+| Simple World Comm | MPE_simple_world_comm_v3 |
+| Simple Reference | MPE_simple_reference_v3 |
+| Simple Adversary | MPE_simple_adversary_v3 |
 
 We additionally include a fully cooperative variant of Simple Tag, first used to evaluate FACMAC. In this environmnet, a number of agents attempt to tag a number of prey, where the prey are controlled by a heuristic AI.
 
@@ -35,6 +30,10 @@ We additionally include a fully cooperative variant of Simple Tag, first used to
 | 3 agents, 1 prey  | `MPE_simple_facmac_3a_v1` |
 | 6 agents, 2 prey  | `MPE_simple_facmac_6a_v1` |
 | 9 agents, 3 prey  | `MPE_simple_facmac_9a_v1` |
+
+## Implementation notes
+
+The implementations follow the PettingZoo code as closely as possible, including sharing variable names and version numbers. There are occasional discrepancies between the PettingZoo code and docs, where this occurs we have followed the code. As our implementation closely follows the PettingZoo code, please refer to their documentation for further information on the environments.
 
 ## Action Space
 Following the PettingZoo implementation, we allow for both discrete or continuous action spaces in all MPE envrionments. The environments use discrete actions by default.
@@ -53,7 +52,7 @@ The exact observation varies for each environment, but in general it is a vector
 ## Visualisation
 Check the example `mpe_introduction.py` file in the tutorials folder for an introduction to our implementation of the MPE environments, including an example visualisation. We animate the environment after the state transitions have been collected as follows:
 
-```python
+``` python
 import jax 
 from jaxmarl import make
 from jaxmarl.environments.mpe import MPEVisualizer
