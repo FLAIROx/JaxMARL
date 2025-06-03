@@ -228,6 +228,15 @@ class QuadEnvGenerator:
                     "gear": f"0 0 1 0 0 {gear:.0e}"
                 })
 
+        # visualize goal as a semi-transparent green sphere
+        ET.SubElement(wb, "site", {
+            "name": "goal_marker",
+            "pos": f"0 0 {self.payload_height}",
+            "size": "0.01",
+            "type": "sphere",
+            "rgba": "0 1 0 0.7"
+        })
+
         return self._prettify(mj)
 
 
