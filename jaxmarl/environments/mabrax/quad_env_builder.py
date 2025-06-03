@@ -4,6 +4,7 @@ import math
 from xml.etree import ElementTree as ET
 from xml.dom import minidom
 from typing import List, Optional
+import colorsys
 
 
 class QuadEnvGenerator:
@@ -205,8 +206,13 @@ class QuadEnvGenerator:
 
         # tendons
         td = ET.SubElement(mj, "tendon")
+        # generate hues for distinct tendon colors
+        hues = list(i / self.n for i in range(self.n))
+
         for i in range(self.n):
-            rgba = f"{(i%3==0)*0.1:.1f} {(i%3==1)*0.8:.1f} {(i%3==2)*0.1:.1f} 1"
+            h = hues[i]
+            r, g, b = colorsys.hsv_to_rgb(h, 0.7, 1.0)
+            rgba = f"{r:.3f} {g:.3f} {b:.3f} 1"
             sp = ET.SubElement(td, "spatial", {
                 "name": f"q{i}_tendon", "limited": "true",
                 "range": f"0 {self.cable_length}",
