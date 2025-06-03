@@ -19,7 +19,7 @@ class QuadEnvGenerator:
         cable_length: float = 0.5,
         tendon_width: float = 0.001,
         payload_height: float = 1.5,
-        payload_mass: float = 0.01,
+        payload_mass: float = 0.05,
         frame_radius: float = 0.15,
         mesh_dir: str = "jaxmarl/environments/mabrax/mujoco/assets",
         mesh_names: Optional[List[str]] = None,

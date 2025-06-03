@@ -453,7 +453,6 @@ class MultiQuadEnv(PipelineEnv):
   def calc_reward(self, obs, sim_time, collision, out_of_bounds,
                   action, angles, last_action, target_position, data,
                   max_thrust) -> (jp.ndarray, None, dict):
-    
     er = lambda x, s=2: jp.exp(-s * jp.abs(x))
 
     # payload tracking rewards
@@ -461,9 +460,21 @@ class MultiQuadEnv(PipelineEnv):
     payload_err   = team_obs[:3]
     payload_linlv = team_obs[3:6]
     dis = jp.linalg.norm(payload_err)
-    tracking_reward = self.reward_coeffs["distance_reward_coef"] * er(dis)
+    # Velocity alignment.
+    target_dir = payload_err / (dis + 1e-6)
+    vel = jp.linalg.norm(payload_linlv)
+    vel_dir = jp.where(jp.abs(vel) > 1e-6,
+                       payload_linlv / vel,
+                       jp.zeros_like(payload_linlv))
+    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis)
+    velocity_towards_target = aligned_vel
+    # combine distance and velocity rewards
+    tracking_reward = (
+      self.reward_coeffs["distance_reward_coef"] * er(dis)
+      + self.reward_coeffs["linvel_reward_coef"] * velocity_towards_target
+    )
 
-    
+
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
     rels     = jp.stack([q[:3]     for q in quad_obs])  # (num_quads,3)
     linvels  = [q[9:12]  for q in quad_obs]
