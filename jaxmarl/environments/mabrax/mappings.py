@@ -184,7 +184,7 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
 }
 
 # dynamic mapping for ix4 observations
-_NUM_QUADS    = 6  
+_NUM_QUADS    = 2  
 _OBS_OFF      = 6       # payload_error (0–2) + payload_linvel (3–5)
 _STATE_BLOCK  = 24      # per-quad features total
 _NU_PER_AGENT = 4       # last_action per agent
