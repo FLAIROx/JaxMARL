@@ -134,7 +134,6 @@ class HanabiEnv(HanabiGame):
             self.action_spaces = {i: Discrete(self.num_moves) for i in self.agents}
         if observation_spaces is None:
             # self.observation_spaces = {i: Discrete(self.obs_size) for i in self.agents}
-            # self.observation_spaces = {i: Box(low=0, high=1, shape=self.obs_size) for i in self.agents}
             self.observation_spaces = {
                 i: Box(
                     low=0.0,
