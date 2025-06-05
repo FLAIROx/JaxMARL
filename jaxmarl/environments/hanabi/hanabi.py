@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 import chex
-from typing import Tuple, Dict
+from typing import Tuple, Dict, cast
 from functools import partial
 from jaxmarl.environments.spaces import Discrete, Box
 from .hanabi_game import HanabiGame, State
@@ -133,8 +133,16 @@ class HanabiEnv(HanabiGame):
         if action_spaces is None:
             self.action_spaces = {i: Discrete(self.num_moves) for i in self.agents}
         if observation_spaces is None:
-            self.observation_spaces = {i: Discrete(self.obs_size) for i in self.agents}
+            # self.observation_spaces = {i: Discrete(self.obs_size) for i in self.agents}
             # self.observation_spaces = {i: Box(low=0, high=1, shape=self.obs_size) for i in self.agents}
+            self.observation_spaces = {
+                i: Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(cast(int, self.obs_size),),
+                )
+                for i in self.agents
+            }
 
     @partial(jax.jit, static_argnums=[0])
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict, State]:
