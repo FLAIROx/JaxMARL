@@ -426,7 +426,7 @@ class MultiQuadEnv(PipelineEnv):
       linear_acc = data.cacc[self.quad_body_ids[i]][3:6]
       angular_acc = data.cacc[self.quad_body_ids[i]][:3]
       obs_list += [rel, rot, linvel, angvel, linear_acc, angular_acc]
-    obs_list.append(jp.clip(last_action, -1.0, 1.0))
+    obs_list.append(last_action, -1.0, 1.0)
     obs = jp.concatenate(obs_list)
 
     # build dynamic noise lookup
@@ -521,6 +521,9 @@ class MultiQuadEnv(PipelineEnv):
     smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action))
     thrust_cmds = 0.5 * (action + 1.0)
     thrust_extremes = jp.exp(-50 * jp.abs(thrust_cmds)) + jp.exp(20 * (thrust_cmds - 1)) # 1 if thrust_cmds is 0 or 1 and going to 0 in the middle
+    # if actions out of bounds lead them to action space
+    thrust_extremes = jp.where(jp.abs(action)> 1.0, 1.0 + 0.1*jp.abs(action), thrust_extremes)  
+
     energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(thrust_extremes)
 
 
