@@ -486,8 +486,10 @@ class MultiQuadEnv(PipelineEnv):
 
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
     rels     = jp.stack([q[:3]     for q in quad_obs])  # (num_quads,3)
-    linvels  = [q[9:12]  for q in quad_obs]
-    angvels  = [q[15:18] for q in quad_obs]
+    rots     = jp.stack([q[3:12]  for q in quad_obs])  # (num_quads,9)
+    linvels  = jp.stack([q[12:15] for q in quad_obs])  # (num_quads,3)
+    angvels  = jp.stack([q[15:18] for q in quad_obs])  # (num_quads,3)
+    
 
     # safe-distance reward (mean over all pairs)
     if self.num_quads > 1:

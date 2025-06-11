@@ -4,8 +4,7 @@ import tensorflow as tf
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-
-from jaxmarl.environments.mabrax.multi_quad_env import MultiQuadEnv
+import jaxmarl
 
 def main():
     parser = argparse.ArgumentParser()
@@ -22,8 +21,9 @@ def main():
     interpreter.resize_tensor_input(inp_det['index'], [args.num_envs, inp_det['shape'][-1]])
     interpreter.allocate_tensors()
 
-    # 2) Create the environment (must match training kwargs)
-    env = MultiQuadEnv(
+    # 2) Create the environment (use jaxmarl.make for correct wrappers)
+    env = jaxmarl.make(
+      "multiquad_ix4",
       policy_freq=500,
       sim_steps_per_action=1,
       episode_length=args.timesteps,
@@ -41,9 +41,9 @@ def main():
     obs_batch = []
     for i in range(args.num_envs):
         rng, key = jax.random.split(rng)
-        st = env.reset(key)
-        pipeline_states.append(st.pipeline_state)
-        obs_batch.append(np.array(st.obs))
+        obs, state = env.reset(key)            # jaxmarl API returns (obs, state)
+        pipeline_states.append(state)
+        obs_batch.append(np.array(obs))
     obs_batch = np.stack(obs_batch).astype(np.float32)
 
     # 4) Rollout for T timesteps
@@ -58,9 +58,9 @@ def main():
         next_obs = []
         for i in range(args.num_envs):
             rng, key = jax.random.split(rng)
-            st = env.step(pipeline_states[i], jnp.array(acts[i]))
-            next_ps.append(st.pipeline_state)
-            next_obs.append(np.array(st.obs))
+            o2, s2, *_ = env.step(key, pipeline_states[i], jnp.array(acts[i]))
+            next_ps.append(s2)
+            next_obs.append(np.array(o2))
         pipeline_states = next_ps
         obs_batch = np.stack(next_obs).astype(np.float32)
 
