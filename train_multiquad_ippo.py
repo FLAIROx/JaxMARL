@@ -111,10 +111,10 @@ def main():
         "ang_vel_reward_coef": 1.0,
         "linvel_quad_reward_coef": 1.0,
         "taut_reward_coef": 1.0,
-        "collision_penalty_coef": -10.0,
-        "out_of_bounds_penalty_coef": -10.0,
+        "collision_penalty_coef": -5.0,
+        "out_of_bounds_penalty_coef": -5.0,
         "smooth_action_coef": -1.0,
-        "action_energy_coef": -1.0,
+        "action_energy_coef": -0.1,
     }
     # Build configuration for IPPO training on multiquad_2x4
     config = {
@@ -127,7 +127,7 @@ def main():
             "num_quads": 2,
             "episode_length": 4096,
         },
-        "TOTAL_TIMESTEPS": 100_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 3_000_000_000,
         "NUM_ENVS": 512,  # 16384,
         "NUM_STEPS": 128, # 128,
         "NUM_MINIBATCHES": 64,  # 512,
@@ -259,7 +259,7 @@ def main():
             self.layers_list = []
             for units in actor_arch:
                 self.layers_list.append(tf.keras.layers.Dense(units, activation='tanh'))
-            self.layers_list.append(tf.keras.layers.Dense(action_dim, activation='tanh'))
+            self.layers_list.append(tf.keras.layers.Dense(action_dim, activation=None))
 
         def call(self, x):
             y = x
