@@ -259,7 +259,7 @@ def main():
             self.layers_list = []
             for units in actor_arch:
                 self.layers_list.append(tf.keras.layers.Dense(units, activation='tanh'))
-            self.layers_list.append(tf.keras.layers.Dense(action_dim, activation=None))
+            self.layers_list.append(tf.keras.layers.Dense(action_dim, activation='tanh'))
 
         def call(self, x):
             y = x

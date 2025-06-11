@@ -40,7 +40,7 @@ class ActorModule(nn.Module):
             a = nn.Dense(h, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(a)
             a = act_fn(a)
         actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(a)
-        return actor_mean
+        return act_fn(actor_mean)
 
 class CriticModule(nn.Module):
     activation: str = "tanh"
