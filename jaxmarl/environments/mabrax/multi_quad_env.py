@@ -460,18 +460,29 @@ class MultiQuadEnv(PipelineEnv):
     payload_err   = team_obs[:3]
     payload_linlv = team_obs[3:6]
     dis = jp.linalg.norm(payload_err)
+
+
+     
+
     # Velocity alignment.
     target_dir = payload_err / (dis + 1e-6)
     vel = jp.linalg.norm(payload_linlv)
     vel_dir = jp.where(jp.abs(vel) > 1e-6,
                        payload_linlv / vel,
                        jp.zeros_like(payload_linlv))
-    aligned_vel = er(1 - jp.dot(vel_dir, target_dir), dis)
-    velocity_towards_target = aligned_vel
+    aligned_vel = 1 - jp.dot(vel_dir, target_dir)
+
+
+
+    progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
+
+    tracking_weight = jp.clip( 2.0 * progress , 0.0, 1.0)
+
+
     # combine distance and velocity rewards
     tracking_reward = (
-      self.reward_coeffs["distance_reward_coef"] * er(dis)
-      + self.reward_coeffs["linvel_reward_coef"] * velocity_towards_target
+      self.reward_coeffs["distance_reward_coef"] * er(dis, 4 * tracking_weight)
+      + self.reward_coeffs["linvel_reward_coef"] * er(aligned_vel, 2 * dis * tracking_weight)
     )
 
 
@@ -517,11 +528,8 @@ class MultiQuadEnv(PipelineEnv):
     safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
            + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
-    progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
-
-    tracking_weight = jp.clip( progress * 2.0 - 0.2, 0.0, 0.8)
-
-    reward = tracking_weight * tracking_reward +  (1-tracking_weight)*(stability + safety)
+ 
+    reward = tracking_reward * (stability + safety)
     reward /= self.reward_divisor
     return reward, None, {}
 
