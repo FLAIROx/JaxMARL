@@ -466,22 +466,22 @@ class MultiQuadEnv(PipelineEnv):
      
 
     # Velocity alignment.
-    target_dir = payload_err / (dis + 1e-6)
-    vel = jp.linalg.norm(payload_linvel)
-    vel_dir = jp.where(jp.abs(vel) > 1e-6,
-                       payload_linvel / vel,
-                       jp.zeros_like(payload_linvel))
-    aligned_vel = 1 - jp.dot(vel_dir, target_dir)
+    target_dir = payload_err / (dis + 1e-8)
 
 
-
+    desired_vel = 1 * (1 - jp.exp(-8 * dis))  # desired vel is 1 m/s at large distances scaleing to 0 at small distances
     
+    target_vel = desired_vel * target_dir
+    
+    vel_error = payload_linvel - target_vel
+
+
 
 
     # combine distance and velocity rewards
     tracking_reward = (
       1 +  self.reward_coeffs["distance_reward_coef"] * er(dis, 1)
-      + self.reward_coeffs["linvel_reward_coef"] * er(aligned_vel, 8 * dis)
+      + self.reward_coeffs["linvel_reward_coef"] * er(vel_error, 4)
     )
 
 
@@ -531,7 +531,7 @@ class MultiQuadEnv(PipelineEnv):
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
                  + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-                 + self.reward_coeffs["linvel_reward_coef"] * er(vel)
+                 #+ self.reward_coeffs["linvel_reward_coef"] * er(vel)
                  + self.reward_coeffs["safe_distance_coef"] * safe_distance) / 6.0
     
     safety =  collision_penalty + oob_penalty + smooth_penalty + energy_penalty
