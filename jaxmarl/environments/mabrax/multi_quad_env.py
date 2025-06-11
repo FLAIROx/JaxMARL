@@ -517,7 +517,7 @@ class MultiQuadEnv(PipelineEnv):
     # penalties
     collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
     oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
-    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action) / max_thrust)
+    smooth_penalty    = 0*self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action) / max_thrust)
     energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(action) / max_thrust)
 
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
