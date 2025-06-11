@@ -509,9 +509,9 @@ class MultiQuadEnv(PipelineEnv):
     taut_reward  = (jp.mean(quad_dists) + jp.mean(quad_heights)) / self.cable_length
 
     # angular and linear velocity rewards summed
-    ang_vel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1),4) for jvp in angvels])
+    ang_vel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1),8) for jvp in angvels])
     ang_vel_reward = jp.mean(ang_vel_vals)
-    linvel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1),4) for jvp in linvels])
+    linvel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1),8) for jvp in linvels])
     linvel_quad_reward =  jp.mean(linvel_vals)
 
     # penalties
@@ -524,7 +524,7 @@ class MultiQuadEnv(PipelineEnv):
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
                  + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-                 + self.reward_coeffs["linvel_reward_coef"] * vel)
+                 + self.reward_coeffs["linvel_reward_coef"] * er(vel, 8))
     safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
            + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
