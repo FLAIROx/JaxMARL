@@ -472,8 +472,10 @@ class MultiQuadEnv(PipelineEnv):
     desired_vel = 1 * (1 - jp.exp(-8 * dis))  # desired vel is 1 m/s at large distances scaleing to 0 at small distances
     
     target_vel = desired_vel * target_dir
+
+    vel_error = jax.linalg.norm(payload_linvel - target_vel)
+
     
-    vel_error = payload_linvel - target_vel
 
 
 
