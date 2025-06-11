@@ -41,9 +41,9 @@ def main():
     obs_batch = []
     for i in range(args.num_envs):
         rng, key = jax.random.split(rng)
-        obs, state = env.reset(key)            # jaxmarl API returns (obs, state)
-        pipeline_states.append(state)
-        obs_batch.append(np.array(obs))
+        obs0, new_state = env.reset(key)       # unpack (obs_array, State)
+        pipeline_states.append(new_state)
+        obs_batch.append(np.array(obs0))
     obs_batch = np.stack(obs_batch).astype(np.float32)
 
     # 4) Rollout for T timesteps
@@ -54,15 +54,15 @@ def main():
         acts = interpreter.get_tensor(out_det['index'])  # shape [N, act_dim]
 
         # step each env individually
-        next_ps = []
+        next_ps  = []
         next_obs = []
         for i in range(args.num_envs):
             rng, key = jax.random.split(rng)
-            o2, s2, *_ = env.step(key, pipeline_states[i], jnp.array(acts[i]))
-            next_ps.append(s2)
-            next_obs.append(np.array(o2))
+            obs1, new_state = env.step(key, pipeline_states[i], jnp.array(acts[i]))  # unpack (obs_array, State)
+            next_ps.append(new_state)
+            next_obs.append(np.array(obs1))
         pipeline_states = next_ps
-        obs_batch = np.stack(next_obs).astype(np.float32)
+        obs_batch      = np.stack(next_obs).astype(np.float32)
 
     # 5) Compute true distances at final timestep and plot histogram
     distances = []

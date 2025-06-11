@@ -372,10 +372,10 @@ class MultiQuadEnv(PipelineEnv):
 
 
 
-    obs = self._get_obs(pipeline_state, prev_last_action, self.target_position, noise_key)
+    obs = self._get_obs(pipeline_state, action, self.target_position, noise_key)
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds,
-        action_scaled, angles, prev_last_action,
+        action, angles, prev_last_action,
         self.target_position, pipeline_state, max_thrust
     )
 
@@ -481,7 +481,7 @@ class MultiQuadEnv(PipelineEnv):
     tracking_reward = (
       self.reward_coeffs["distance_reward_coef"] * er(dis)
       + self.reward_coeffs["linvel_reward_coef"] * er(aligned_vel)
-    ) / 2
+    )
 
 
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
@@ -517,8 +517,9 @@ class MultiQuadEnv(PipelineEnv):
     # penalties
     collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
     oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
-    smooth_penalty    = 0*self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action) / max_thrust)
-    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(action) / max_thrust)
+    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action))
+    thrust_cmds = 0.5 * (action + 1.0)
+    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(thrust_cmds)**2)
 
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
@@ -529,11 +530,11 @@ class MultiQuadEnv(PipelineEnv):
     
     safety =  collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
-    progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
-    tracking_weight = jp.clip( 2 * progress-0.1, 0.0, 0.8)  # weight for tracking reward based on progress
+    # if stability reward is negative reward = stability + safety else reward = tracking  * stability + safety
+    # jax compatible
+    reward = jp.where(stability < 0, stability + safety, tracking_reward * stability + safety)
 
-    reward = tracking_weight * tracking_reward + (1-tracking_weight) * stability + 0*safety
- 
+
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
