@@ -518,8 +518,13 @@ class MultiQuadEnv(PipelineEnv):
     linvel_quad_reward =  jp.mean(linvel_vals)
 
     # penalties
-    collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
-    oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
+    progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
+    # penalty grace factor
+    grace = jp.clip(2 * sim_time, 0.0, 1.0) # less penalty at first 0.5 seconds
+
+    collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision * grace
+    oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds * grace
+
     smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action))
     thrust_cmds = 0.5 * (action + 1.0)
     thrust_extremes = jp.exp(-50 * jp.abs(thrust_cmds)) + jp.exp(20 * (thrust_cmds - 1)) # 1 if thrust_cmds is 0 or 1 and going to 0 in the middle
