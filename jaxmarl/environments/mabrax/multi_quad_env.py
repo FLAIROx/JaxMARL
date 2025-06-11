@@ -473,7 +473,7 @@ class MultiQuadEnv(PipelineEnv):
     
     target_vel = desired_vel * target_dir
 
-    vel_error = jax.linalg.norm(payload_linvel - target_vel)
+    vel_error = jp.linalg.norm(payload_linvel - target_vel)
 
     
 
