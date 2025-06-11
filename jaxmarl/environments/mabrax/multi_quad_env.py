@@ -453,7 +453,7 @@ class MultiQuadEnv(PipelineEnv):
   def calc_reward(self, obs, sim_time, collision, out_of_bounds,
                   action, angles, last_action, target_position, data,
                   max_thrust) -> (jp.ndarray, None, dict):
-    er = lambda x, s=2: jp.exp(-s * jp.abs(x)) - 0.1 * s * jp.abs(x)  # Exponential reward function
+    er = lambda x, s=2: jp.exp(-s * jp.abs(x)) - 0.01 * s * jp.abs(x)  # Exponential reward function
 
     # payload tracking rewards
     team_obs      = obs[:6]
