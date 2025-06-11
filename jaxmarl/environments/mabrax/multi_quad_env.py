@@ -482,9 +482,9 @@ class MultiQuadEnv(PipelineEnv):
 
     # combine distance and velocity rewards
     tracking_reward = (
-      1 +  self.reward_coeffs["distance_reward_coef"] * er(dis, 1)
+      2.0 +  self.reward_coeffs["distance_reward_coef"] * er(dis, 1)
       + self.reward_coeffs["linvel_reward_coef"] * er(vel_error, 4)
-    )
+    )/ 4.0
 
 
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
