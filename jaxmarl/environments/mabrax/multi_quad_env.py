@@ -532,8 +532,8 @@ class MultiQuadEnv(PipelineEnv):
     progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
     tracking_weight = jp.clip( 2 * progress-0.1, 0.0, 0.8)  # weight for tracking reward based on progress
 
-    reward = tracking_weight * tracking_reward + (1-tracking_weight) * stability + 50*safety
-    reward /= self.reward_divisor
+    reward = tracking_weight * tracking_reward + (1-tracking_weight) * stability + 0*safety
+ 
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
