@@ -524,7 +524,7 @@ class MultiQuadEnv(PipelineEnv):
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
                  + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-                 + self.reward_coeffs["linvel_reward_coef"] * payload_linvel)
+                 + self.reward_coeffs["linvel_reward_coef"] * vel)
     safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
            + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
