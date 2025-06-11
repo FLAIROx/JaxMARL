@@ -426,7 +426,7 @@ class MultiQuadEnv(PipelineEnv):
       linear_acc = data.cacc[self.quad_body_ids[i]][3:6]
       angular_acc = data.cacc[self.quad_body_ids[i]][:3]
       obs_list += [rel, rot, linvel, angvel, linear_acc, angular_acc]
-    obs_list.append(last_action, -1.0, 1.0)
+    obs_list.append(jp.clip(last_action, -1.0, 1.0))
     obs = jp.concatenate(obs_list)
 
     # build dynamic noise lookup
