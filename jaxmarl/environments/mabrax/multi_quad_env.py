@@ -481,7 +481,7 @@ class MultiQuadEnv(PipelineEnv):
     tracking_reward = (
       self.reward_coeffs["distance_reward_coef"] * er(dis)
       + self.reward_coeffs["linvel_reward_coef"] * er(aligned_vel)
-    )
+    ) / 2
 
 
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
@@ -526,12 +526,14 @@ class MultiQuadEnv(PipelineEnv):
                  + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
                  + self.reward_coeffs["linvel_reward_coef"] * er(vel, 8)
                  + safe_distance * self.reward_coeffs["safe_distance_coef"])
+    stability /= 6 # number of stability components
     
     safety =  collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
+    progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
+    tracking_weight = jp.clip( 2 * progress-0.1, 0.0, 0.8)  # weight for tracking reward based on progress
 
- 
-    reward = tracking_reward * stability + safety
+    reward = tracking_weight * tracking_reward + (1-tracking_weight) * stability + safety
     reward /= self.reward_divisor
     return reward, None, {}
 
