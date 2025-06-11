@@ -529,7 +529,7 @@ class MultiQuadEnv(PipelineEnv):
            + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
  
-    reward = tracking_reward * (stability + safety)
+    reward = tracking_reward * stability + safety
     reward /= self.reward_divisor
     return reward, None, {}
 
