@@ -41,7 +41,9 @@ def main():
     obs_batch = []
     for i in range(args.num_envs):
         rng, key = jax.random.split(rng)
-        obs0, new_state = env.reset(key)       # unpack (obs_array, State)
+        reset_out = env.reset(key)             # returns dict
+        obs0       = reset_out["obs"]
+        new_state  = reset_out["state"]
         pipeline_states.append(new_state)
         obs_batch.append(np.array(obs0))
     obs_batch = np.stack(obs_batch).astype(np.float32)
@@ -58,7 +60,9 @@ def main():
         next_obs = []
         for i in range(args.num_envs):
             rng, key = jax.random.split(rng)
-            obs1, new_state = env.step(key, pipeline_states[i], jnp.array(acts[i]))  # unpack (obs_array, State)
+            step_out   = env.step(key, pipeline_states[i], jnp.array(acts[i]))
+            obs1       = step_out["obs"]
+            new_state  = step_out["state"]
             next_ps.append(new_state)
             next_obs.append(np.array(obs1))
         pipeline_states = next_ps

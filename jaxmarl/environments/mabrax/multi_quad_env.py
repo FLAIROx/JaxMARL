@@ -316,6 +316,7 @@ class MultiQuadEnv(PipelineEnv):
     # Scale actions from [-1, 1] to thrust commands in [0, max_thrust].
     max_thrust = state.metrics['max_thrust']
     thrust_cmds = 0.5 * (action + 1.0)
+    thrust_cmds = jp.clip(thrust_cmds, 0.0, 1.0)
     action_scaled = thrust_cmds * max_thrust
 
     data0 = state.pipeline_state
@@ -425,7 +426,7 @@ class MultiQuadEnv(PipelineEnv):
       linear_acc = data.cacc[self.quad_body_ids[i]][3:6]
       angular_acc = data.cacc[self.quad_body_ids[i]][:3]
       obs_list += [rel, rot, linvel, angvel, linear_acc, angular_acc]
-    obs_list.append(last_action)
+    obs_list.append(jp.clip(last_action, -1.0, 1.0))
     obs = jp.concatenate(obs_list)
 
     # build dynamic noise lookup
@@ -479,8 +480,8 @@ class MultiQuadEnv(PipelineEnv):
 
     # combine distance and velocity rewards
     tracking_reward = (
-      self.reward_coeffs["distance_reward_coef"] * er(dis)
-      + self.reward_coeffs["linvel_reward_coef"] * er(aligned_vel)
+      1 +  self.reward_coeffs["distance_reward_coef"] * er(dis, 1)
+      + self.reward_coeffs["linvel_reward_coef"] * er(aligned_vel, 8 * dis)
     )
 
 
@@ -519,7 +520,9 @@ class MultiQuadEnv(PipelineEnv):
     oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
     smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action))
     thrust_cmds = 0.5 * (action + 1.0)
-    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(thrust_cmds)**2)
+    thrust_extremes = jp.exp(-50 * jp.abs(thrust_cmds)) + jp.exp(20 * (thrust_cmds - 1)) # 1 if thrust_cmds is 0 or 1 and going to 0 in the middle
+    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(thrust_extremes)
+
 
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
