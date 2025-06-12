@@ -15,11 +15,14 @@ def main():
 
     # 1) Load TFLite model and resize input for batch inference
     interpreter = tf.lite.Interpreter(model_path=args.model_path)
-    interpreter.allocate_tensors()
     inp_det = interpreter.get_input_details()[0]
     out_det = interpreter.get_output_details()[0]
-    interpreter.resize_tensor_input(inp_det['index'], [args.num_envs, inp_det['shape'][-1]])
+    # resize BEFORE allocate so batch dim is correct
+    interpreter.resize_tensor_input(inp_det['index'],
+                                    [args.num_envs, inp_det['shape'][-1]])
     interpreter.allocate_tensors()
+    # get expected input dimension for tflite model
+    input_dim = inp_det['shape'][-1]
 
     # 2) Create the environment (use jaxmarl.make for correct wrappers)
     env = jaxmarl.make(
@@ -34,24 +37,55 @@ def main():
       num_quads=2,
       cable_length=0.4,
     )
+    # grab agent names for splitting actions
+    agent_names = env.agents
 
-    # 3) Run rollouts and collect final position errors
+    # 3) Run rollouts in parallel and collect final position errors
     rng = jax.random.PRNGKey(0)
-    rng, reset_key = jax.random.split(rng)
-    # reset returns batched obs and pipeline_state
-    obs, state = env.reset(reset_key)
-    for _ in range(args.timesteps):
-        # run actor tflite inference
-        model_input = np.array(obs, dtype=np.float32)
-        interpreter.set_tensor(inp_det['index'], model_input)
-        interpreter.invoke()
-        action = interpreter.get_tensor(out_det['index'])
-        # step the vectorized env
-        rng, step_key = jax.random.split(rng)
-        obs, state, _, _, _ = env.step_env(step_key, state, action)
+    # batch-reset
+    subkeys = jax.random.split(rng, args.num_envs + 1)
+    rng = subkeys[0]
+    reset_keys = subkeys[1:]
+    obs_batch_dict, states = jax.vmap(env.reset)(reset_keys)
+    obs = np.array(obs_batch_dict['global'], dtype=np.float32)
+    # slice observation to match model input dimension
+    obs = obs[:, :input_dim]
 
-    # compute per-env payload position error (first 3 dims of obs)
-    pos_errs = np.linalg.norm(np.array(obs)[:, :3], axis=1)
+    for _ in range(args.timesteps):
+        # TFLite inference on batched obs
+        interpreter.set_tensor(inp_det['index'], obs)
+        interpreter.invoke()
+        action = interpreter.get_tensor(out_det['index'])  # (batch, total_act_dim)
+
+        # split or duplicate flat action into per-agent dict
+        action_jax = jnp.array(action)
+        total_dim = action_jax.shape[-1]
+        # if model outputs per-agent action, duplicate across agents
+        global_act_size = env.env.action_size
+        if total_dim * len(agent_names) == global_act_size:
+            actions = {agent: action_jax for agent in agent_names}
+        else:
+            per_dim = total_dim // len(agent_names)
+            actions = {
+                agent_names[i]: action_jax[:, i*per_dim:(i+1)*per_dim]
+                for i in range(len(agent_names))
+            }
+
+        # generate new PRNG keys for stepping
+        subkeys = jax.random.split(rng, args.num_envs + 1)
+        rng = subkeys[0]
+        step_keys = subkeys[1:]
+        # batch-step using a pytree vmap over the dict
+        obs_batch_dict, states, _, _, _ = jax.vmap(
+            env.step_env,
+            in_axes=(0, 0, {agent: 0 for agent in agent_names})
+        )(step_keys, states, actions)
+        obs = np.array(obs_batch_dict['global'], dtype=np.float32)
+        # slice observation to match model input dimension
+        obs = obs[:, :input_dim]
+    
+    # compute per-env payload position error from the first 3 dims
+    pos_errs = np.linalg.norm(obs[:, :3], axis=1)
     # plot histogram
     plt.figure()
     plt.hist(pos_errs, bins=50)
@@ -60,3 +94,8 @@ def main():
     plt.title('Position Error Histogram at Last Frame')
     plt.savefig('pos_err_histogram.png')
     print("Saved histogram to pos_err_histogram.png")
+
+
+if __name__ == "__main__":
+    main()
+    # Run the main function
