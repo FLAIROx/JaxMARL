@@ -26,7 +26,7 @@ def main():
     # 2) Create the environment
     env = jaxmarl.make(
         "multiquad_ix4",
-        policy_freq=500,
+        policy_freq=250,
         sim_steps_per_action=1,
         episode_length=args.timesteps,
         reward_coeffs=None,
@@ -42,7 +42,7 @@ def main():
     try:
         dt = float(env.env.dt)
     except Exception:
-        dt = 1.0 / 500.0
+        dt = 1.0 / 250.0
 
     # 3) Prepare RNG and reset batch
     rng = jax.random.PRNGKey(0)
@@ -61,7 +61,7 @@ def main():
     for _ in range(args.timesteps):
         obs_history.append(obs.copy())
         # convert JAX states pytree to NumPy per step
-        states_history.append(tree_map(lambda x: np.array(x), states))
+        #states_history.append(tree_map(lambda x: np.array(x), states))
 
         # model inference
         interpreter.set_tensor(inp_det['index'], obs)
@@ -96,7 +96,7 @@ def main():
     obs_history = np.stack(obs_history, axis=0)
     actions_history = np.stack(actions_history, axis=0)
     # use imported tree_map to stack state pytree history
-    states_history = tree_map(lambda *arrs: np.stack(arrs, axis=0), *states_history)
+    #states_history = tree_map(lambda *arrs: np.stack(arrs, axis=0), *states_history)
 
     # compute final position errors
     pos_errs = np.linalg.norm(obs[:, :3], axis=1)
@@ -109,16 +109,45 @@ def main():
             'timesteps': args.timesteps,
             'agent_names': agent_names
         },
-        'obs_history': obs_history,
-        'states_history': states_history,
-        'actions_history': actions_history,
-        'final_pos_errors': pos_errs,
-        'timestep': np.arange(args.timesteps),
-        'env_index': np.arange(args.num_envs)
+        'environment': {
+            'name': 'multiquad_ix4',
+            'policy_freq': 250,
+            'sim_steps_per_action': 1,
+            'episode_length': args.timesteps,
+            'reward_coeffs': None,
+            'obs_noise': 0.3,
+            'act_noise': 0.1,
+            'max_thrust_range': 0.3,
+            'num_quads': 2,
+            'cable_length': 0.4
+            'observation_size': input_dim,
+            'action_size': out_det['shape'][-1],
+            'observation_lookup': {
+            }
+
+        },
+        'policy': {
+            'model_path': args.model_path,
+            'input_dim': input_dim,
+            'output_dim': out_det['shape'][-1],
+            'model_parameters': {
+                'input_shape': inp_det['shape'],
+                'output_shape': out_det['shape'],
+            }
+        },
+
+        'flights': [
+            {
+                'observations': obs_history,
+                'actions': actions_history,
+            }
+
+        ]
+       
     }
     af = asdf.AsdfFile(tree)
-    af.write_to('flights.asdf')
-    print("Saved all flight data and metadata to flights.asdf")
+    af.write_to('flights.crazy.asdf')
+    print("Saved all flight data and metadata to flights.crazy.asdf")
 
     # 8) Plot histogram
     plt.figure()
