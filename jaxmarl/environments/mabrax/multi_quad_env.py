@@ -514,8 +514,9 @@ class MultiQuadEnv(PipelineEnv):
     # angular and linear velocity rewards summed
     ang_vel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in angvels])
     ang_vel_reward = jp.mean(ang_vel_vals)
+    linvel_norm = jp.linalg.norm(linvels, axis=-1)
     linvel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in linvels])
-    linvel_quad_reward =  jp.mean(linvel_vals)
+    linvel_quad_reward =  jp.mean(linvel_vals) - 10 * jp.mean(jp.clip(linvel_norm - 1.0, 0, None))  # penalize linvels above 1m/s
 
     # penalties
     progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
