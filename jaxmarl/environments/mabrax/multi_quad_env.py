@@ -456,39 +456,17 @@ class MultiQuadEnv(PipelineEnv):
   def calc_reward(self, obs, sim_time, collision, out_of_bounds,
                   action, angles, last_action, target_position, data,
                   max_thrust) -> (jp.ndarray, None, dict):
-    er = lambda x, s=2: jp.exp(-s * jp.abs(x)) - 0.1 * s * jp.abs(x)  # Exponential reward function
+    
+    er = lambda x, s=2: jp.exp(-s * jp.abs(x))
 
     # payload tracking rewards
     team_obs      = obs[:6]
     payload_err   = team_obs[:3]
-    payload_linvel = team_obs[3:6]
+    payload_linlv = team_obs[3:6]
     dis = jp.linalg.norm(payload_err)
-
-
-     
-
-    # Velocity alignment.
-    target_dir = payload_err / (dis + 1e-8)
-
-
-    desired_vel = 0.7 * (1 - jp.exp(-8 * dis))  # desired vel is 0.7 m/s at large distances scaleing to 0 at small distances
-
-    target_vel = desired_vel * target_dir
-
-    vel_error = jp.linalg.norm(payload_linvel - target_vel)
+    tracking_reward = self.reward_coeffs["distance_reward_coef"] * er(dis)
 
     
-
-
-
-
-    # combine distance and velocity rewards
-    tracking_reward = (
-      2.0 +  self.reward_coeffs["distance_reward_coef"] * er(dis, 1)
-      + self.reward_coeffs["linvel_reward_coef"] * er(vel_error, 4)
-    )
-
-
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
     rels     = jp.stack([q[:3]     for q in quad_obs])  # (num_quads,3)
     rots     = jp.stack([q[3:12]  for q in quad_obs])  # (num_quads,9)
@@ -506,51 +484,34 @@ class MultiQuadEnv(PipelineEnv):
         safe_distance = 1.0
 
     # upright reward = mean over all quads
-    up_reward = jp.mean(er(angles,4))
+    up_reward = jp.mean(er(angles))
 
     # taut-string reward = sum of distances + heights
     quad_dists   = jp.linalg.norm(rels, axis=-1)
     quad_heights = rels[:, 2]
-    taut_reward  = (jp.mean(quad_dists) + jp.mean(quad_heights)) / self.cable_length
+    taut_reward  = (jp.sum(quad_dists) + jp.sum(quad_heights)) / self.cable_length
 
     # angular and linear velocity rewards summed
     ang_vel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in angvels])
-    ang_vel_reward = jp.mean(ang_vel_vals)
-    linvel_norm = jp.linalg.norm(linvels, axis=-1)
+    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * jp.mean(ang_vel_vals)
     linvel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in linvels])
-    linvel_quad_reward =  jp.mean(linvel_vals) - 10 * jp.mean(jp.clip(linvel_norm - 1.0, 0, None))  # penalize linvels above 1m/s
+    linvel_quad_reward = (0.5 + 6 * er(dis, 20)) * jp.mean(linvel_vals)
 
-    # # penalties
-    # progress = jp.clip(sim_time / self.max_time, 0.0, 1.0)
-    # # penalty grace factor
-    # grace = jp.clip(2 * sim_time, 0.0, 1.0) # less penalty at first 0.5 seconds
-
+    # penalties
     collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
     oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
-
-    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action))
-    thrust_cmds = 0.5 * (action + 1.0)
-    thrust_extremes = jp.exp(-30 * jp.abs(thrust_cmds)) + jp.exp(90 * (thrust_cmds - 1)) # 1 if thrust_cmds is 0 or 1 and going to 0 in the middle
-    # if actions out of bounds lead them to action space
-    thrust_extremes = jp.where(jp.abs(action)> 1.0, 1.0 + 0.1*jp.abs(action), thrust_extremes)  
-
-    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(thrust_extremes)
-
+    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action) / max_thrust)
+    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(action) / max_thrust)
 
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
-                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-                 #+ self.reward_coeffs["linvel_reward_coef"] * er(vel)
-                 + self.reward_coeffs["safe_distance_coef"] * safe_distance) / 6.0
-    
-    safety =  collision_penalty + oob_penalty + smooth_penalty + energy_penalty
+                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward)
+    safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
+           + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
-    # if stability reward is negative reward = stability + safety else reward = tracking  * stability + safety
-    # jax compatible
-    reward = jp.clip(tracking_reward, 0.1 , 5.0) * stability + safety
-
-
+    reward = tracking_reward * (stability + safety)
+    reward /= self.reward_divisor
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
