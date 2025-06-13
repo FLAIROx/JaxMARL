@@ -19,7 +19,7 @@ class QuadEnvGenerator:
         cable_length: float = 0.5,
         tendon_width: float = 0.001,
         payload_height: float = 1.5,
-        payload_mass: float = 0.05,
+        payload_mass: float = 0.01,
         frame_radius: float = 0.15,
         mesh_dir: str = "jaxmarl/environments/mabrax/mujoco/assets",
         mesh_names: Optional[List[str]] = None,
@@ -47,6 +47,16 @@ class QuadEnvGenerator:
         self.camera_pos = camera_pos
         self.camera_quat = camera_quat
         self.camera_mode = camera_mode
+
+        # Print out all the Environment parameters
+        print(f"Generating XML for {self.n} quadrotors with payload:")
+        print(f"  Cable Length: {self.cable_length} m")
+        print(f"  Tendon Width: {self.tendon_width} m")
+        print(f"  Payload Height: {self.payload_height} m")
+        print(f"  Payload Mass: {self.payload_mass} kg")
+        print(f"  Frame Radius: {self.frame_radius} m")
+        print(f"  Mesh Directory: {self.mesh_dir}")
+               
 
     def _prettify(self, elem: ET.Element) -> str:
         rough = ET.tostring(elem, "utf-8")
