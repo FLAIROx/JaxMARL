@@ -175,6 +175,8 @@ class MultiQuadEnv(PipelineEnv):
       print(f"  {r}: {nm}")
     # --- end table ---
 
+    self.obs_table = obs_table
+
   @staticmethod
   def generate_configuration(key, num_quads, cable_length):
     # split once for payload and quads

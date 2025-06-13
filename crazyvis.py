@@ -119,11 +119,10 @@ def main():
             'act_noise': 0.1,
             'max_thrust_range': 0.3,
             'num_quads': 2,
-            'cable_length': 0.4
+            'cable_length': 0.4,
             'observation_size': input_dim,
             'action_size': out_det['shape'][-1],
-            'observation_lookup': {
-            }
+            'observation_lookup': env.env.obs_table
 
         },
         'policy': {
