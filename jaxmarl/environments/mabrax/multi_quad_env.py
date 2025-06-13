@@ -500,8 +500,15 @@ class MultiQuadEnv(PipelineEnv):
     # penalties
     collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
     oob_penalty       = self.reward_coeffs["out_of_bounds_penalty_coef"] * out_of_bounds
-    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action) / max_thrust)
-    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(jp.abs(action) / max_thrust)
+
+    smooth_penalty    = self.reward_coeffs["smooth_action_coef"] * jp.mean(jp.abs(action - last_action))
+    thrust_cmds = 0.5 * (action + 1.0)
+    thrust_extremes = jp.exp(-50 * jp.abs(thrust_cmds)) + jp.exp(50 * (thrust_cmds - 1)) # 1 if thrust_cmds is 0 or 1 and going to 0 in the middle
+    # if actions out of bounds lead them to action space
+    thrust_extremes = jp.where(jp.abs(action)> 1.0, 1.0 + 0.1*jp.abs(action), thrust_extremes)  
+
+    energy_penalty    = self.reward_coeffs["action_energy_coef"] * jp.mean(thrust_extremes)
+
 
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
