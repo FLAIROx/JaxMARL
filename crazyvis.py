@@ -30,11 +30,11 @@ def main():
         sim_steps_per_action=1,
         episode_length=args.timesteps,
         reward_coeffs=None,
-        obs_noise=0.3,
-        act_noise=0.1,
-        max_thrust_range=0.3,
+        obs_noise=0.0,
+        act_noise=0.0,
+        max_thrust_range=0.0,
         num_quads=2,
-        cable_length=0.4,
+        cable_length=0.5,
     )
     agent_names = env.agents
 
