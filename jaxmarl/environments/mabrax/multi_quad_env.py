@@ -479,7 +479,7 @@ class MultiQuadEnv(PipelineEnv):
         d = jp.linalg.norm(rels[:, None, :] - rels[None, :, :], axis=-1)
         eye = jp.eye(self.num_quads, dtype=bool)
         pairwise = jp.where(eye, jp.inf, d)
-        safe_distance = jp.mean(jp.clip((pairwise - 0.15) / 0.02, 0, 1))
+        safe_distance = jp.mean(jp.clip(10*(pairwise - 0.18) / 0.02, -20, 1))
     else:
         safe_distance = 1.0
 
