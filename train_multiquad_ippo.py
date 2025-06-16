@@ -45,7 +45,7 @@ jax.config.update("jax_compilation_cache_dir", cache_dir)
 # jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 
-def render_video(rollout, env, render_every=2, width=1280, height=720):
+def render_video(rollout, env, render_every=10, width=1280, height=720):
     # Create an OpenGL context for rendering
     ctx = mujoco.GLContext(width, height)
     ctx.make_current()
@@ -127,10 +127,10 @@ def main():
             "num_quads": 2,
             "episode_length": 4096,
         },
-        "TOTAL_TIMESTEPS": 500_000_000,  #3_000_000_000,
+        "TOTAL_TIMESTEPS": 1_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
-        "NUM_STEPS": 4, #128,
-        "NUM_MINIBATCHES": 32, #512
+        "NUM_STEPS": 8, #128,
+        "NUM_MINIBATCHES": 64, #512
         # "TOTAL_TIMESTEPS": 1_000_000_000,
         # "NUM_ENVS": 2048, # 16384,
         # "NUM_STEPS": 256,

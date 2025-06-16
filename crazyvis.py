@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import jaxmarl
 import asdf
+from jax import tree_util, Array  # for pytree operations and Array type
 
 #------------------------------------------------------------------------------
 # Vendored batchify / unbatchify (no external deps)
@@ -27,15 +28,13 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     split = x.reshape((len(agent_list), num_envs, -1))
     return {agent_list[i]: split[i] for i in range(len(agent_list))}
 
-#------------------------------------------------------------------------------
-
 # Setup XLA/MuJoCo cache
+env_cache = os.path.join(os.getcwd(), "xla_cache")
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["MUJOCO_GL"] = "egl"
-cache_dir = os.path.join(os.getcwd(), "xla_cache")
-os.makedirs(cache_dir, exist_ok=True)
-os.environ["XLA_CACHE_DIR"] = cache_dir
-jax.config.update("jax_compilation_cache_dir", cache_dir)
+os.makedirs(env_cache, exist_ok=True)
+os.environ["XLA_CACHE_DIR"] = env_cache
+jax.config.update("jax_compilation_cache_dir", env_cache)
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -55,12 +54,10 @@ def load_model(model_path: str) -> tf.lite.Interpreter:
     return tf.lite.Interpreter(model_path=model_path)
 
 def run_rollout(interpreter: tf.lite.Interpreter, num_envs: int, timesteps: int):
-    # Build a single env and then vmap over it
     env = jaxmarl.make("multiquad_ix4")
     agents = env.agents
     obs_dim = env.observation_spaces[agents[0]].shape[0]
 
-    # Prepare TFLite for batched inference
     interpreter.resize_tensor_input(
         interpreter.get_input_details()[0]["index"], [num_envs, obs_dim]
     )
@@ -68,89 +65,93 @@ def run_rollout(interpreter: tf.lite.Interpreter, num_envs: int, timesteps: int)
     inp_det = interpreter.get_input_details()[0]
     out_det = interpreter.get_output_details()[0]
 
-    # Vectorized reset
     rng = jax.random.PRNGKey(0)
     rng, *reset_keys = jax.random.split(rng, num_envs + 1)
-    reset_keys = jnp.stack(reset_keys)  # shape (num_envs,)
+    reset_keys = jnp.stack(reset_keys)
 
     vm_reset = jax.vmap(env.reset)
     obs_batched, pipeline_states = vm_reset(reset_keys)
-    # obs_batched: dict of (num_envs, obs_dim); pipeline_states: tuple/list of length num_envs
 
-    # Buffers
-    obs_buf = []
-    act_buf = []
-
-    # Batched step function
-    def batched_step(key, state, acts):
-        return env.step_env(key, state, acts)
-    # Now vmap over ALL three arguments
-    vm_step = jax.vmap(batched_step, in_axes=(0, 0, 0))
+    obs_buf, act_buf, rew_buf, done_buf = [], [], [], []
+    vm_step = jax.vmap(lambda k, s, a: env.step_env(k, s, a), in_axes=(0, 0, 0))
 
     for _ in range(timesteps):
-        # (1) record observations
         obs_arr = np.stack([np.array(obs_batched[a]) for a in agents], axis=1)
-        # shape = (num_envs, num_agents, obs_dim)
         obs_buf.append(obs_arr)
 
-        # (2) TFLite inference
         raw_acts = {}
         for a in agents:
-            inp = np.array(obs_batched[a], dtype=np.float32)  # (num_envs, obs_dim)
+            inp = np.array(obs_batched[a], dtype=np.float32)
             interpreter.set_tensor(inp_det["index"], inp)
             interpreter.invoke()
-            raw_acts[a] = jnp.array(interpreter.get_tensor(out_det["index"]))  # (num_envs, act_dim)
+            raw_acts[a] = jnp.array(interpreter.get_tensor(out_det["index"]))
         act_arr = np.stack([np.array(raw_acts[a]) for a in agents], axis=1)
-        # shape = (num_envs, num_agents, act_dim)
         act_buf.append(act_arr)
 
-        # (3) step in parallel
         rng, *step_keys = jax.random.split(rng, num_envs + 1)
         step_keys = jnp.stack(step_keys)
-        obs_batched, pipeline_states, _, _, _ = vm_step(step_keys, pipeline_states, raw_acts)
+        obs_batched, pipeline_states, rewards, dones, _ = vm_step(
+            step_keys, pipeline_states, raw_acts
+        )
 
-    # Stack time dimension: (timesteps, num_envs, num_agents, dim)
+        rew_arr = np.stack([np.array(rewards[a]) for a in agents], axis=1)
+        rew_buf.append(np.array(rewards["__all__"]))
+        done_buf.append(np.array(dones["__all__"]))
+
     obs_history = np.stack(obs_buf, axis=0)
     act_history = np.stack(act_buf, axis=0)
-    return obs_history, act_history, agents
+    rew_history = np.stack(rew_buf, axis=0)
+    done_history = np.stack(done_buf, axis=0)
 
-def save_rollout(obs_h, act_h, agents, args, num_envs):
-    """
-    Save batched rollout to ASDF with:
-      agents: name -> {
-        observations: ndarray[timesteps, num_envs, obs_dim],
-        actions:      ndarray[timesteps, num_envs, act_dim]
-      }
-    """
+    return obs_history, act_history, rew_history, done_history, pipeline_states, agents
+
+def save_rollout(obs_h, act_h, rew_h, done_h, pipeline_states, agents, args, num_envs):
+    # Build per-agent data using numpy for slicing
     agents_dict = {
         agents[i]: {
             "observations": obs_h[:, :, i, :],
-            "actions":      act_h[:, :, i, :]
+            "actions":      act_h[:, :, i, :],
         }
         for i in range(len(agents))
     }
 
     tree = {
-        "metadata": {
-            "num_envs":    num_envs,
-            "timesteps":   args.timesteps,
-            "agent_names": agents
-        },
+        "metadata": {"num_envs": num_envs, "timesteps": args.timesteps, "agent_names": agents},
         "environment": {"name": "multiquad_ix4"},
         "flights": [{
-            "agents": agents_dict
+            "metadata": {"num_envs": num_envs, "timesteps": args.timesteps,
+                          "agents": agents, "model_path": args.model_path},
+            "agents": agents_dict,
+            "global": {
+                        "rewards": rew_h, 
+                        "dones": done_h,  # Global done status
+                      # "pipeline_states": pipeline_states
+                       }
         }]
     }
+
+    # # Convert all numpy and JAX arrays to Python lists for ASDF serialization
+    # def _to_list(x):
+    #     if isinstance(x, (np.ndarray, Array)):
+    #         return np.array(x).tolist()
+    #     return x
+    # tree = tree_util.tree_map(_to_list, tree)
 
     af = asdf.AsdfFile(tree)
     af.write_to(args.output)
     print(f"Saved ASDF to {args.output}")
 
+    
+
 def main():
     args = parse_args()
     interpreter = load_model(args.model_path)
-    obs_h, act_h, agents = run_rollout(interpreter, args.num_envs, args.timesteps)
-    save_rollout(obs_h, act_h, agents, args, args.num_envs)
+
+    obs_h, act_h, rew_h, done_h, pipeline_states, agents = \
+        run_rollout(interpreter, args.num_envs, args.timesteps)
+
+    save_rollout(obs_h, act_h, rew_h, done_h,
+                 pipeline_states, agents, args, args.num_envs)
 
 if __name__ == "__main__":
     main()
