@@ -1,161 +1,144 @@
+#!/usr/bin/env python3
+import os
 import argparse
 import numpy as np
 import tensorflow as tf
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 import jaxmarl
 import asdf
 from jax.tree_util import tree_map
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--num_envs', type=int, default=64, help='Batch size')
-    parser.add_argument('--timesteps', type=int, default=2000, help='Rollout length')
-    parser.add_argument('--model_path', type=str, default='actor_model.tflite')
-    args = parser.parse_args()
+#------------------------------------------------------------------------------
+# Vendored batchify / unbatchify
+def batchify(x: dict, agent_list, num_actors):
+    max_dim = max(x[a].shape[-1] for a in agent_list)
+    def pad(z):
+        return jnp.concatenate([z, jnp.zeros(z.shape[:-1] + (max_dim - z.shape[-1],))], -1)
+    stacked = jnp.stack([
+        x[a] if x[a].shape[-1] == max_dim else pad(x[a])
+        for a in agent_list
+    ])
+    return stacked.reshape((num_actors, -1))
 
-    # 1) Load TFLite model and resize input for batch inference
-    interpreter = tf.lite.Interpreter(model_path=args.model_path)
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
+    split = x.reshape((len(agent_list), num_envs, -1))
+    return {agent_list[i]: split[i] for i in range(len(agent_list))}
+#------------------------------------------------------------------------------
+
+# XLA / MuJoCo cache setup
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["MUJOCO_GL"] = "egl"
+cache_dir = os.path.join(os.getcwd(), "xla_cache")
+os.makedirs(cache_dir, exist_ok=True)
+os.environ["XLA_CACHE_DIR"] = cache_dir
+jax.config.update("jax_compilation_cache_dir", cache_dir)
+
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="Run a multiquad rollout with a TFLite actor and dump to ASDF"
+    )
+    p.add_argument("--model_path", type=str, default="actor_model.tflite",
+                   help="Path to the TFLite actor model")
+    p.add_argument("--timesteps",  type=int, default=2500,
+                   help="Number of simulation steps")
+    p.add_argument("--output",     type=str, default="flights.crazy.asdf",
+                   help="Filename for the ASDF output")
+    return p.parse_args()
+
+def load_model(model_path: str) -> tf.lite.Interpreter:
+    interpreter = tf.lite.Interpreter(model_path=model_path)
+    return interpreter
+
+def run_rollout(interpreter: tf.lite.Interpreter, timesteps: int):
+    # 1) single‐env creation
+    env    = jaxmarl.make("multiquad_ix4")      # no num_envs here  [oai_citation:3‡kngwyu.github.io](https://kngwyu.github.io/rlog/ja/2021/12/18/jax-brax-haiku.html?utm_source=chatgpt.com)
+    agents = env.agents
+    obs_dim = env.observation_spaces[agents[0]].shape[0]
+
+    # 2) prepare TFLite for batch=1
+    interpreter.resize_tensor_input(
+        interpreter.get_input_details()[0]["index"],
+        [1, obs_dim]
+    )
+    interpreter.allocate_tensors()
     inp_det = interpreter.get_input_details()[0]
     out_det = interpreter.get_output_details()[0]
-    interpreter.resize_tensor_input(inp_det['index'], [args.num_envs, inp_det['shape'][-1]])
-    interpreter.allocate_tensors()
-    input_dim = inp_det['shape'][-1]
 
-    # 2) Create the environment
-    env = jaxmarl.make(
-        "multiquad_ix4",
-        policy_freq=250,
-        sim_steps_per_action=1,
-        episode_length=args.timesteps,
-        reward_coeffs=None,
-        obs_noise=0.0,
-        act_noise=0.0,
-        max_thrust_range=0.0,
-        num_quads=2,
-        cable_length=0.5,
-    )
-    agent_names = env.agents
+    obs_buf, act_buf, state_buf = [], [], []
 
-    # Try to get dt from environment or default
-    try:
-        dt = float(env.env.dt)
-    except Exception:
-        dt = 1.0 / 250.0
-
-    # 3) Prepare RNG and reset batch
+    # 3) RESET → unpack tuple
     rng = jax.random.PRNGKey(0)
-    subkeys = jax.random.split(rng, args.num_envs + 1)
-    rng = subkeys[0]
-    reset_keys = subkeys[1:]
-    obs_batch_dict, states = jax.vmap(env.reset)(reset_keys)
-    obs = np.array(obs_batch_dict['global'], dtype=np.float32)[:, :input_dim]
+    rng, reset_key = jax.random.split(rng)
+    obs_dict, pipeline_state = env.reset(reset_key)  # returns (obs, pipeline_state)
 
-    # 4) Initialize history buffers
-    obs_history = []
-    states_history = []
-    actions_history = []
+    for t in range(timesteps):
+        # a) RECORD obs
+        obs_buf.append( np.stack([ np.array(obs_dict[a]) for a in agents ], axis=0) )
 
-    # 5) Run rollouts
-    for _ in range(args.timesteps):
-        obs_history.append(obs.copy())
-        # convert JAX states pytree to NumPy per step
-        #states_history.append(tree_map(lambda x: np.array(x), states))
+        # b) ACT: one‐agent TFLite inference per agent
+        raw_acts = {}
+        for a in agents:
+            inp = np.array(obs_dict[a][None, :], dtype=np.float32)
+            interpreter.set_tensor(inp_det["index"], inp)
+            interpreter.invoke()
+            out = interpreter.get_tensor(out_det["index"])[0]
+            raw_acts[a] = jnp.array(out)
+        act_buf.append( np.stack([ np.array(raw_acts[a]) for a in agents ], axis=0) )
 
-        # model inference
-        interpreter.set_tensor(inp_det['index'], obs)
-        interpreter.invoke()
-        action = interpreter.get_tensor(out_det['index'])
-        actions_history.append(action.copy())
+        # c) RECORD MJX state by iterating over all array fields
+        flat = {}
+        for name in dir(pipeline_state):
+            if name.startswith("_"): continue
+            val = getattr(pipeline_state, name)
+            if isinstance(val, (np.ndarray, jnp.ndarray)):
+                flat[name] = np.array(val)
+        state_buf.append(flat)
 
-        # split or duplicate flat action into per-agent dict
-        action_jax = jnp.array(action)
-        total_dim = action_jax.shape[-1]
-        global_act_size = env.env.action_size
-        if total_dim * len(agent_names) == global_act_size:
-            actions = {agent: action_jax for agent in agent_names}
-        else:
-            per_dim = total_dim // len(agent_names)
-            actions = {
-                agent_names[i]: action_jax[:, i * per_dim:(i+1) * per_dim]
-                for i in range(len(agent_names))
-            }
+        # d) STEP → unpack tuple
+        obs_dict, pipeline_state, reward, dones, info = env.step_env(
+            jax.random.split(rng)[1], pipeline_state, raw_acts
+        )
 
-        # step environment with new PRNG keys
-        subkeys = jax.random.split(rng, args.num_envs + 1)
-        rng = subkeys[0]
-        step_keys = subkeys[1:]
-        obs_batch_dict, states, *_ = jax.vmap(
-            env.step_env,
-            in_axes=(0, 0, {agent: 0 for agent in agent_names})
-        )(step_keys, states, actions)
-        obs = np.array(obs_batch_dict['global'], dtype=np.float32)[:, :input_dim]
+    # stack: (T, num_agents, dim)
+    obs_history     = np.stack(obs_buf, axis=0)
+    actions_history = np.stack(act_buf, axis=0)
+    return obs_history, actions_history, state_buf, agents
 
-    # 6) Stack histories
-    obs_history = np.stack(obs_history, axis=0)
-    actions_history = np.stack(actions_history, axis=0)
-    # use imported tree_map to stack state pytree history
-    #states_history = tree_map(lambda *arrs: np.stack(arrs, axis=0), *states_history)
+def save_rollout(obs_h, act_h, state_buf, agents, args):
+    # build states dict: each field shape (T, *field_shape)
+    fields = list(state_buf[0].keys())
+    states_dict = {
+        f: np.stack([ step[f] for step in state_buf ], axis=0)
+        for f in fields
+    }
 
-    # compute final position errors
-    pos_errs = np.linalg.norm(obs[:, :3], axis=1)
-
-    # 7) Save data to ASDF file with metadata
     tree = {
-        'metadata': {
-            'dt': dt,
-            'num_envs': args.num_envs,
-            'timesteps': args.timesteps,
-            'agent_names': agent_names
+        "metadata": {
+            "num_envs":    1,
+            "timesteps":   args.timesteps,
+            "agent_names": agents
         },
-        'environment': {
-            'name': 'multiquad_ix4',
-            'policy_freq': 250,
-            'sim_steps_per_action': 1,
-            'episode_length': args.timesteps,
-            'reward_coeffs': None,
-            'obs_noise': 0.3,
-            'act_noise': 0.1,
-            'max_thrust_range': 0.3,
-            'num_quads': 2,
-            'cable_length': 0.4,
-            'observation_size': input_dim,
-            'action_size': out_det['shape'][-1],
-            'observation_lookup': env.env.obs_table
-
-        },
-        'policy': {
-            'model_path': args.model_path,
-            'input_dim': input_dim,
-            'output_dim': out_det['shape'][-1],
-            'model_parameters': {
-                'input_shape': inp_det['shape'],
-                'output_shape': out_det['shape'],
-            }
-        },
-
-        'flights': [
-            {
-                'observations': obs_history,
-                'actions': actions_history,
-            }
-
-        ]
-       
+        "environment": {"name": "multiquad_ix4"},
+        "flights": [{
+            "states": states_dict,
+            "agents": {
+                agents[i]: {
+                    "observations": obs_h[:, i],
+                    "actions":      act_h[:, i]
+                } for i in range(len(agents))
+        }
+        }]
     }
     af = asdf.AsdfFile(tree)
-    af.write_to('flights.crazy.asdf')
-    print("Saved all flight data and metadata to flights.crazy.asdf")
+    af.write_to(args.output)
+    print(f"Saved ASDF to {args.output}")
 
-    # 8) Plot histogram
-    plt.figure()
-    plt.hist(pos_errs, bins=50)
-    plt.xlabel('Position Error')
-    plt.ylabel('Frequency')
-    plt.title('Position Error Histogram at Last Frame')
-    plt.savefig('pos_err_histogram.png')
-    print("Saved histogram to pos_err_histogram.png")
+def main():
+    args = parse_args()
+    interpreter = load_model(args.model_path)
+    obs_h, act_h, state_buf, agents = run_rollout(interpreter, args.timesteps)
+    save_rollout(obs_h, act_h, state_buf, agents, args)
 
 if __name__ == "__main__":
     main()
