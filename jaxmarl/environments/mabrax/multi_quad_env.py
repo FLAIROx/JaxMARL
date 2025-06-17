@@ -44,7 +44,7 @@ class MultiQuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      episode_length: int = 1024,                  # Maximum simulation time per episode.
+      episode_length: int = 2048,                  # Maximum simulation time per episode.
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
@@ -191,7 +191,7 @@ class MultiQuadEnv(PipelineEnv):
     # spherical params
     mean_r, std_r = cable_length, cable_length/3
     clip_r = (0.05, cable_length)
-    mean_th, std_th = jp.pi/4, jp.pi/8
+    mean_th, std_th = jp.pi/7, jp.pi/8
     std_phi = jp.pi/(num_quads+1)
     # sample per-quad
     r     = jp.clip(mean_r + std_r*jax.random.normal(subkeys[2], (num_quads,)), *clip_r)
@@ -230,7 +230,7 @@ class MultiQuadEnv(PipelineEnv):
     min_payload = jp.min(jp.linalg.norm(pd, axis=-1), axis=1)
 
     # 4) mask & pick top batch_size
-    mask = (min_quad>=0.18)&(min_payload>=0.05)
+    mask = (min_quad>=0.16)&(min_payload>=0.07)
     idx = jp.argsort(-mask.astype(jp.int32))[:batch_size]
 
     return payloads[idx], quadss[idx]
@@ -248,17 +248,13 @@ class MultiQuadEnv(PipelineEnv):
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
     # Randomize velocities around zero
     ang_vel_std = 20 * jp.pi / 180  # 20 degrees per second
-    lin_vel_std = 0.1  # 10 cm/s
+    lin_vel_std = 0.2  # 20 cm/s
 
     qvel = jp.zeros(self.sys.nv)
     for i in range(self.num_quads):
       quad_body_id = self.quad_body_ids[i]
-      # sample velocities
       lin = jax.random.normal(rng2, (3,)) * lin_vel_std
       ang = jax.random.normal(rng2, (3,)) * ang_vel_std
-      # clip to maximum velocities
-      lin = jp.clip(lin, -10*lin_vel_std, 10*lin_vel_std)
-      ang = jp.clip(ang, -10*ang_vel_std, 10*ang_vel_std)
       start = quad_body_id * 6
       qvel = qvel.at[start:start+3].set(lin)
       qvel = qvel.at[start+3:start+6].set(ang)
@@ -387,18 +383,6 @@ class MultiQuadEnv(PipelineEnv):
     # max_payload_error = 4 * (1 - time_progress) + 0.05 # allow for 5cm error at the target
     # out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
 
-    # add angular velocity out-of-bounds
-    angvels = jp.stack([pipeline_state.cvel[qb][:3] for qb in self.quad_body_ids])  # (num_quads, 3)
-    angvel_mag = jp.linalg.norm(angvels, axis=-1)
-    angvel_too_high = jp.any(angvel_mag > 20.0)
-    out_of_bounds = jp.logical_or(out_of_bounds, angvel_too_high)
-
-    # add linear velocity out-of-bounds
-    linvels = jp.stack([pipeline_state.cvel[qb][3:6] for qb in self.quad_body_ids])  # (num_quads, 3)
-    linvel_mag = jp.linalg.norm(linvels, axis=-1)
-    linvel_too_high = jp.any(linvel_mag > 4.0) # limit at 4m/s
-    out_of_bounds = jp.logical_or(out_of_bounds, linvel_too_high)
-
 
 
     obs = self._get_obs(pipeline_state, action, self.target_position, noise_key)
@@ -490,10 +474,7 @@ class MultiQuadEnv(PipelineEnv):
     payload_err   = team_obs[:3]
     payload_linlv = team_obs[3:6]
     dis = jp.linalg.norm(payload_err)
-    tracking_reward = self.reward_coeffs["distance_reward_coef"] * ( er(dis) - 0.1 * jp.abs(dis))
-
-
-    payload_linvel_reward =  er(jp.linalg.norm(payload_linlv)) 
+    tracking_reward = self.reward_coeffs["distance_reward_coef"] * er(dis)
 
     
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
@@ -514,17 +495,18 @@ class MultiQuadEnv(PipelineEnv):
         safe_distance = 1.0
 
     # upright reward = mean over all quads
-    up_reward = jp.mean(er(angles, 4))
+    up_reward = jp.mean(er(angles))
 
     # taut-string reward = sum of distances + heights
-    dists = jp.linalg.norm(rels, axis=-1)  # (num_quads,)
-    taut_reward  = jp.mean(dists) / self.cable_length
+    quad_dists   = jp.linalg.norm(rels, axis=-1)
+    quad_heights = rels[:, 2]
+    taut_reward  = (jp.sum(quad_dists) + jp.sum(quad_heights)) / self.cable_length
 
     # angular and linear velocity rewards summed
     ang_vel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in angvels])
-    ang_vel_reward =  jp.mean(ang_vel_vals)
+    ang_vel_reward = (0.5 + 3 * er(dis, 20)) * jp.mean(ang_vel_vals)
     linvel_vals = jp.stack([er(jp.linalg.norm(jvp, axis=-1)) for jvp in linvels])
-    linvel_quad_reward = jp.mean(linvel_vals)
+    linvel_quad_reward = (0.5 + 6 * er(dis, 20)) * jp.mean(linvel_vals)
 
     # penalties
     collision_penalty = self.reward_coeffs["collision_penalty_coef"] * collision
@@ -542,17 +524,12 @@ class MultiQuadEnv(PipelineEnv):
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
-                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
-                )/4
-    
+                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward)
     safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
-           + collision_penalty + oob_penalty + smooth_penalty + energy_penalty 
-    
-    safety /= 4
+           + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
 
-    
-    agility = 0.5 # This can be adjusted based on the desired balance between tracking and stability.
-    reward = agility * tracking_reward + stability + safety
+    reward = tracking_reward * (stability + safety)
+  
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
