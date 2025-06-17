@@ -55,7 +55,7 @@ def parse_args():
         description="Run a multiquad rollout with a TFLite actor, save to ASDF, and render video"
     )
     p.add_argument("--model_path", type=str, default="actor_model.tflite", help="Path to TFLite actor model")
-    p.add_argument("--num_envs", type=int, default=1000, help="Number of parallel environments")
+    p.add_argument("--num_envs", type=int, default=10, help="Number of parallel environments")
     p.add_argument("--timesteps", type=int, default=4000, help="Number of simulation steps")
     p.add_argument("--output", type=str, default="flights.crazy.asdf", help="ASDF output filename")
     p.add_argument("--video", type=str, default="rollout_video.mp4", help="Rendered video filename")
@@ -67,8 +67,7 @@ def load_model(model_path: str) -> tf.lite.Interpreter:
     return interpreter
 
 #------------------------------------------------------------------------------
-def run_batched_rollout(interpreter: tf.lite.Interpreter, num_envs: int, timesteps: int):
-    env = jaxmarl.make("multiquad_ix4")
+def run_batched_rollout(interpreter: tf.lite.Interpreter, env, num_envs: int, timesteps: int):
     agents = env.agents
     obs_dim = env.observation_spaces[agents[0]].shape[0]
 
@@ -115,12 +114,12 @@ def run_batched_rollout(interpreter: tf.lite.Interpreter, num_envs: int, timeste
         np.stack(obs_buf),
         np.stack(act_buf),
         np.stack(rew_buf),
-        np.stack(done_buf)
+        np.stack(done_buf),
+        agents
     )
 
 #------------------------------------------------------------------------------
-def run_single_rollout(interpreter: tf.lite.Interpreter, timesteps: int):
-    env = jaxmarl.make("multiquad_ix4")
+def run_single_rollout(interpreter: tf.lite.Interpreter, env, timesteps: int):
     agents = env.agents
     obs_dim = env.observation_spaces[agents[0]].shape[0]
 
@@ -155,7 +154,7 @@ def run_single_rollout(interpreter: tf.lite.Interpreter, timesteps: int):
     return states
 
 #------------------------------------------------------------------------------
-def save_rollout(obs_h, act_h, rew_h, done_h, args, num_envs, agents):
+def save_rollout(obs_h, act_h, rew_h, done_h, args, num_envs, agents, trajectory=None):
     agents_dict = {
         agents[i]: {"observations": obs_h[:, :, i, :], "actions": act_h[:, :, i, :]}
         for i in range(len(agents))
@@ -172,26 +171,50 @@ def save_rollout(obs_h, act_h, rew_h, done_h, args, num_envs, agents):
                            "env": "multiquad_ix4"
                            },
             "agents": agents_dict,
-            "global": {"rewards": rew_h, "dones": done_h}
+            "global": {"rewards": rew_h, "dones": done_h, "trajectory": trajectory},
         }]
     }
     asdf.AsdfFile(tree).write_to(args.output)
     print(f"Saved ASDF to {args.output}")
+
+
+def figure_eight(length, width=1.0, height=1.0, rounds=1):
+    """
+    Generate a figure-eight trajectory.
+
+    Parameters:
+    - length:   number of sampling points (timesteps).
+    - width:    total width (peak-to-peak) of the figure-8 in x.
+    - height:   total height (peak-to-peak) of the figure-8 in y.
+    - rounds:   number of complete figure-8 loops over the span.
+
+    Returns:
+    - x, y: arrays of shape (length,) giving the trajectory.
+    """
+    # directly sample the parameter from 0 to 2π·rounds
+    t = np.linspace(0, 2 * np.pi * rounds, length)
+    x = width * np.sin(t)
+    y = height * np.sin(2 * t)
+
+    return x, y
 
 #------------------------------------------------------------------------------
 def main():
     args = parse_args()
     interpreter = load_model(args.model_path)
 
+    x, y = figure_eight(args.timesteps, width=1.0, height=1.0, rounds=3)
+    traj = np.stack([x, y, 1.5 * np.ones_like(x)], axis=-1)
+
+    env = jaxmarl.make("multiquad_ix4",  episode_length=args.timesteps, trajectory=traj)
+
     # Batched rollout: collect and save data
-    obs_h, act_h, rew_h, done_h = run_batched_rollout(interpreter, args.num_envs, args.timesteps)
-    env = jaxmarl.make("multiquad_ix4")
-    agents = env.agents
-    save_rollout(obs_h, act_h, rew_h, done_h, args, args.num_envs, agents)
+    obs_h, act_h, rew_h, done_h, agents = run_batched_rollout(interpreter, env, args.num_envs, args.timesteps)
+    save_rollout(obs_h, act_h, rew_h, done_h, args, args.num_envs, agents, trajectory=traj)
 
     # Single-env rollout for rendering
     print("Running single-env rollout for rendering...")
-    states = run_single_rollout(interpreter, args.timesteps)
+    states = run_single_rollout(interpreter, env, args.timesteps)
     render_video(states, env, render_every=10, width=640, height=480, output=args.video)
 
 if __name__ == "__main__":

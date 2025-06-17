@@ -44,13 +44,13 @@ class MultiQuadEnv(PipelineEnv):
       self,
       policy_freq: float = 250,              # Policy frequency in Hz.
       sim_steps_per_action: int = 1,           # Physics steps between control actions.
-      episode_length: int = 2048,                  # Maximum simulation time per episode.
       reward_coeffs: dict = None,
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
       max_thrust_range: float = 0.3,               # range for randomizing thrust
       num_quads = 2,
       cable_length: float = 0.4,  # Length of the cable connecting the payload to the quadrotors.
+      trajectory = None,  # array of target positions for the payload
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
@@ -70,7 +70,8 @@ class MultiQuadEnv(PipelineEnv):
     self.policy_freq = policy_freq
     self.sim_steps_per_action = sim_steps_per_action
     self.time_per_action = 1.0 / self.policy_freq
-    self.max_time = episode_length * self.time_per_action
+  
+
     self.obs_noise = obs_noise    
     self.act_noise = act_noise 
     if reward_coeffs is None:
@@ -106,6 +107,20 @@ class MultiQuadEnv(PipelineEnv):
     # Define the target goal for the payload.
     self.goal_center = jp.array([0.0, 0.0, 1.5])
     self.target_position = self.goal_center 
+    self.trajectory = trajectory
+    if  self.trajectory is not None:
+      #make sure the trajectory has length of episode_length
+      self.trajectory = jp.array(trajectory, dtype=jp.float32)
+      if self.trajectory.ndim == 1:
+        # If trajectory is a 1D array, reshape it to (episode_length, 3).
+        self.trajectory = self.trajectory.reshape(-1, 3)
+      elif self.trajectory.ndim == 2 and self.trajectory.shape[1] != 3:
+        # If trajectory is a 2D array but not of shape (episode_length, 3), raise an error.
+        raise ValueError("Trajectory must be of shape (episode_length, 3) or (episode_length * 3,).")
+
+      # If a trajectory is provided, set the target position to the first point.
+      self.target_position = jp.array(trajectory[0], dtype=jp.float32)
+
 
     # Cache body IDs
 
@@ -384,12 +399,22 @@ class MultiQuadEnv(PipelineEnv):
     # out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
 
 
+    # set target if trajectory is provided
+    target_position = self.target_position
+    if self.trajectory is not None and self.trajectory.shape[0] > 0:
+      # get the next target position from the trajectory
+      target_idx = jp.clip(
+        jp.floor(pipeline_state.time  / self.time_per_action).astype(jp.int32),
+        0, self.trajectory.shape[0] - 1
+      ) 
+      target_position = self.trajectory[target_idx]
 
-    obs = self._get_obs(pipeline_state, action, self.target_position, noise_key)
+
+    obs = self._get_obs(pipeline_state, action, target_position, noise_key)
     reward, _, _ = self.calc_reward(
         obs, pipeline_state.time, collision, out_of_bounds,
         action, angles, prev_last_action,
-        self.target_position, pipeline_state, max_thrust
+        target_position, pipeline_state, max_thrust
     )
 
     # dont terminate ground collision on ground start
@@ -403,8 +428,7 @@ class MultiQuadEnv(PipelineEnv):
 
     collision = jp.logical_or(quad_collision, ground_collision)
     
-    done = jp.logical_or(jp.logical_or(out_of_bounds, collision),
-                         pipeline_state.time > self.max_time*1.2) # this should never happen, because episode ends first
+    done = jp.logical_or(out_of_bounds, collision)
    
     
     done = done * 1.0
