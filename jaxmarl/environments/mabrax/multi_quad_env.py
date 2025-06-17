@@ -246,8 +246,15 @@ class MultiQuadEnv(PipelineEnv):
     rng, rng1, rng2, rng_config = jax.random.split(rng, 4)
 
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
-    qvel = 0.1 * jax.random.normal(rng2, (self.sys.nv,))
-    qvel = jp.clip(qvel, a_min=-5.0, a_max=5.0)
+    # Randomize velocities around zero
+    ang_vel_std = 20 * jp.pi / 180  # 20 degrees per second
+    lin_vel_std = 0.2  # 20 cm/s
+
+    qvel = jp.zeros(self.sys.qvel0.shape)
+    for i in range(self.num_quads):
+      quad_body_id = self.quad_body_ids[i]
+      qvel[quad_body_id, 0:3] = jax.random.normal(rng2, (3,)) * lin_vel_std
+      qvel[quad_body_id, 3:6] = jax.random.normal(rng2, (3,)) * ang_vel_std
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad_positions = MultiQuadEnv.generate_filtered_configuration_batch(
@@ -360,8 +367,8 @@ class MultiQuadEnv(PipelineEnv):
     collision       = jp.logical_or(quad_collision, ground_collision)
 
     # out-of-bounds if any quad tilts too far or goes under payload
-    too_tilted = jp.any(jp.abs(angles) > jp.radians(90))
-    below_pl   = jp.any(qp[:, 2] < pipeline_state.xpos[self.payload_body_id][2] - 0.05)
+    too_tilted = jp.any(jp.abs(angles) > jp.radians(150))
+    below_pl   = jp.any(qp[:, 2] < pipeline_state.xpos[self.payload_body_id][2] - 0.15)
     out_of_bounds = jp.logical_or(too_tilted, below_pl)
 
     # out of bounds for pos error shrinking with time
