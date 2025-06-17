@@ -230,7 +230,7 @@ class MultiQuadEnv(PipelineEnv):
     min_payload = jp.min(jp.linalg.norm(pd, axis=-1), axis=1)
 
     # 4) mask & pick top batch_size
-    mask = (min_quad>=0.16)&(min_payload>=0.07)
+    mask = (min_quad>=0.18)&(min_payload>=0.05)
     idx = jp.argsort(-mask.astype(jp.int32))[:batch_size]
 
     return payloads[idx], quadss[idx]
@@ -492,6 +492,9 @@ class MultiQuadEnv(PipelineEnv):
     dis = jp.linalg.norm(payload_err)
     tracking_reward = self.reward_coeffs["distance_reward_coef"] * ( er(dis) - 0.1 * jp.abs(dis))
 
+
+    payload_linvel_reward =  er(jp.linalg.norm(payload_linlv)) 
+
     
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
     rels     = jp.stack([q[:3]     for q in quad_obs])  # (num_quads,3)
@@ -511,7 +514,7 @@ class MultiQuadEnv(PipelineEnv):
         safe_distance = 1.0
 
     # upright reward = mean over all quads
-    up_reward = jp.mean(er(angles))
+    up_reward = jp.mean(er(angles), 8)
 
     # taut-string reward = sum of distances + heights
     quad_dists   = jp.linalg.norm(rels, axis=-1)
@@ -540,14 +543,17 @@ class MultiQuadEnv(PipelineEnv):
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
-                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward) / 4
+                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward
+                 + self.reward_coeffs["velocity_reward_coef"] * payload_linvel_reward)/5
     
     safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
            + collision_penalty + oob_penalty + smooth_penalty + energy_penalty 
     
     safety /= 3
 
-    reward = tracking_reward + stability + safety
+    
+    agility = 0.2 # This can be adjusted based on the desired balance between tracking and stability.
+    reward = agility * tracking_reward + stability + safety
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
