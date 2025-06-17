@@ -164,7 +164,13 @@ def save_rollout(obs_h, act_h, rew_h, done_h, args, num_envs, agents):
         "metadata": {"num_envs": num_envs, "timesteps": obs_h.shape[0], "agent_names": agents},
         "environment": {"name": "multiquad_ix4"},
         "flights": [{
-            "metadata": {"num_envs": num_envs, "timesteps": obs_h.shape[0], "agents": agents, "model_path": args.model_path},
+            "metadata": {"num_envs": num_envs, 
+                         "timesteps": obs_h.shape[0], 
+                         "agents": agents,
+                        "model_path": args.model_path,
+                           "dt": 1.0/250,
+                           "env": "multiquad_ix4"
+                           },
             "agents": agents_dict,
             "global": {"rewards": rew_h, "dones": done_h}
         }]
