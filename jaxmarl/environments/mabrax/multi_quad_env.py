@@ -514,7 +514,7 @@ class MultiQuadEnv(PipelineEnv):
         safe_distance = 1.0
 
     # upright reward = mean over all quads
-    up_reward = jp.mean(er(angles), 8)
+    up_reward = jp.mean(er(angles, 8))
 
     # taut-string reward = sum of distances + heights
     quad_dists   = jp.linalg.norm(rels, axis=-1)
