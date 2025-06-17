@@ -248,13 +248,17 @@ class MultiQuadEnv(PipelineEnv):
     base_qpos = self.sys.qpos0  # Start with the reference configuration.
     # Randomize velocities around zero
     ang_vel_std = 20 * jp.pi / 180  # 20 degrees per second
-    lin_vel_std = 0.2  # 20 cm/s
+    lin_vel_std = 0.1  # 10 cm/s
 
     qvel = jp.zeros(self.sys.nv)
     for i in range(self.num_quads):
       quad_body_id = self.quad_body_ids[i]
+      # sample velocities
       lin = jax.random.normal(rng2, (3,)) * lin_vel_std
       ang = jax.random.normal(rng2, (3,)) * ang_vel_std
+      # clip to maximum velocities
+      lin = jp.clip(lin, -10*lin_vel_std, 10*lin_vel_std)
+      ang = jp.clip(ang, -10*ang_vel_std, 10*ang_vel_std)
       start = quad_body_id * 6
       qvel = qvel.at[start:start+3].set(lin)
       qvel = qvel.at[start+3:start+6].set(ang)
@@ -382,6 +386,18 @@ class MultiQuadEnv(PipelineEnv):
     # time_progress = jp.clip(pipeline_state.time / max_time_to_target, 0.0, 1.0)
     # max_payload_error = 4 * (1 - time_progress) + 0.05 # allow for 5cm error at the target
     # out_of_bounds = jp.logical_or(out_of_bounds, payload_error_norm > max_payload_error)
+
+    # add angular velocity out-of-bounds
+    angvels = jp.stack([pipeline_state.cvel[qb][:3] for qb in self.quad_body_ids])  # (num_quads, 3)
+    angvel_mag = jp.linalg.norm(angvels, axis=-1)
+    angvel_too_high = jp.any(angvel_mag > 6.0) # limit at 6 rad/s
+    out_of_bounds = jp.logical_or(out_of_bounds, angvel_too_high)
+
+    # add linear velocity out-of-bounds
+    linvels = jp.stack([pipeline_state.cvel[qb][3:6] for qb in self.quad_body_ids])  # (num_quads, 3)
+    linvel_mag = jp.linalg.norm(linvels, axis=-1)
+    linvel_too_high = jp.any(linvel_mag > 4.0) # limit at 4m/s
+    out_of_bounds = jp.logical_or(out_of_bounds, linvel_too_high)
 
 
 

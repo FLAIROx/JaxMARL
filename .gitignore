@@ -3,7 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-*.ipynb
 *.DS_Store
 .vscode/
 .ipynb_checkpoints/
