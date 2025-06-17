@@ -253,8 +253,11 @@ class MultiQuadEnv(PipelineEnv):
     qvel = jp.zeros(self.sys.nv)
     for i in range(self.num_quads):
       quad_body_id = self.quad_body_ids[i]
-      qvel[quad_body_id, 0:3] = jax.random.normal(rng2, (3,)) * lin_vel_std
-      qvel[quad_body_id, 3:6] = jax.random.normal(rng2, (3,)) * ang_vel_std
+      lin = jax.random.normal(rng2, (3,)) * lin_vel_std
+      ang = jax.random.normal(rng2, (3,)) * ang_vel_std
+      start = quad_body_id * 6
+      qvel = qvel.at[start:start+3].set(lin)
+      qvel = qvel.at[start+3:start+6].set(ang)
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad_positions = MultiQuadEnv.generate_filtered_configuration_batch(
