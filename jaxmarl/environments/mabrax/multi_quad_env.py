@@ -250,7 +250,7 @@ class MultiQuadEnv(PipelineEnv):
     ang_vel_std = 20 * jp.pi / 180  # 20 degrees per second
     lin_vel_std = 0.2  # 20 cm/s
 
-    qvel = jp.zeros(self.sys.qvel0.shape)
+    qvel = jp.zeros(self.sys.nv)
     for i in range(self.num_quads):
       quad_body_id = self.quad_body_ids[i]
       qvel[quad_body_id, 0:3] = jax.random.normal(rng2, (3,)) * lin_vel_std
