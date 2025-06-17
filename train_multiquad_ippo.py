@@ -125,12 +125,12 @@ def main():
             "act_noise": 0.0,
             "max_thrust_range": 0.0,
             "num_quads": 2,
-            "episode_length": 4096,
+            "episode_length": 2048,
         },
         "TOTAL_TIMESTEPS": 1_000_000_000,  #3_000_000_000,
         "NUM_ENVS": 16384,
-        "NUM_STEPS": 8, #128,
-        "NUM_MINIBATCHES": 64, #512
+        "NUM_STEPS": 32, #128,
+        "NUM_MINIBATCHES": 128, #512
         # "TOTAL_TIMESTEPS": 1_000_000_000,
         # "NUM_ENVS": 2048, # 16384,
         # "NUM_STEPS": 256,
