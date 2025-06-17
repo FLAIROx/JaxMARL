@@ -191,7 +191,7 @@ class MultiQuadEnv(PipelineEnv):
     # spherical params
     mean_r, std_r = cable_length, cable_length/3
     clip_r = (0.05, cable_length)
-    mean_th, std_th = jp.pi/7, jp.pi/8
+    mean_th, std_th = jp.pi/4, jp.pi/8
     std_phi = jp.pi/(num_quads+1)
     # sample per-quad
     r     = jp.clip(mean_r + std_r*jax.random.normal(subkeys[2], (num_quads,)), *clip_r)
@@ -390,7 +390,7 @@ class MultiQuadEnv(PipelineEnv):
     # add angular velocity out-of-bounds
     angvels = jp.stack([pipeline_state.cvel[qb][:3] for qb in self.quad_body_ids])  # (num_quads, 3)
     angvel_mag = jp.linalg.norm(angvels, axis=-1)
-    angvel_too_high = jp.any(angvel_mag > 6.0) # limit at 6 rad/s
+    angvel_too_high = jp.any(angvel_mag > 20.0)
     out_of_bounds = jp.logical_or(out_of_bounds, angvel_too_high)
 
     # add linear velocity out-of-bounds
@@ -490,7 +490,7 @@ class MultiQuadEnv(PipelineEnv):
     payload_err   = team_obs[:3]
     payload_linlv = team_obs[3:6]
     dis = jp.linalg.norm(payload_err)
-    tracking_reward = self.reward_coeffs["distance_reward_coef"] * er(dis)
+    tracking_reward = self.reward_coeffs["distance_reward_coef"] * ( er(dis) - 0.1 * jp.abs(dis))
 
     
     quad_obs = [obs[6 + i*24 : 6 + (i+1)*24] for i in range(self.num_quads)]
@@ -540,12 +540,14 @@ class MultiQuadEnv(PipelineEnv):
     stability = (self.reward_coeffs["up_reward_coef"] * up_reward
                  + self.reward_coeffs["taut_reward_coef"] * taut_reward
                  + self.reward_coeffs["ang_vel_reward_coef"] * ang_vel_reward
-                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward)
+                 + self.reward_coeffs["linvel_quad_reward_coef"] * linvel_quad_reward) / 4
+    
     safety = safe_distance * self.reward_coeffs["safe_distance_coef"] \
-           + collision_penalty + oob_penalty + smooth_penalty + energy_penalty
+           + collision_penalty + oob_penalty + smooth_penalty + energy_penalty 
+    
+    safety /= 3
 
-    reward = tracking_reward * (stability + safety)
-    reward /= self.reward_divisor
+    reward = tracking_reward + stability + safety
     return reward, None, {}
 
 # Register the environment under the name 'multiquad'
