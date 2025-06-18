@@ -237,7 +237,7 @@ class MultiQuadEnv(PipelineEnv):
     M = os_factor * batch_size
     keys = jax.random.split(key, M)
     payloads, quadss = jax.vmap(
-      MultiQuadEnv.generate_configuration, in_axes=(0, None, None)
+      MultiQuadEnv.generate_configuration, in_axes=(0, None, None, None, None)
     )(keys, num_quads, cable_length, target_position, target_start_ratio)  # shapes (M,3), (M,num_quads,3)
 
     # 2) quad‐to‐quad min‐dist
