@@ -48,7 +48,7 @@ class MultiQuadEnv(PipelineEnv):
       obs_noise: float = 0.0,           # Parameter for observation noise
       act_noise: float = 0.0,         # Parameter for actuator noise
       max_thrust_range: float = 0.3,               # range for randomizing thrust
-      num_quads = 2,
+      num_quads = 1,
       cable_length: float = 0.4,  # Length of the cable connecting the payload to the quadrotors.
       trajectory = None,  # array of target positions for the payload
       **kwargs,
