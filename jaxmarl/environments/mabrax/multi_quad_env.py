@@ -51,6 +51,7 @@ class MultiQuadEnv(PipelineEnv):
       num_quads = 2,
       cable_length: float = 0.4,  # Length of the cable connecting the payload to the quadrotors.
       trajectory = None,  # array of target positions for the payload
+      target_start_ratio: float = 0.2,  # percentage of resets to target position
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
@@ -65,6 +66,7 @@ class MultiQuadEnv(PipelineEnv):
     super().__init__(sys, **kwargs)
 
     self.cable_length = cable_length
+    self.target_start_ratio = target_start_ratio
 
     # Save environment parameters.
     self.policy_freq = policy_freq
@@ -193,7 +195,7 @@ class MultiQuadEnv(PipelineEnv):
     self.obs_table = obs_table
 
   @staticmethod
-  def generate_configuration(key, num_quads, cable_length):
+  def generate_configuration(key, num_quads, cable_length, target_position, target_start_ratio):
     # split once for payload and quads
     subkeys = jax.random.split(key, 5)
     min_qz, min_pz = 0.008, 0.0055
@@ -203,10 +205,14 @@ class MultiQuadEnv(PipelineEnv):
     pz = jax.random.uniform(subkeys[1], (), minval=-1.0, maxval=3.0)
     payload = jp.array([xy[0], xy[1], pz.clip(min_pz, 3.0)])
 
+    # reset payload position to the target position with a probability
+    if jax.random.uniform(subkeys[1]) < target_start_ratio:
+        payload = target_position + jax.random.normal(subkeys[1], (3,)) * 0.02
+
     # spherical params
     mean_r, std_r = cable_length, cable_length/3
     clip_r = (0.05, cable_length)
-    mean_th, std_th = jp.pi/7, jp.pi/8
+    mean_th, std_th = jp.pi/4, jp.pi/8
     std_phi = jp.pi/(num_quads+1)
     # sample per-quad
     r     = jp.clip(mean_r + std_r*jax.random.normal(subkeys[2], (num_quads,)), *clip_r)
@@ -224,14 +230,14 @@ class MultiQuadEnv(PipelineEnv):
 
 
   @staticmethod
-  def generate_filtered_configuration_batch(key, batch_size, num_quads, cable_length):
+  def generate_filtered_configuration_batch(key, batch_size, num_quads, cable_length, target_position, target_start_ratio):
     # 1) oversample_factor=2
     os_factor = round(num_quads / 2) + 1
     M = os_factor * batch_size
     keys = jax.random.split(key, M)
     payloads, quadss = jax.vmap(
       MultiQuadEnv.generate_configuration, in_axes=(0, None, None)
-    )(keys, num_quads, cable_length)  # shapes (M,3), (M,num_quads,3)
+    )(keys, num_quads, cable_length, target_position, target_start_ratio)  # shapes (M,3), (M,num_quads,3)
 
     # 2) quad‐to‐quad min‐dist
     diffs = quadss[:, :, None, :] - quadss[:, None, :, :]
@@ -276,7 +282,7 @@ class MultiQuadEnv(PipelineEnv):
 
     # Get new positions for payload and both quadrotors.
     payload_pos, quad_positions = MultiQuadEnv.generate_filtered_configuration_batch(
-      rng_config, 1, self.num_quads, self.cable_length
+      rng_config, 1, self.num_quads, self.cable_length, self.target_position, self.target_start_ratio
     )
     payload_pos = payload_pos[0]
     quad_positions = quad_positions[0]  # shape (num_quads, 3)
