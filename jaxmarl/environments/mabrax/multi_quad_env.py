@@ -52,11 +52,12 @@ class MultiQuadEnv(PipelineEnv):
       cable_length: float = 0.4,  # Length of the cable connecting the payload to the quadrotors.
       trajectory = None,  # array of target positions for the payload
       target_start_ratio: float = 0.2,  # percentage of resets to target position
+      payload_mass: float = 0.01,  # Mass of the payload.
       **kwargs,
   ):
     print("Initializing MultiQuadEnv")
     # Dynamically generate the MuJoCo XML via QuadEnvGenerator
-    gen = QuadEnvGenerator(n_quads=num_quads, cable_length=cable_length)
+    gen = QuadEnvGenerator(n_quads=num_quads, cable_length=cable_length, payload_mass=payload_mass)
     xml = gen.generate_xml()
     mj_model = mujoco.MjModel.from_xml_string(xml)
     # Convert the MuJoCo model to a Brax system.
