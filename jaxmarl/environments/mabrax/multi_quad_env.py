@@ -207,8 +207,8 @@ class MultiQuadEnv(PipelineEnv):
     payload = jp.array([xy[0], xy[1], pz.clip(min_pz, 3.0)])
 
     # reset payload position to the target position with a probability
-    if jax.random.uniform(subkeys[1]) < target_start_ratio:
-        payload = target_position + jax.random.normal(subkeys[1], (3,)) * 0.02
+    is_target_start = jax.random.uniform(subkeys[1]) < target_start_ratio
+    payload = jp.where(is_target_start, target_position + jax.random.normal(subkeys[1], (3,)) * 0.02, payload)
 
     # spherical params
     mean_r, std_r = cable_length, cable_length/3
