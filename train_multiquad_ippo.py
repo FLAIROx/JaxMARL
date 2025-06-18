@@ -124,7 +124,7 @@ def main():
             "obs_noise": 0.0,
             "act_noise": 0.0,
             "max_thrust_range": 0.0,
-            "num_quads": 2,
+            "num_quads": 1,
             "episode_length": 1024,
         },
         "TOTAL_TIMESTEPS": 1_000_000_000,  #3_000_000_000,
