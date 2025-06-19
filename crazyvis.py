@@ -55,7 +55,7 @@ def parse_args():
         description="Run a multiquad rollout with a TFLite actor, save to ASDF, and render video"
     )
     p.add_argument("--model_path", type=str, default="actor_model.tflite", help="Path to TFLite actor model")
-    p.add_argument("--num_envs", type=int, default=10, help="Number of parallel environments")
+    p.add_argument("--num_envs", type=int, default=1000, help="Number of parallel environments")
     p.add_argument("--timesteps", type=int, default=4000, help="Number of simulation steps")
     p.add_argument("--output", type=str, default="flights.crazy.asdf", help="ASDF output filename")
     p.add_argument("--video", type=str, default="rollout_video.mp4", help="Rendered video filename")
@@ -203,7 +203,7 @@ def main():
     args = parse_args()
     interpreter = load_model(args.model_path)
 
-    x, y = figure_eight(args.timesteps, width=1.0, height=1.0, rounds=3)
+    x, y = figure_eight(args.timesteps, width=1.0, height=1.0, rounds=1)
     traj = np.stack([x, y, 1.5 * np.ones_like(x)], axis=-1)
 
     env = jaxmarl.make("multiquad_ix4",  episode_length=args.timesteps, trajectory=traj)
