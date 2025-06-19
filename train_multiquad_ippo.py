@@ -149,7 +149,7 @@ def main():
         "GAE_LAMBDA": 0.95,
         "SEED": 0,
         "ACTOR_ARCH": [64, 64, 64],
-        "CRITIC_ARCH": [256, 256, 128],
+        "CRITIC_ARCH": [128, 128, 128],
         "DISABLE_JIT": False,
         "PROJECT": "single_quad_rl",
         "NAME": f"quad_marl_{int(time.time())}",
