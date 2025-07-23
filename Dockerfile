@@ -19,6 +19,16 @@ RUN apt-get update && \
 #jaxmarl from source if needed, all the requirements
 RUN pip install -e .[algs,dev]
 
+# install submodules (currently each submodule needs to be added to safe.directory)
+RUN git config --global --add safe.directory /home/${MYUSER}
+
+# install jaxrobatrium env and robotarium sim submodules
+RUN git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium
+RUN git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator
+RUN git submodule update --init --recursive
+RUN cd jaxmarl/environments/robotarium && pip install -e .
+RUN cd jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && pip install -e .
+
 USER ${MYUSER}
 
 #disabling preallocation
