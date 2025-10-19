@@ -20,9 +20,9 @@ class UTrackingAnimator(animation.FuncAnimation):
         episode_rewards,
         episode_errors,
         lags=None,
-        interval=100,
+        interval=10,
         legend=True,
-        fps=30
+        fps=10
     ):
         # Convert JAX arrays to NumPy for Matplotlib compatibility
         self.agent_positions = np.asarray(agent_positions)
@@ -177,13 +177,15 @@ class UTrackingAnimator(animation.FuncAnimation):
             # Agent elements
             for i in range(self.n_agents):
                 legend_handles.append(Line2D([0], [0], color=self.agent_colors[i], lw=2))
-                legend_labels.append(f"Agent {i+1} Path")
+                legend_labels.append(f"Agent {i+1}")
+                """
                 legend_handles.append(Line2D([0], [0], marker='*', color=self.agent_colors[i], 
                                         markersize=10, linestyle=''))
                 legend_labels.append(f"Agent {i+1} Start")
                 legend_handles.append(Line2D([0], [0], marker='o', color=self.agent_colors[i], 
                                         markersize=8, linestyle='', markeredgecolor='k'))
                 legend_labels.append(f"Agent {i+1} Current")
+                """
             
             # Landmark elements
             for i in range(self.n_landmarks):
@@ -355,7 +357,7 @@ def animate_from_infos(infos, num_agents=3, save_path="./outputs", save_gif=True
         landmark_predictions=np.swapaxes(filtered["tracking_pred"], 0, 1),
         episode_rewards=filtered["reward"],
         episode_errors=np.swapaxes(filtered["tracking_error"], 0, 1),
-        fps=10,
+        fps=fps,
     )
     
     os.makedirs(os.path.dirname(save_path), exist_ok=True)

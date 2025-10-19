@@ -3,10 +3,6 @@ import time
 import copy
 import numpy as np
 
-import time
-import copy
-import numpy as np
-
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -16,13 +12,9 @@ from flax.training.train_state import TrainState
 import distrax
 import optax
 
-import optax
-
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from functools import partial
-from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
-import wandb
 from typing import Sequence, NamedTuple, Any, Tuple, Union, Dict
 import wandb
 
@@ -450,7 +442,7 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(
                     env.step, in_axes=(0, 0, 0)
                 )(rng_step, env_state, env_act)
-                # info = jax.tree_util.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                # info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
@@ -572,6 +564,7 @@ def make_train(config):
                         actor_loss = (
                             loss_actor
                             - config["ENT_COEF"] * entropy
+                            + config["KL_COEF"] * approx_kl
                         )
 
                         return actor_loss, (
@@ -643,7 +636,7 @@ def make_train(config):
                 ) = update_state
                 rng, _rng = jax.random.split(rng)
 
-                init_hstates = jax.tree_util.tree_map(
+                init_hstates = jax.tree_map(
                     lambda x: jnp.reshape(x, (1, config["NUM_ACTORS"], -1)),
                     init_hstates,
                 )
@@ -680,7 +673,7 @@ def make_train(config):
                 )
                 update_state = (
                     train_states,
-                    jax.tree_util.tree_map(lambda x: x.squeeze(), init_hstates),
+                    jax.tree_map(lambda x: x.squeeze(), init_hstates),
                     traj_batch,
                     advantages,
                     targets,
@@ -709,8 +702,8 @@ def make_train(config):
                 "env_step": update_steps * config["NUM_ENVS"] * config["NUM_STEPS"],
                 "update_steps": update_steps,
             }
-            metrics.update(jax.tree_util.tree_map(lambda x: x.mean(), infos))
-            metrics.update(jax.tree_util.tree_map(lambda x: x.mean(), loss_info))
+            metrics.update(jax.tree_map(lambda x: x.mean(), infos))
+            metrics.update(jax.tree_map(lambda x: x.mean(), loss_info))
 
             # report on wandb if required
             if config["WANDB_MODE"] != "disabled":
@@ -747,8 +740,8 @@ def make_train(config):
                                 "animation": wandb.Video(
                                     animation_path + ".gif",
                                     caption=f"step{int(metrics['update_steps'])}",
-                                    format="gif",
                                     fps=10,
+                                    format="gif",
                                 ),
                             },
                             step=metrics["update_steps"],
@@ -760,7 +753,6 @@ def make_train(config):
                     # save params
                     if (
                         config.get("CHECKPOINT_INTERVAL", None) is not None
-                        and config.get("SAVE_PATH", None) is not None
                         and metrics["update_steps"]
                         % int(config["NUM_UPDATES"] * config["CHECKPOINT_INTERVAL"])
                         == 0
@@ -859,7 +851,7 @@ def make_train(config):
                         % int(config["NUM_UPDATES"] * config["ANIMATION_LOG_INTERVAL"])
                         == 0,
                         lambda _: get_complete_rollout(_rng, train_states[0].params),
-                        lambda _: jax.tree_util.tree_map(
+                        lambda _: jax.tree_map(
                             lambda x: jnp.repeat(
                                 x[0, 0:1], (config["ANIMATION_MAX_STEPS"]), axis=0
                             ),
@@ -909,15 +901,11 @@ def single_run(config):
         name=f'{alg_name}_{env_name}_seed{config["SEED"]}',
     )
     
-    
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_jit = jax.jit(make_train(copy.deepcopy(config)))
     t0 = time.time()
-    train_jit = jax.jit(make_train(copy.deepcopy(config)))
-    t0 = time.time()
     outs = jax.vmap(train_jit)(rngs)
-    print("time taken:", time.time() - t0)
     print("time taken:", time.time() - t0)
 
     if config.get("SAVE_PATH", None) is not None:
@@ -935,7 +923,7 @@ def single_run(config):
         )
 
         for i, rng in enumerate(rngs):
-            params = jax.tree_util.tree_map(lambda x: x[i], model_state)
+            params = jax.tree_map(lambda x: x[i], model_state)
             save_path = os.path.join(
                 save_dir,
                 f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
