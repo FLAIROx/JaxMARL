@@ -293,7 +293,6 @@ def make_train(config):
         config["MODEL_PARAMS"] = load_params(config["LOAD_PATH"])
         print("loaded model from", config["LOAD_PATH"])
 
-
     def linear_schedule(count):
         frac = (
             1.0
@@ -310,7 +309,7 @@ def make_train(config):
         )
         critic_network = TransformerCritic(config=config)
         rng, _rng_actor, _rng_critic = jax.random.split(rng, 3)
-        
+
         if config["LOAD_PATH"] is not None:
             actor_network_params = config["MODEL_PARAMS"]["actor"]
             critic_network_params = config["MODEL_PARAMS"]["critic"]
@@ -569,10 +568,7 @@ def make_train(config):
                         approx_kl = ((ratio - 1) - logratio).mean()
                         clip_frac = jnp.mean(jnp.abs(ratio - 1) > config["CLIP_EPS"])
 
-                        actor_loss = (
-                            loss_actor
-                            - config["ENT_COEF"] * entropy
-                        )
+                        actor_loss = loss_actor - config["ENT_COEF"] * entropy
 
                         return actor_loss, (
                             loss_actor,
@@ -715,7 +711,9 @@ def make_train(config):
             # report on wandb if required
             if config["WANDB_MODE"] != "disabled":
 
-                def callback(metrics, original_seed, render_infos=None, model_state=None):
+                def callback(
+                    metrics, original_seed, render_infos=None, model_state=None
+                ):
                     if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
                             {
@@ -765,13 +763,16 @@ def make_train(config):
                         % int(config["NUM_UPDATES"] * config["CHECKPOINT_INTERVAL"])
                         == 0
                     ):
-                        
+
                         env_name = f'utracking_{config["ENV_KWARGS"]["num_agents"]}_vs_{config["ENV_KWARGS"]["num_landmarks"]}'
                         alg_name = config.get("ALG_NAME", "mappo_rnn_utracking")
-                        
-                        print('Saving Checkpoint')
-    
-                        model_state = {"actor": model_state[0].params, "critic": model_state[1].params}
+
+                        print("Saving Checkpoint")
+
+                        model_state = {
+                            "actor": model_state[0].params,
+                            "critic": model_state[1].params,
+                        }
                         save_dir = os.path.join(config["SAVE_PATH"], env_name, alg_name)
                         os.makedirs(save_dir, exist_ok=True)
 
@@ -870,7 +871,9 @@ def make_train(config):
                 else:
                     render_infos = None
 
-                jax.debug.callback(callback, metrics, original_seed, render_infos, train_states)
+                jax.debug.callback(
+                    callback, metrics, original_seed, render_infos, train_states
+                )
 
             update_steps = update_steps + 1
             runner_state = (train_states, env_state, last_obs, last_done, hstates, rng)
@@ -885,10 +888,10 @@ def make_train(config):
             (ac_init_hstate, cr_init_hstate),
             _rng,
         )
-        (runner_state, update_step), metric = jax.lax.scan(
+        (runner_state, update_step), metrics = jax.lax.scan(
             _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
-        return {"runner_state": runner_state}
+        return {"runner_state": runner_state, "metrics": metrics}
 
     return train
 
@@ -908,16 +911,12 @@ def single_run(config):
         mode=config["WANDB_MODE"],
         name=f'{alg_name}_{env_name}_seed{config["SEED"]}',
     )
-    
-    
+
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     train_jit = jax.jit(make_train(copy.deepcopy(config)))
     t0 = time.time()
-    train_jit = jax.jit(make_train(copy.deepcopy(config)))
-    t0 = time.time()
     outs = jax.vmap(train_jit)(rngs)
-    print("time taken:", time.time() - t0)
     print("time taken:", time.time() - t0)
 
     if config.get("SAVE_PATH", None) is not None:

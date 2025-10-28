@@ -27,11 +27,11 @@ class ParticleFilter:
         self,
         num_particles=5000,
         std_range=10,  # m (standard deviation error of the range measurements)
-        mu_init_vel=0.6,  # m/s
-        std_init_vel=0.4,  # m/s
+        mu_init_vel=1.0,  # m/s
+        std_init_vel=0.6,  # m/s
         turn_noise=0.5,  # rad
-        vel_noise=0.05,  # m/s
-        ess_threshold=0.01, # percentage of the total number of particles
+        vel_noise=0.10,  # m/s
+        ess_threshold=0.01,  # percentage of the total number of particles
     ):
         self.num_particles = num_particles
         self.std_range = std_range
@@ -95,7 +95,6 @@ class ParticleFilter:
         pos_est = self.estimate_pos(state)
 
         return state, pos_est
-
 
     @partial(jax.jit, static_argnums=0)
     def update_particles(self, key, state, dt=30.0):
@@ -197,36 +196,34 @@ class ParticleFilter:
         resampled_particles = jax.tree_map(lambda x: x[indexes], state.particles)
 
         return ParticlesState(particles=resampled_particles, weights=state.weights)
-    
 
     @partial(jax.jit, static_argnums=0)
     def resample_reinit_particles(self, rng, state, pos, obs, mask):
         key_reinit, key_resample = jax.random.split(rng, 2)
-        
+
         # Normalize the weights and compute the effective sample size (ESS)
         weight_sum = jnp.sum(state.weights)
         normalized_weights = state.weights / weight_sum
-        ess = 1.0 / jnp.sum(normalized_weights ** 2)
-        
+        ess = 1.0 / jnp.sum(normalized_weights**2)
+
         has_valid = jnp.any(mask)
         # Choose a valid observation for reinitialization (if available) or default to the first observer.
         reinit_idx = jnp.argmax(mask)  # if mask is all False, this still returns 0.
         pos_reinit = jax.lax.select(has_valid, pos[reinit_idx], pos[0])
         obs_reinit = jax.lax.select(has_valid, obs[reinit_idx], 0.0)
-        
+
         # Set the reinitialization condition:
         # reinit if there are NaNs in the weights or if the ESS is too low.
         reinit_cond = jnp.isnan(state.weights).any() | (ess < self.ess_threshold)
-        
+
         state = jax.lax.cond(
             reinit_cond,
             lambda _: self.reset(key_reinit, pos_reinit, obs_reinit),
             lambda _: self.resample(key_resample, state),
             operand=None,
         )
-        
-        return state
 
+        return state
 
     @partial(jax.jit, static_argnums=0)
     def estimate_pos(self, state):

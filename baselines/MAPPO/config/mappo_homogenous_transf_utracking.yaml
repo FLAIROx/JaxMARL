@@ -1,7 +1,7 @@
 LR: 0.0001
 NUM_ENVS: 128
 NUM_STEPS: 128
-TOTAL_TIMESTEPS: 5e8
+TOTAL_TIMESTEPS: 1e9
 HIDDEN_DIM: 64
 NUM_LAYERS: 2
 NUM_HEADS: 8
@@ -19,56 +19,38 @@ ACTIVATION: relu
 ANNEAL_LR: true
 
 # Environment configuration
-ENV_NAME: utracking
-ENV_KWARGS:
-  num_agents: 2
-  num_landmarks: 2
-  max_steps: 128
-  dt: 30
-  difficulty: hard
-  range_noise_std: 10.0
-  traj_noise_std: 0.02
-  lost_comm_prob: 0.1
-  rew_follow_coeff: 1.0
-  rew_tracking_coeff: 0.0
-  penalty_for_crashing: true
-  truncate_failed_episode: false
-  rew_dist_thr: 150
-  rew_pred_ideal: 10
-  rew_pred_thr: 50
-  min_valid_distance: 10
-  min_init_distance: 30
-  max_init_distance: 180
-  pre_init_pos_len: 3000000
-  max_range_dist: 450
-  max_comm_dist: 1500
-  tracking_method: pf
-  ranges_in_obs: false
-  matrix_obs: true
-  matrix_state: true
-  state_as_edges: false
-  pf_num_particles: 5000
-  mu_init_vel: 0.6
-  std_init_vel: 0.4
-  turn_noise: 0.5
-  vel_noise: 0.05
-  ess_threshold: 0.01
-  std_range: 10.0
+"ENV_NAME": "utracking"
+"ENV_KWARGS": {
+  "num_agents": 2,
+  "num_landmarks": 1,
+  "max_steps": 512,
+  "dt": 30,
+  "difficulty": "medium",
+  "rew_follow_coeff": 1.0,
+  "rew_tracking_coeff": 0.0,
+  "steps_for_new_range": 4,
+  "max_range_dist": 800.0,
+  "min_init_distance": 100.0,
+  "max_init_distance": 1000.0,
+  "matrix_obs": true,
+  "matrix_state": true,
+}
+ 
 
 # Experiment settings
 SEED: 0
 NUM_SEEDS: 1
 TUNE: false
-SAVE_PATH: null  # models/utracking_release
-LOAD_PATH: null  # models/utracking_post/...
+SAVE_PATH: models/utracking_mbari
+LOAD_PATH: # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
 LOAD_CRITIC: null  # True
 ALG_NAME: mappo_transformer
-CHECKPOINT_INTERVAL: 0.05
+CHECKPOINT_INTERVAL: 0.05 # perecentage of total update steps
 ANIMATION_LOG_INTERVAL: 0.1  # percentage of total update steps
 ANIMATION_MAX_STEPS: 128     # should match the env
 
 # Weights & Biases logging
-WANDB_MODE: offline
+WANDB_MODE: online
 ENTITY: mttga
-PROJECT: utracking_release
+PROJECT: utracking_mbari
 WANDB_LOG_ALL_SEEDS: false

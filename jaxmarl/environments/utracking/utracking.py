@@ -72,7 +72,13 @@ class State:
     t: int  # step
     cum_rew: float  # cumulative episode reward
     last_actions: chex.Array  # last action taken by the agent
-    last_actions: chex.Array  # last action taken by the agent
+    # Fields for caching range computations between steps_for_new_range intervals
+    steps_since_range: int  # steps since last range computation
+    cached_delta_xyz: chex.Array  # cached delta_xyz from last range computation
+    cached_ranges: chex.Array  # cached ranges from last range computation
+    cached_comm_drop: (
+        chex.Array
+    )  # cached communication drop from last range computation
 
 
 class UTracking(MultiAgentEnv):
@@ -163,6 +169,11 @@ class UTracking(MultiAgentEnv):
             "hard",
             "expert",
         ], "difficulty must be manual, easy, medium, hard or expert"
+
+        # LS method only works with steps_for_new_range=1 to avoid complexity
+        assert (
+            tracking_method != "ls" or steps_for_new_range == 1
+        ), "LS tracking method requires steps_for_new_range=1"
 
         if difficulty != "manual":
             if difficulty == "easy":
@@ -447,6 +458,10 @@ class UTracking(MultiAgentEnv):
             t=t,
             cum_rew=0.0,
             last_actions=jnp.zeros(self.num_agents),
+            steps_since_range=0,
+            cached_delta_xyz=delta_xyz,
+            cached_ranges=ranges,
+            cached_comm_drop=comm_drop,
         )
         return obs, state
 
@@ -524,24 +539,70 @@ class UTracking(MultiAgentEnv):
             state.traj_intercepts,
         )
 
-        # update tracking
-        rng, key_ranges, key_comm = jax.random.split(rng, 3)
-        delta_xyz, ranges_real_2d, ranges_real, ranges_2d, ranges = self.get_ranges(
-            key_ranges, pos
-        )
-        range_buffer, range_buffer_head, comm_drop = self.communicate(
-            key_comm,
-            ranges_real_2d,
-            ranges_2d,
-            pos,
-            state.range_buffer,
-            state.range_buffer_head,
-        )
-        rng, rng_ = jax.random.split(rng)
+        # update tracking - conditionally compute new ranges based on steps_for_new_range
+        steps_since_range = state.steps_since_range + 1
+        should_compute_ranges = steps_since_range >= self.steps_for_new_range
 
-        pf_state, land_pred_pos = self.update_predictions(
-            rng_, state.pf_state, state.t, range_buffer, pos, ranges_2d
-        )
+        def compute_new_ranges():
+            rng_, key_ranges, key_comm = jax.random.split(rng, 3)
+            delta_xyz_, ranges_real_2d_, ranges_real_, ranges_2d_, ranges_ = (
+                self.get_ranges(key_ranges, pos)
+            )
+            range_buffer_, range_buffer_head_, comm_drop_ = self.communicate(
+                key_comm,
+                ranges_real_2d_,
+                ranges_2d_,
+                pos,
+                state.range_buffer,
+                state.range_buffer_head,
+            )
+            rng_pred, rng_rest = jax.random.split(rng_)
+            pf_state_, land_pred_pos_ = self.update_predictions(
+                rng_pred, state.pf_state, state.t, range_buffer_, pos, ranges_2d_
+            )
+            return (
+                delta_xyz_,
+                ranges_real_2d_,
+                ranges_,
+                comm_drop_,
+                range_buffer_,
+                range_buffer_head_,
+                pf_state_,
+                land_pred_pos_,
+                0,
+                rng_rest,
+            )
+
+        def use_cached_ranges():
+            # Use cached values and previous predictions, but compute actual ranges for reward
+            # (since rewards depend on actual distances)
+            rng_, _ = jax.random.split(rng)
+            _, ranges_real_2d_current, _, _, _ = self.get_ranges(rng_, pos)
+            return (
+                state.cached_delta_xyz,
+                ranges_real_2d_current,
+                state.cached_ranges,
+                state.cached_comm_drop,
+                state.range_buffer,
+                state.range_buffer_head,
+                state.pf_state,
+                state.land_pred_pos,
+                steps_since_range,
+                rng,
+            )
+
+        (
+            delta_xyz,
+            ranges_real_2d,
+            ranges,
+            comm_drop,
+            range_buffer,
+            range_buffer_head,
+            pf_state,
+            land_pred_pos,
+            new_steps_since_range,
+            rng_after,
+        ) = jax.lax.cond(should_compute_ranges, compute_new_ranges, use_cached_ranges)
 
         # get global reward, done, info
         reward, done, info = self.get_rew_done_info(
@@ -571,6 +632,16 @@ class UTracking(MultiAgentEnv):
             t=state.t + 1,
             cum_rew=state.cum_rew + reward,
             last_actions=last_actions,
+            steps_since_range=new_steps_since_range,
+            cached_delta_xyz=jax.lax.cond(
+                should_compute_ranges, lambda: delta_xyz, lambda: state.cached_delta_xyz
+            ),
+            cached_ranges=jax.lax.cond(
+                should_compute_ranges, lambda: ranges, lambda: state.cached_ranges
+            ),
+            cached_comm_drop=jax.lax.cond(
+                should_compute_ranges, lambda: comm_drop, lambda: state.cached_comm_drop
+            ),
         )
         return obs, state, rewards, done, info
 
@@ -581,6 +652,16 @@ class UTracking(MultiAgentEnv):
         # the absolute distance (ranges) is_agent, is_self features
         # [pos_x, pos_y, pos_z, dist, is_agent, is_self]*n_entities
 
+        delta_self_pos = pos - old_pos
+        delta_self_pos = delta_self_pos.at[:, :3].set(
+            self.normalize_distances(delta_self_pos[:, :3])
+        )
+        # normalize angle difference to [0, 1]
+        delta_self_pos = delta_self_pos.at[:, 3].set(
+            (delta_self_pos[:, 3] + jnp.pi) / (2 * jnp.pi)
+        )
+        delta_xyz = self.normalize_distances(delta_xyz)
+
         other_agents_dist = jnp.where(
             comm_drop[:, :, None], 0, delta_xyz[:, : self.num_agents]
         )  # 0 for communication drop
@@ -589,9 +670,7 @@ class UTracking(MultiAgentEnv):
         )
         agents_rel_pos = jnp.where(
             self_mask[:, :, None],
-            pos[
-                : self.num_agents, [0, 1, 3]
-            ],  # delta_self_pos[: self.num_agents, [0, 1, 3]],
+            delta_self_pos[: self.num_agents, [0, 1, 3]],
             other_agents_dist,
         )  # for self use delta with respect to previous position
         lands_rel_pos = (
@@ -610,8 +689,8 @@ class UTracking(MultiAgentEnv):
 
         feats = jnp.concatenate(
             (
-                pos_feats * self.space_unit,
-                ranges[:, :, None] * self.space_unit,
+                pos_feats,
+                self.normalize_distances(ranges[:, :, None]),
                 is_agent_feat[:, :, None],
                 is_self_feat[:, :, None],
             ),
