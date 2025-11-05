@@ -1,7 +1,7 @@
-LR: 0.0001
-NUM_ENVS: 128
-NUM_STEPS: 128
-TOTAL_TIMESTEPS: 1e9
+LR: 0.0005
+NUM_ENVS: 1024
+NUM_STEPS: 256
+TOTAL_TIMESTEPS: 2e9
 HIDDEN_DIM: 64
 NUM_LAYERS: 2
 NUM_HEADS: 8
@@ -23,14 +23,14 @@ ANNEAL_LR: true
 "ENV_KWARGS": {
   "num_agents": 2,
   "num_landmarks": 1,
-  "max_steps": 512,
+  "max_steps": 1024,
   "dt": 30,
-  "difficulty": "medium",
+  "difficulty": "hard",
   "rew_follow_coeff": 1.0,
-  "rew_tracking_coeff": 0.0,
+  "rew_tracking_coeff": 1.0,
   "steps_for_new_range": 4,
-  "max_range_dist": 800.0,
-  "min_init_distance": 100.0,
+  "max_range_dist": 1500.0,
+  "min_init_distance": 30.0,
   "max_init_distance": 1000.0,
   "matrix_obs": true,
   "matrix_state": true,
@@ -42,9 +42,9 @@ SEED: 0
 NUM_SEEDS: 1
 TUNE: false
 SAVE_PATH: models/utracking_mbari
-LOAD_PATH: # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
-LOAD_CRITIC: null  # True
-ALG_NAME: mappo_transformer
+LOAD_PATH: #models/utracking_mbari/utracking_2_vs_1/mappo_transformer_tracking_rew/mappo_transformer_tracking_rew_utracking_2_vs_1_seed0_vmap0.safetensors # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
+LOAD_CRITIC: # True
+ALG_NAME: mappo_transformer_newobs_hard
 CHECKPOINT_INTERVAL: 0.05 # perecentage of total update steps
 ANIMATION_LOG_INTERVAL: 0.1  # percentage of total update steps
 ANIMATION_MAX_STEPS: 128     # should match the env

@@ -135,6 +135,7 @@ class UTracking(MultiAgentEnv):
         rew_tracking_coeff: float = 1.0,  # reward coefficient for tracking landmarks
         truncate_failed_episode: bool = False,  # if true, the episode is truncated when a crash or lost landmark is detected
         penalty_for_crashing: bool = True,  # if true, the reward is -1 if there is any crash
+        penalty_for_lost_agent: bool = True,  # if true, the reward is -1 if any agent loses tracking of any landmark
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
         seed_init_pos: int = 0,  # random seed for precomputing initial distance
         pre_init_pos_len: int = 100000,  # how many initial positions precompute
@@ -227,6 +228,7 @@ class UTracking(MultiAgentEnv):
         self.rew_follow_coeff = rew_follow_coeff
         self.rew_tracking_coeff = rew_tracking_coeff
         self.penalty_for_crashing = penalty_for_crashing
+        self.penalty_for_lost_agent = penalty_for_lost_agent
         self.truncate_failed_episode = truncate_failed_episode
         self.pre_init_pos = pre_init_pos
         self.pre_init_pos_len = pre_init_pos_len
@@ -668,14 +670,17 @@ class UTracking(MultiAgentEnv):
         self_mask = (
             jnp.arange(self.num_agents) == np.arange(self.num_agents)[:, np.newaxis]
         )
+        self_pos_feats = delta_self_pos[: self.num_agents, [0, 1, 3]]
+        self_pos_feats = self_pos_feats.at[:, 2].set(0)
         agents_rel_pos = jnp.where(
             self_mask[:, :, None],
-            delta_self_pos[: self.num_agents, [0, 1, 3]],
+            self_pos_feats,
             other_agents_dist,
         )  # for self use delta with respect to previous position
         lands_rel_pos = (
             pos[: self.num_agents, None, :3] - land_pred_pos
         )  # relative distance from predicted positions
+        lands_rel_pos = self.normalize_distances(lands_rel_pos)
         pos_feats = jnp.concatenate((agents_rel_pos, lands_rel_pos), axis=1)
         is_agent_feat = jnp.tile(
             jnp.concatenate((jnp.ones(self.num_agents), jnp.zeros(self.num_landmarks))),
@@ -894,6 +899,15 @@ class UTracking(MultiAgentEnv):
         if self.penalty_for_crashing:
             rew = jnp.where((agent_dist < self.min_valid_distance).any(), -1.0, rew)
 
+        # penalize if agent lost all landmarks
+        # i.e. any agent is at distance > max_range_dist*2 from all landmarks
+        if self.penalty_for_lost_agent:
+            any_agent_lost = (
+                distances_2d[:, self.num_agents :].max(axis=1)
+                >= self.max_range_dist * 2
+            ).any()
+            rew = jnp.where(any_agent_lost, -1.0, rew)
+
         # DONE
         done = t == self.max_steps
 
@@ -913,6 +927,11 @@ class UTracking(MultiAgentEnv):
             / self.num_landmarks,
             "landmarks_lost": (min_land_dist >= self.max_range_dist).sum(keepdims=True)
             / self.num_landmarks,
+            "agents_lost": (
+                distances_2d[:, self.num_agents :].max(axis=1)
+                >= self.max_range_dist * 2
+            ).sum(keepdims=True)
+            / self.num_agents,
             "tracking_error_mean": pred_2d_err.mean(keepdims=True),
             "land_dist_mean": min_land_dist.mean(keepdims=True),
             "crash": (agent_dist < self.min_valid_distance).any(keepdims=True),
