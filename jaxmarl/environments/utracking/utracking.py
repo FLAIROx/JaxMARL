@@ -318,8 +318,12 @@ class UTracking(MultiAgentEnv):
         )
 
         if normalize_distances:
+            # minmax normalize between 0 and 1
             self.normalize_distances = lambda x: jnp.clip(
-                x / self.max_range_dist, 0.0, 1.0
+                (x - (-self.max_range_dist))
+                / (self.max_range_dist - (-self.max_range_dist)),
+                0.0,
+                1.0,
             )
         else:
             self.normalize_distances = lambda x: x
