@@ -56,7 +56,7 @@ For more details, take a look at our [blog post](https://blog.foersterlab.com/ja
 | 🧭 JaxNav | [Paper](https://www.arxiv.org/abs/2408.15099) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/jaxnav) | 2D geometric navigation for differential drive robots
 | 🪙 Coin Game | [Paper](https://arxiv.org/abs/1802.09640) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/coin_game) | Two-player grid world environment which emulates social dilemmas
 | 💡 Switch Riddle | [Paper](https://proceedings.neurips.cc/paper_files/paper/2016/hash/c7635bfd99248a2cdef8249ef7bfbef4-Abstract.html) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/switch_riddle) | Simple cooperative communication game included for debugging
-
+| 🤖 JaxRobotarium | [Paper](https://arxiv.org/abs/2505.06771) | [Source](https://github.com/GT-STAR-Lab/JaxRobotarium) | Multi-robot environment with open access sim2real through the [Robotarium](https://www.robotarium.gatech.edu/)
  
 <h2 name="algorithms" id="algorithms">Baseline Algorithms 🦉 </h2>
 
