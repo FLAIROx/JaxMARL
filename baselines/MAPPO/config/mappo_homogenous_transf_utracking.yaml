@@ -1,5 +1,5 @@
-LR: 0.0005
-NUM_ENVS: 1024
+LR: 0.0001
+NUM_ENVS: 512
 NUM_STEPS: 256
 TOTAL_TIMESTEPS: 2e9
 HIDDEN_DIM: 64
@@ -16,7 +16,7 @@ ENT_COEF: 0.01
 VF_COEF: 0.5
 MAX_GRAD_NORM: 0.5
 ACTIVATION: relu
-ANNEAL_LR: true
+ANNEAL_LR: false
 
 # Environment configuration
 "ENV_NAME": "utracking"
@@ -25,29 +25,35 @@ ANNEAL_LR: true
   "num_landmarks": 1,
   "max_steps": 1024,
   "dt": 30,
-  "difficulty": "hard",
+  "difficulty": "manual",
+  "landmark_rel_speed": [0.5, 0.8],
+  "dirchange_time_range_landmark": [100, 200],
+  "rudder_range_landmark": [0.1, 0.2],
   "rew_follow_coeff": 1.0,
   "rew_tracking_coeff": 1.0,
   "steps_for_new_range": 4,
+  "traj_noise_std": 0.2,
+  "velocity_noise_std": 0.2,
   "max_range_dist": 1500.0,
   "min_init_distance": 30.0,
-  "max_init_distance": 1000.0,
+  "max_init_distance": 800.0,
   "matrix_obs": true,
   "matrix_state": true,
+  "pre_init_pos_len": 10000000,
 }
  
 
 # Experiment settings
-SEED: 0
+SEED: 3
 NUM_SEEDS: 1
 TUNE: false
-SAVE_PATH: models/utracking_mbari
-LOAD_PATH: #models/utracking_mbari/utracking_2_vs_1/mappo_transformer_tracking_rew/mappo_transformer_tracking_rew_utracking_2_vs_1_seed0_vmap0.safetensors # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
-LOAD_CRITIC: # True
-ALG_NAME: mappo_transformer_newobs_hard
-CHECKPOINT_INTERVAL: 0.05 # perecentage of total update steps
+SAVE_PATH: #models/17november
+LOAD_PATH: #models/17november/utracking_2_vs_1/mappo_transformer_noisy_more_linear_4steps_3rdrun/mappo_transformer_noisy_more_linear_4steps_3rdrun_utracking_2_vs_1_step760_rng1946498123.safetensors # "models/17november/utracking_1_vs_1/mappo_transformer_noisy/mappo_transformer_noisy_utracking_1_vs_1_step3230_rng1948878966.safetensors" #models/utracking_mbari/utracking_1_vs_1/mappo_transformer_newobs_medium_correct_norm/mappo_transformer_newobs_medium_correct_norm_utracking_1_vs_1_step2660_rng1948878966.safetensors #models/utracking_mbari/utracking_2_vs_1/mappo_transformer_newobs_medium_2ndrun/mappo_transformer_newobs_medium_2ndrun_utracking_2_vs_1_step3810_rng928981903.safetensors #models/utracking_mbari/utracking_1_vs_1_newobs/mappo_transformer_newobs_medium_utracking_1_vs_1_step4191_rng928981903.safetensors # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
+LOAD_CRITIC: #True #False
+ALG_NAME: mappo_transformer_noisy_more_linear_4steps
+CHECKPOINT_INTERVAL: 0.02 # perecentage of total update steps
 ANIMATION_LOG_INTERVAL: 0.1  # percentage of total update steps
-ANIMATION_MAX_STEPS: 128     # should match the env
+ANIMATION_MAX_STEPS: 1024     # should match the env
 
 # Weights & Biases logging
 WANDB_MODE: online

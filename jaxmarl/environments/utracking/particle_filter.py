@@ -27,7 +27,7 @@ class ParticleFilter:
         self,
         num_particles=5000,
         std_range=10,  # m (standard deviation error of the range measurements)
-        mu_init_vel=1.0,  # m/s
+        mu_init_vel=2.0,  # m/s
         std_init_vel=0.6,  # m/s
         turn_noise=0.5,  # rad
         vel_noise=0.10,  # m/s

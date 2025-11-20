@@ -124,7 +124,8 @@ class UTracking(MultiAgentEnv):
         tracking_method: str = "pf",  # method for tracking the landmarks positions (ls, pf)
         tracking_buffer_len: int = 32,  # maximum number of range observations kept for predicting the landmark positions
         range_noise_std: float = 10.0,  # standard deviation of the gaussian noise added to range measurements (meters)
-        traj_noise_std: float = 0.02,  # standard deviation of the gaussian noise added to the traj models (radians)
+        traj_noise_std: float = 0.1,  # standard deviation of the gaussian noise added to the traj models (radians)
+        velocity_noise_std: float = 0.1,  # standard deviation of the gaussian noise added to the velocity (meters/second)
         lost_comm_prob=0.1,  # probability of loosing communications (range measurements and intra-agent communication)
         min_steps_ls: int = 2,  # minimum steps for collecting data and start predicting landmarks positions with least squares
         rew_dist_thr: float = 150.0,  # distance threshold for the follow reward
@@ -218,7 +219,7 @@ class UTracking(MultiAgentEnv):
         self.tracking_buffer_len = tracking_buffer_len
         self.range_noise_std = range_noise_std
         self.traj_noise_std = traj_noise_std
-        self.traj_noise_std = traj_noise_std
+        self.velocity_noise_std = velocity_noise_std
         self.lost_comm_prob = lost_comm_prob
         self.min_steps_ls = min_steps_ls
         self.rew_dist_thr = rew_dist_thr
@@ -487,27 +488,20 @@ class UTracking(MultiAgentEnv):
         else:
             # update the angle
             angle_change = actions * traj_coeffs + traj_intercepts
-            # add noise
-            angle_change += (
+            # add noise to agents only (not landmarks)
+            angle_noise = (
                 jax.random.normal(rng, shape=angle_change.shape) * self.traj_noise_std
+            )
+            angle_change = angle_change.at[: self.num_agents].add(
+                angle_noise[: self.num_agents]
             )
             new_angles = (pos[:, -1] + angle_change + jnp.pi) % (2 * jnp.pi) - jnp.pi
             # update the x-y position (depth remains constant)
             pos = pos.at[:, -1].set(new_angles)
 
-        if self.actions_as_angles:
-            pos = pos.at[:, -1].set(actions)
-        else:
-            # update the angle
-            angle_change = actions * traj_coeffs + traj_intercepts
-            # add noise
-            angle_change += (
-                jax.random.normal(rng, shape=angle_change.shape) * self.traj_noise_std
-            )
-            new_angles = (pos[:, -1] + angle_change + jnp.pi) % (2 * jnp.pi) - jnp.pi
-            # update the x-y position (depth remains constant)
-            pos = pos.at[:, -1].set(new_angles)
-
+        # add noise to velocity of agents only (not landmarks)
+        vel_noise = jax.random.normal(rng, shape=vel.shape) * self.velocity_noise_std
+        vel = vel.at[: self.num_agents].add(vel_noise[: self.num_agents])
         pos = pos.at[:, 0].add(jnp.cos(pos[:, -1]) * vel * self.dt)
         pos = pos.at[:, 1].add(jnp.sin(pos[:, -1]) * vel * self.dt)
         return pos
@@ -666,8 +660,9 @@ class UTracking(MultiAgentEnv):
         delta_self_pos = delta_self_pos.at[:, 3].set(
             (delta_self_pos[:, 3] + jnp.pi) / (2 * jnp.pi)
         )
-        delta_xyz = self.normalize_distances(delta_xyz)
 
+        # other entities relative distance
+        delta_xyz = self.normalize_distances(delta_xyz)
         other_agents_dist = jnp.where(
             comm_drop[:, :, None], 0, delta_xyz[:, : self.num_agents]
         )  # 0 for communication drop
@@ -675,7 +670,7 @@ class UTracking(MultiAgentEnv):
             jnp.arange(self.num_agents) == np.arange(self.num_agents)[:, np.newaxis]
         )
         self_pos_feats = delta_self_pos[: self.num_agents, [0, 1, 3]]
-        self_pos_feats = self_pos_feats.at[:, 2].set(0)
+        self_pos_feats = self_pos_feats.at[:, 2].set(0)  # set angle to 0 for now
         agents_rel_pos = jnp.where(
             self_mask[:, :, None],
             self_pos_feats,
@@ -693,18 +688,20 @@ class UTracking(MultiAgentEnv):
         is_self_feat = (
             jnp.arange(self.num_entities) == jnp.arange(self.num_agents)[:, np.newaxis]
         )
+        ranges = self.normalize_distances(ranges)
         ranges *= 1.0 if self.ranges_in_obs else 0.0  # mask the ranges if not in obs
         # the distance based feats are rescaled to hundreds of meters (better for NNs)
 
         feats = jnp.concatenate(
             (
                 pos_feats,
-                self.normalize_distances(ranges[:, :, None]),
+                ranges[:, :, None],
                 is_agent_feat[:, :, None],
                 is_self_feat[:, :, None],
             ),
             axis=2,
         )
+        feats = jnp.where(jnp.isnan(feats), 0.0, feats)  # replace nan with 0
 
         # than it is assigned to each agent its obs
         return {
@@ -830,6 +827,8 @@ class UTracking(MultiAgentEnv):
         else:
             state = self.get_vertex_state(pos, vel, ranges, land_pred_pos)
 
+        state = jnp.where(jnp.isnan(state), 0.0, state)  # replace nan with 0
+
         if self.matrix_state:
             return state
         else:
@@ -911,6 +910,8 @@ class UTracking(MultiAgentEnv):
                 >= self.max_range_dist * 2
             ).any()
             rew = jnp.where(any_agent_lost, -1.0, rew)
+
+        rew = jnp.where(jnp.isnan(rew), 0.0, rew)  # replace nan with 0
 
         # DONE
         done = t == self.max_steps
@@ -1013,13 +1014,8 @@ class UTracking(MultiAgentEnv):
             jax.random.normal(key_noise, shape=ranges_real.shape) * self.range_noise_std
         )
 
+        # Add noise to 3D range measurement (physically correct)
         ranges = ranges_real + noise
-        lost_range = (
-            jax.random.uniform(key_lost, shape=ranges.shape) <= self.lost_comm_prob
-        ) | (
-            ranges_real > self.max_range_dist
-        )  # lost communication or landmark too far
-        ranges = jnp.where(lost_range, 0.0, ranges)
         lost_range = (
             jax.random.uniform(key_lost, shape=ranges.shape) <= self.lost_comm_prob
         ) | (
@@ -1028,13 +1024,22 @@ class UTracking(MultiAgentEnv):
         ranges = jnp.where(lost_range, 0.0, ranges)
         ranges = fill_diagonal_zeros(ranges)  # reset to 0s the self-ranges
 
-        ranges_2d = ranges_real_2d + noise
-        ranges_2d = jnp.where(lost_range, 0.0, ranges_2d)
-        ranges_2d = fill_diagonal_zeros(ranges_2d)
-
-        ranges_2d = ranges_real_2d + noise
-        ranges_2d = jnp.where(lost_range, 0.0, ranges_2d)
-        ranges_2d = fill_diagonal_zeros(ranges_2d)
+        # Convert noisy 3D measurement to 2D (if depth is known)
+        # This is the physically correct way: measure 3D with noise, then convert to 2D
+        if self.landmark_depth_known:
+            # Calculate depth differences for landmarks (agents to landmarks)
+            delta_z = pos[: self.num_agents, np.newaxis, 2] - pos[:, 2]
+            # Convert noisy 3D range to 2D: r_2d = sqrt(r_3d² - dz²)
+            # Use jnp.maximum to avoid negative values under sqrt
+            ranges_2d_squared = jnp.maximum(ranges**2 - delta_z**2, 0.0)
+            ranges_2d = jnp.sqrt(ranges_2d_squared)
+            # Set to 0 where communication was lost
+            ranges_2d = jnp.where(lost_range, 0.0, ranges_2d)
+            ranges_2d = fill_diagonal_zeros(ranges_2d)
+        else:
+            # If depth is not known, can't convert - use 3D ranges directly
+            # (This is less realistic but keeps backward compatibility)
+            ranges_2d = ranges
 
         return delta_xyz, ranges_real_2d, ranges_real, ranges_2d, ranges
 

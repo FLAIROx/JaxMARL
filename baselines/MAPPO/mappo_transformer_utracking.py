@@ -767,8 +767,6 @@ def make_train(config):
                         env_name = f'utracking_{config["ENV_KWARGS"]["num_agents"]}_vs_{config["ENV_KWARGS"]["num_landmarks"]}'
                         alg_name = config.get("ALG_NAME", "mappo_rnn_utracking")
 
-                        print("Saving Checkpoint")
-
                         model_state = {
                             "actor": model_state[0].params,
                             "critic": model_state[1].params,
@@ -781,6 +779,7 @@ def make_train(config):
                             f"{alg_name}_{env_name}_step{int(metrics['update_steps'])}_rng{int(original_seed)}.safetensors",
                         )
                         save_params(model_state, save_path)
+                        print("Checkpoint saved at", save_path)
 
                 if config.get("ANIMATION_LOG_INTERVAL", None) is not None:
 
