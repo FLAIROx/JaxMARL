@@ -16,47 +16,52 @@ ENT_COEF: 0.01
 VF_COEF: 0.5
 MAX_GRAD_NORM: 0.5
 ACTIVATION: relu
-ANNEAL_LR: false
+ANNEAL_LR: true
 
 # Environment configuration
 "ENV_NAME": "utracking"
 "ENV_KWARGS": {
   "num_agents": 2,
-  "num_landmarks": 1,
+  "num_landmarks": 2,
   "max_steps": 1024,
   "dt": 30,
   "difficulty": "manual",
-  "landmark_rel_speed": [0.5, 0.8],
-  "dirchange_time_range_landmark": [100, 200],
-  "rudder_range_landmark": [0.1, 0.2],
+  "landmark_rel_speed": [0.4, 0.7],
+  "dirchange_time_range_landmark": [100, 150],
+  "rudder_range_landmark": [0.15, 0.24],
   "rew_follow_coeff": 1.0,
-  "rew_tracking_coeff": 1.0,
+  "rew_tracking_coeff": 0.0,
   "steps_for_new_range": 4,
+  "steps_for_agent_communication": 6,
+  "min_valid_distance": 20.0,
   "traj_noise_std": 0.2,
-  "velocity_noise_std": 0.2,
+  "velocity_noise_std": 0.1,
+  "rew_dist_thr": 150.0,
   "max_range_dist": 1500.0,
   "min_init_distance": 30.0,
-  "max_init_distance": 800.0,
+  "max_init_distance": 500.0,
   "matrix_obs": true,
   "matrix_state": true,
   "pre_init_pos_len": 10000000,
+  "penalty_for_crashing": True,
+  "penalty_for_lost_agent": False,
 }
  
 
 # Experiment settings
-SEED: 3
+SEED: 4
 NUM_SEEDS: 1
 TUNE: false
-SAVE_PATH: #models/17november
-LOAD_PATH: #models/17november/utracking_2_vs_1/mappo_transformer_noisy_more_linear_4steps_3rdrun/mappo_transformer_noisy_more_linear_4steps_3rdrun_utracking_2_vs_1_step760_rng1946498123.safetensors # "models/17november/utracking_1_vs_1/mappo_transformer_noisy/mappo_transformer_noisy_utracking_1_vs_1_step3230_rng1948878966.safetensors" #models/utracking_mbari/utracking_1_vs_1/mappo_transformer_newobs_medium_correct_norm/mappo_transformer_newobs_medium_correct_norm_utracking_1_vs_1_step2660_rng1948878966.safetensors #models/utracking_mbari/utracking_2_vs_1/mappo_transformer_newobs_medium_2ndrun/mappo_transformer_newobs_medium_2ndrun_utracking_2_vs_1_step3810_rng928981903.safetensors #models/utracking_mbari/utracking_1_vs_1_newobs/mappo_transformer_newobs_medium_utracking_1_vs_1_step4191_rng928981903.safetensors # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
-LOAD_CRITIC: #True #False
-ALG_NAME: mappo_transformer_noisy_more_linear_4steps
-CHECKPOINT_INTERVAL: 0.02 # perecentage of total update steps
+SAVE_PATH: /gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november #models/17november
+LOAD_PATH: /gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november/utracking_2_vs_2/mappo_transformer_from1v1_2v2_extraTrue/mappo_transformer_from1v1_2v2_extraTrue_utracking_2_vs_2_step13716_rng1946498123.safetensors #/gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november/utracking_1_vs_1/mappo_transformer_morelinear/mappo_transformer_morelinear_utracking_1_vs_1_seed3_vmap0.safetensors #/gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november/utracking_2_vs_1/mappo_transformer_morelinear_nopenalty_from1v1_agentlostpenalty/mappo_transformer_morelinear_nopenalty_from1v1_agentlostpenalty_utracking_2_vs_1_seed3_vmap0.safetensors # /gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november/utracking_2_vs_1/mappo_transformer_morelinear_nopenalty_from3v1_crashpenalty/mappo_transformer_morelinear_nopenalty_from3v1_crashpenalty_utracking_2_vs_1_seed3_vmap0.safetensors #/gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november/utracking_3_vs_1/mappo_transformer_morelinear_nopenalty/mappo_transformer_morelinear_nopenalty_utracking_3_vs_1_step13725_rng1946498123.safetensors #/gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_november/utracking_1_vs_1/mappo_transformer_morelinear/mappo_transformer_morelinear_utracking_1_vs_1_seed3_vmap0.safetensors #models/17november/utracking_2_vs_1/mappo_transformer_noisy_more_linear_4steps_3rdrun/mappo_transformer_noisy_more_linear_4steps_3rdrun_utracking_2_vs_1_step760_rng1946498123.safetensors # "models/17november/utracking_1_vs_1/mappo_transformer_noisy/mappo_transformer_noisy_utracking_1_vs_1_step3230_rng1948878966.safetensors" #models/utracking_mbari/utracking_1_vs_1/mappo_transformer_newobs_medium_correct_norm/mappo_transformer_newobs_medium_correct_norm_utracking_1_vs_1_step2660_rng1948878966.safetensors #models/utracking_mbari/utracking_2_vs_1/mappo_transformer_newobs_medium_2ndrun/mappo_transformer_newobs_medium_2ndrun_utracking_2_vs_1_step3810_rng928981903.safetensors #models/utracking_mbari/utracking_1_vs_1_newobs/mappo_transformer_newobs_medium_utracking_1_vs_1_step4191_rng928981903.safetensors # models/utracking_post/utracking_5_vs_5/mappo_transformer_hard_128steps/mappo_transformer_hard_128steps_utracking_5_vs_5_seed2.safetensors
+LOAD_CRITIC: True
+ALG_NAME: mappo_transformer_morelinear_from1v1_agentbadcommunication
+CHECKPOINT_INTERVAL: 0.05 # perecentage of total update steps
 ANIMATION_LOG_INTERVAL: 0.1  # percentage of total update steps
 ANIMATION_MAX_STEPS: 1024     # should match the env
 
 # Weights & Biases logging
-WANDB_MODE: online
+WANDB_MODE: offline
 ENTITY: mttga
-PROJECT: utracking_mbari
+PROJECT: utracking_november_2v1_curriculum
 WANDB_LOG_ALL_SEEDS: false

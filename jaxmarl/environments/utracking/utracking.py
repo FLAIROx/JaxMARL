@@ -79,6 +79,10 @@ class State:
     cached_comm_drop: (
         chex.Array
     )  # cached communication drop from last range computation
+    # Fields for caching agent communication between steps_for_agent_communication intervals
+    steps_since_agent_comm: int  # steps since last agent communication
+    cached_agent_delta_xyz: chex.Array  # cached agent delta_xyz from last communication
+    last_observed_agent_pos: chex.Array  # [num_agents, num_agents, 3] last successfully observed agent positions (per agent view)
 
 
 class UTracking(MultiAgentEnv):
@@ -126,6 +130,7 @@ class UTracking(MultiAgentEnv):
         range_noise_std: float = 10.0,  # standard deviation of the gaussian noise added to range measurements (meters)
         traj_noise_std: float = 0.1,  # standard deviation of the gaussian noise added to the traj models (radians)
         velocity_noise_std: float = 0.1,  # standard deviation of the gaussian noise added to the velocity (meters/second)
+        agent_obs_noise_std: float = 5.0,  # standard deviation of the gaussian noise added to agent position observations (meters)
         lost_comm_prob=0.1,  # probability of loosing communications (range measurements and intra-agent communication)
         min_steps_ls: int = 2,  # minimum steps for collecting data and start predicting landmarks positions with least squares
         rew_dist_thr: float = 150.0,  # distance threshold for the follow reward
@@ -134,7 +139,6 @@ class UTracking(MultiAgentEnv):
         rew_norm_landmarks: bool = True,  # if true, the reward is normalized by the number of landmarks
         rew_follow_coeff: float = 1.0,  # reward coefficient for following landmarks
         rew_tracking_coeff: float = 1.0,  # reward coefficient for tracking landmarks
-        truncate_failed_episode: bool = False,  # if true, the episode is truncated when a crash or lost landmark is detected
         penalty_for_crashing: bool = True,  # if true, the reward is -1 if there is any crash
         penalty_for_lost_agent: bool = True,  # if true, the reward is -1 if any agent loses tracking of any landmark
         pre_init_pos: bool = True,  # computing the initial positions can be expensive if done on the go; to reduce the reset (and therefore step) time, precompute a bunch of possible options
@@ -150,6 +154,7 @@ class UTracking(MultiAgentEnv):
         actions_as_angles: bool = False,  # if true, the actions are interpreted as angles
         normalize_distances: bool = True,  # if true, distances in observations and states are normalized to [0,1] based on max_range_dist
         steps_for_new_range: int = 1,  # number of steps between new range observations
+        steps_for_agent_communication: int = 1,  # number of steps between agent-to-agent communications
         **pf_kwargs,  # kwargs for the particle filter
     ):
         assert (
@@ -220,6 +225,7 @@ class UTracking(MultiAgentEnv):
         self.range_noise_std = range_noise_std
         self.traj_noise_std = traj_noise_std
         self.velocity_noise_std = velocity_noise_std
+        self.agent_obs_noise_std = agent_obs_noise_std
         self.lost_comm_prob = lost_comm_prob
         self.min_steps_ls = min_steps_ls
         self.rew_dist_thr = rew_dist_thr
@@ -230,7 +236,6 @@ class UTracking(MultiAgentEnv):
         self.rew_tracking_coeff = rew_tracking_coeff
         self.penalty_for_crashing = penalty_for_crashing
         self.penalty_for_lost_agent = penalty_for_lost_agent
-        self.truncate_failed_episode = truncate_failed_episode
         self.pre_init_pos = pre_init_pos
         self.pre_init_pos_len = pre_init_pos_len
         self.ranges_in_obs = ranges_in_obs
@@ -240,6 +245,7 @@ class UTracking(MultiAgentEnv):
         self.space_unit = space_unit
         self.infos_for_render = infos_for_render
         self.steps_for_new_range = steps_for_new_range
+        self.steps_for_agent_communication = steps_for_agent_communication
 
         if tracking_method == "pf":
             self.tracking_buffer_len = (
@@ -446,7 +452,14 @@ class UTracking(MultiAgentEnv):
         )
 
         # first observation
-        obs = self.get_obs(delta_xyz, ranges, comm_drop, pos, pos, land_pred_pos)
+        agent_delta_xyz = delta_xyz[:, :self.num_agents]
+        # Add noise to initial agent observations
+        rng, rng_noise = jax.random.split(rng)
+        agent_obs_noise = jax.random.normal(rng_noise, shape=agent_delta_xyz.shape) * self.agent_obs_noise_std
+        agent_delta_xyz_noisy = agent_delta_xyz.at[:, :, :3].add(agent_obs_noise[:, :, :3])
+        # Initialize last_observed_agent_pos with noisy current positions (no drops yet)
+        last_observed_agent_pos = agent_delta_xyz_noisy.copy()
+        obs = self.get_obs(ranges, pos, pos, land_pred_pos, last_observed_agent_pos)
         obs["world_state"] = self.get_global_state(
             delta_xyz, ranges, comm_drop, pos, vel, land_pred_pos
         )
@@ -469,6 +482,9 @@ class UTracking(MultiAgentEnv):
             cached_delta_xyz=delta_xyz,
             cached_ranges=ranges,
             cached_comm_drop=comm_drop,
+            steps_since_agent_comm=0,
+            cached_agent_delta_xyz=agent_delta_xyz,
+            last_observed_agent_pos=last_observed_agent_pos,
         )
         return obs, state
 
@@ -543,6 +559,10 @@ class UTracking(MultiAgentEnv):
         steps_since_range = state.steps_since_range + 1
         should_compute_ranges = steps_since_range >= self.steps_for_new_range
 
+        # conditionally compute new agent communication based on steps_for_agent_communication
+        steps_since_agent_comm = state.steps_since_agent_comm + 1
+        should_compute_agent_comm = steps_since_agent_comm >= self.steps_for_agent_communication
+
         def compute_new_ranges():
             rng_, key_ranges, key_comm = jax.random.split(rng, 3)
             delta_xyz_, ranges_real_2d_, ranges_real_, ranges_2d_, ranges_ = (
@@ -604,6 +624,28 @@ class UTracking(MultiAgentEnv):
             rng_after,
         ) = jax.lax.cond(should_compute_ranges, compute_new_ranges, use_cached_ranges)
 
+        # conditionally compute new agent communication
+        def compute_new_agent_comm():
+            # Update last_observed_agent_pos: keep last values where comm_drop, update otherwise
+            new_agent_delta = delta_xyz[:, :self.num_agents]
+            # Add noise to agent observations (only xyz, not angle)
+            rng_noise, _ = jax.random.split(rng_after)
+            agent_obs_noise = jax.random.normal(rng_noise, shape=new_agent_delta.shape) * self.agent_obs_noise_std
+            new_agent_delta_noisy = new_agent_delta.at[:, :, :3].add(agent_obs_noise[:, :, :3])
+            updated_last_observed = jnp.where(
+                comm_drop[:, :, None],
+                state.last_observed_agent_pos,  # keep last observed if communication dropped
+                new_agent_delta_noisy  # update with new noisy position if communication succeeded
+            )
+            return new_agent_delta_noisy, updated_last_observed, 0
+
+        def use_cached_agent_comm():
+            return state.cached_agent_delta_xyz, state.last_observed_agent_pos, steps_since_agent_comm
+
+        agent_delta_xyz, last_observed_agent_pos, new_steps_since_agent_comm = jax.lax.cond(
+            should_compute_agent_comm, compute_new_agent_comm, use_cached_agent_comm
+        )
+
         # get global reward, done, info
         reward, done, info = self.get_rew_done_info(
             state.t,
@@ -617,7 +659,7 @@ class UTracking(MultiAgentEnv):
         done = {agent: done for agent in self.agents + ["__all__"]}
 
         # agents obs and global state
-        obs = self.get_obs(delta_xyz, ranges, comm_drop, pos, state.pos, land_pred_pos)
+        obs = self.get_obs(ranges, pos, state.pos, land_pred_pos, last_observed_agent_pos)
         obs["world_state"] = self.get_global_state(
             delta_xyz, ranges, comm_drop, pos, state.vel, land_pred_pos
         )
@@ -642,11 +684,16 @@ class UTracking(MultiAgentEnv):
             cached_comm_drop=jax.lax.cond(
                 should_compute_ranges, lambda: comm_drop, lambda: state.cached_comm_drop
             ),
+            steps_since_agent_comm=new_steps_since_agent_comm,
+            cached_agent_delta_xyz=jax.lax.cond(
+                should_compute_agent_comm, lambda: agent_delta_xyz, lambda: state.cached_agent_delta_xyz
+            ),
+            last_observed_agent_pos=last_observed_agent_pos,
         )
         return obs, state, rewards, done, info
 
     @partial(jax.jit, static_argnums=0)
-    def get_obs(self, delta_xyz, ranges, comm_drop, pos, old_pos, land_pred_pos):
+    def get_obs(self, ranges, pos, old_pos, land_pred_pos, last_observed_agent_pos):
         # first a matrix with all the observations is created, composed by
         # the position of the agent or the relative position of other agents (comunication) and landmarks (tracking)
         # the absolute distance (ranges) is_agent, is_self features
@@ -662,10 +709,8 @@ class UTracking(MultiAgentEnv):
         )
 
         # other entities relative distance
-        delta_xyz = self.normalize_distances(delta_xyz)
-        other_agents_dist = jnp.where(
-            comm_drop[:, :, None], 0, delta_xyz[:, : self.num_agents]
-        )  # 0 for communication drop
+        # use last_observed_agent_pos which contains the last successfully observed positions
+        other_agents_dist = self.normalize_distances(last_observed_agent_pos)
         self_mask = (
             jnp.arange(self.num_agents) == np.arange(self.num_agents)[:, np.newaxis]
         )
@@ -902,26 +947,20 @@ class UTracking(MultiAgentEnv):
         if self.penalty_for_crashing:
             rew = jnp.where((agent_dist < self.min_valid_distance).any(), -1.0, rew)
 
-        # penalize if agent lost all landmarks
-        # i.e. any agent is at distance > max_range_dist*2 from all landmarks
-        if self.penalty_for_lost_agent:
-            any_agent_lost = (
-                distances_2d[:, self.num_agents :].max(axis=1)
-                >= self.max_range_dist * 2
-            ).any()
-            rew = jnp.where(any_agent_lost, -1.0, rew)
 
         rew = jnp.where(jnp.isnan(rew), 0.0, rew)  # replace nan with 0
 
         # DONE
         done = t == self.max_steps
 
-        # truncate the episode if failed (if a landmark is lost)
-        if self.truncate_failed_episode:
-            failed_episode = (
-                min_land_dist >= self.max_range_dist * 2
-            ).any()  # failed episode if a landmark is lost
-            done = done | failed_episode
+        # penalize if agent lost all landmarks
+        # i.e. any agent is at distance > max_range_dist*3 from all landmarks
+        if self.penalty_for_lost_agent:
+            any_agent_lost = (
+                distances_2d[:, self.num_agents :].max(axis=1)
+                >= self.max_range_dist
+            ).any()
+            done = done | any_agent_lost
 
         # INFO
         # return different infos if the env is gonna be used for rendering or training
