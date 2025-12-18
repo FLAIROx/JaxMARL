@@ -1,7 +1,7 @@
 "LR": 0.0005
 "NUM_ENVS": 128
 "NUM_STEPS": 128
-"TOTAL_TIMESTEPS": 5e9
+"TOTAL_TIMESTEPS": 1e8
 "FC_DIM_SIZE": 256
 "GRU_HIDDEN_DIM": 256
 "NUM_LAYERS": 4
@@ -21,58 +21,33 @@
 # ENV
 "ENV_NAME": "utracking"
 "ENV_KWARGS": {
-  "num_agents": 1,
-  "num_landmarks": 1,
-  "max_steps": 128,
-  "dt": 30,
-  "prop_range_landmark": [25], # possible propulsor velocities of the landmarks
-  "dirchange_time_range_landmark": [5, 30],
-  "range_noise_std": 10.0,
-  "traj_noise_std": 0.02,
-  "lost_comm_prob": 0.1,
-  "rew_type": "tracking",
-  "penalty_for_crashing": True,
-  "truncate_failed_episode": False,
-  "rew_pred_ideal": 10,
-  "rew_pred_thr": 50,
-  "min_valid_distance": 10,
-  "min_init_distance": 30,
-  "max_init_distance": 180,
-  "pre_init_pos_len": 3000000,
-  "max_range_dist": 450,
-  "max_comm_dist": 1500,
-  "tracking_method": "pf",
-  "id_in_obs": False, 
-  "ranges_in_obs": False,
-  "matrix_obs": False, 
-  "matrix_state": False,
-  "state_as_edges": False,
-  "pf_num_particles": 5000,
-  "mu_init_vel": 0.6,
-  "std_init_vel": 0.4,
-  "turn_noise": 0.5,
-  "vel_noise": 0.05,
-  "ess_threshold": 0.01,
-  "std_range": 10.0,
+  "num_agents": 2,
+  "num_landmarks": 2,
+  "max_steps": 256,
+  "difficulty": "easy",
+  "rew_follow_coeff": 1.0, # coefficient for the following reward
+  "rew_tracking_coeff": 0.0, # coefficient for the tracking reward
+  "steps_for_new_range": 1, # recieve a new range measurement every n steps, more realistic is 4 (but more difficult)
+  "steps_for_agent_communication": 1, # agents can communicate every n steps, more realistic is 6 (but more difficult)
+  "pre_init_pos_len": 10000000, # pre-generate initial positions to speed up resets
 }
- 
 
 # EXP
 "SEED": 0
 "NUM_SEEDS": 1
 "TUNE": False
-"SAVE_PATH": "/gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_landmarkprop25"
-"LOAD_PATH": #"/gpfs/scratch/bsc70/jax_rl/jax_23.10-py3-jaxmarl/home/JaxMARL/models/utracking_tracking"
+"SAVE_PATH": # path
+"LOAD_PATH": # path
 "LOAD_CRITIC": #True  
-"ALG_NAME": "mappo_rnn_tracking_landmarkprop25_long"
-"CHECKPOINT_INTERVAL": 0.1
-"ANIMATION_LOG_INTERVAL": 0.16 # percentage of total update steps, leave blank for no animating during training. Animating will slow down training and use more memory
-"ANIMATION_MAX_STEPS": 128 # should be the same of the env
+"ALG_NAME": "mappo_rnn_follow"
+"CHECKPOINT_INTERVAL": # 0.05 # perecentage of total update steps
+"ANIMATION_LOG_INTERVAL": 0.1  # percentage of total update steps
+"ANIMATION_MAX_STEPS": 256 # should be the same of the env
 
 # WANDB
-"WANDB_MODE": "offline"
-"ENTITY": "mttga"
-"PROJECT": "utracking_13days"
+"WANDB_MODE": disabled
+"ENTITY": 
+"PROJECT": 
 "WANDB_LOG_ALL_SEEDS": False
 
 

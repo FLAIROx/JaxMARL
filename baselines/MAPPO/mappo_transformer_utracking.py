@@ -300,6 +300,8 @@ def make_train(config):
             / config["NUM_UPDATES"]
         )
         return config["LR"] * frac
+    
+    log_times = []
 
     def train(rng):
         original_seed = rng[0]
@@ -714,6 +716,17 @@ def make_train(config):
                 def callback(
                     metrics, original_seed, render_infos=None, model_state=None
                 ):
+                    log_times.append(time.time())
+                    if len(log_times) > 1:
+                        dt = log_times[-1] - log_times[-2]
+                        steps_per_update = (
+                            config["NUM_ENVS"]
+                            * config["NUM_STEPS"]
+                            * config["NUM_SEEDS"]
+                        )
+                        metrics["sps"] = steps_per_update / dt
+                        metrics["walltime"] = log_times[-1] - log_times[0]
+                        
                     if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
                             {
