@@ -77,6 +77,7 @@ class EnemySMAX(MultiAgentEnv):
         enemy_actions, enemy_policy_state = self.get_enemy_actions(
             action_key, state.enemy_policy_state, enemy_obs
         )
+        jact: Dict[str, chex.Array] = {**actions, **enemy_actions}
         enemy_actions = jnp.array([enemy_actions[i] for i in self.enemy_agents])
         actions = jnp.array([actions[i] for i in self.agents])
         enemy_movement_actions, enemy_attack_actions = (
@@ -101,34 +102,26 @@ class EnemySMAX(MultiAgentEnv):
         movement_actions = jnp.concatenate(
             [ally_movement_actions, enemy_movement_actions], axis=0
         )
-        attack_actions = jnp.concatenate([ally_attack_actions, enemy_attack_actions], axis=0)
+        attack_actions = jnp.concatenate(
+            [ally_attack_actions, enemy_attack_actions], axis=0
+        )
 
-        if not get_state_sequence:
-            obs, jaxmarl_state, rewards, dones, infos = self._env.step_env_no_decode(
-                key,
-                jaxmarl_state,
-                (movement_actions, attack_actions),
-                get_state_sequence=get_state_sequence,
-            )
-            new_obs = {agent: obs[agent] for agent in self.agents}
-            new_obs["world_state"] = obs["world_state"]
-            rewards = {agent: rewards[agent] for agent in self.agents}
-            all_done = dones["__all__"]
-            dones = {agent: dones[agent] for agent in self.agents}
-            dones["__all__"] = all_done
+        obs, jaxmarl_state, rewards, dones, infos = self._env.step_env_no_decode(
+            key, jaxmarl_state, (movement_actions, attack_actions)
+        )
+        infos["render_state"]["joint_action"] = jact
+        new_obs = {agent: obs[agent] for agent in self.agents}
+        new_obs["world_state"] = obs["world_state"]
+        rewards = {agent: rewards[agent] for agent in self.agents}
+        all_done = dones["__all__"]
+        dones = {agent: dones[agent] for agent in self.agents}
+        dones["__all__"] = all_done
 
-            state = state.replace(
-                enemy_policy_state=enemy_policy_state, state=jaxmarl_state
-            )
-            return new_obs, state, rewards, dones, infos
-        else:
-            states = self._env.step_env_no_decode(
-                key,
-                jaxmarl_state,
-                (movement_actions, attack_actions),
-                get_state_sequence=get_state_sequence,
-            )
-            return states
+        state = state.replace(
+            enemy_policy_state=enemy_policy_state,
+            state=jaxmarl_state,
+        )
+        return new_obs, state, rewards, dones, infos
 
     @partial(jax.jit, static_argnums=(0,))
     def get_avail_actions(self, state: State):

@@ -9,7 +9,7 @@ from jaxmarl.environments.smax.distributions import (
     UniformUnitTypeDistribution,
 )
 import chex
-from typing import Tuple, Dict, Optional
+from typing import Tuple, Dict, Optional, Iterable
 from flax.struct import dataclass
 from enum import IntEnum
 from functools import partial
@@ -262,12 +262,17 @@ class SMAX(MultiAgentEnv):
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Environment-specific reset."""
         key, team_0_key, team_1_key = jax.random.split(key, num=3)
-        team_0_start = jnp.stack([jnp.array([self.map_width / 4, self.map_height / 2])] * self.num_allies)
+        team_0_start = jnp.stack(
+            [jnp.array([self.map_width / 4, self.map_height / 2])] * self.num_allies
+        )
         team_0_start_noise = jax.random.uniform(
             team_0_key, shape=(self.num_allies, 2), minval=-2, maxval=2
         )
         team_0_start = team_0_start + team_0_start_noise
-        team_1_start = jnp.stack([jnp.array([self.map_width / 4 * 3, self.map_height / 2])] * self.num_enemies)
+        team_1_start = jnp.stack(
+            [jnp.array([self.map_width / 4 * 3, self.map_height / 2])]
+            * self.num_enemies
+        )
         team_1_start_noise = jax.random.uniform(
             team_1_key, shape=(self.num_enemies, 2), minval=-2, maxval=2
         )
@@ -311,26 +316,29 @@ class SMAX(MultiAgentEnv):
         obs["world_state"] = jax.lax.stop_gradient(world_state)
         return obs, state
 
-    @partial(jax.jit, static_argnums=(0, 4))
+    @partial(jax.jit, static_argnums=0)
     def step_env(
         self,
         key: chex.PRNGKey,
         state: State,
         actions: Dict[str, chex.Array],
-        get_state_sequence: bool = False,
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+        action_dict = actions
+
         actions = jnp.array([actions[i] for i in self.agents])
         key, action_key = jax.random.split(key)
         actions = self._decode_actions(action_key, state, actions)
-        return self.step_env_no_decode(key, state, actions, get_state_sequence)
+        obs, state, rew, done, info = self.step_env_no_decode(key, state, actions)
 
-    @partial(jax.jit, static_argnums=(0, 4))
+        info["render_state"]["joint_action"] = action_dict
+        return obs, state, rew, done, info
+
+    @partial(jax.jit, static_argnums=0)
     def step_env_no_decode(
         self,
         key: chex.PRNGKey,
         state: State,
-        actions: Dict[str, chex.Array],
-        get_state_sequence: bool = False,
+        actions: tuple[chex.Array, chex.Array],
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Environment-specific step transition."""
 
@@ -372,17 +380,15 @@ class SMAX(MultiAgentEnv):
         dones["__all__"] = state.terminal
         world_state = self.get_world_state(state)
         infos = {}
+        infos["render_state"] = {"substates": states}
         obs["world_state"] = jax.lax.stop_gradient(world_state)
-        if not get_state_sequence:
-            return (
-                jax.lax.stop_gradient(obs),
-                jax.lax.stop_gradient(state),
-                rewards,
-                dones,
-                infos,
-            )
-        else:
-            return states
+        return (
+            jax.lax.stop_gradient(obs),
+            jax.lax.stop_gradient(state),
+            rewards,
+            dones,
+            infos,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def compute_reward(self, state, health_before, health_after):
@@ -952,135 +958,36 @@ class SMAX(MultiAgentEnv):
             for i, agent in enumerate(self.agents)
         }
 
-    def expand_state_seq(self, state_seq):
-        expanded_state_seq = []
-        for key, state, actions in state_seq:
-            states = self.step_env(key, state, actions, get_state_sequence=True)
-            states = list(map(State, *dataclasses.astuple(states)))
-            viz_actions = {agent: states[0].prev_attack_actions[i] for i, agent in enumerate(self.agents)}
-            expanded_state_seq.extend(
-                zip([key] * len(states), states, [viz_actions] * len(states))
-            )
+    # def expand_state_seq(self, state_seq: Iterable[]):
+    #     expanded_state_seq = []
+    #     for key, state, actions in state_seq:
+    #         states = self.step_env(key, state, actions, get_state_sequence=True)
+    #         states = list(map(State, *dataclasses.astuple(states)))
+    #         viz_actions = {agent: states[0].prev_attack_actions[i] for i, agent in enumerate(self.agents)}
+    #         expanded_state_seq.extend(
+    #             zip([key] * len(states), states, [viz_actions] * len(states))
+    #         )
 
-            state = state.replace(terminal=self.is_terminal(state))
-        return expanded_state_seq
+    #         state = state.replace(terminal=self.is_terminal(state))
+    #     return expanded_state_seq
 
-    def init_render(
-        self,
-        ax,
-        state: Tuple[State, Dict],
-        step: int,
-        env_step: int,
-    ):
-        from matplotlib.patches import Circle, Rectangle
-        import matplotlib.pyplot as plt
-        import numpy as np
-
-        _, state, actions = state
-
-        # work out which agents are being shot
-        def agent_being_shot(shooter_idx, action):
-            attacked_idx = jax.lax.cond(
-                shooter_idx < self.num_allies,
-                lambda: action + self.num_allies - self.num_movement_actions,
-                lambda: self.num_allies - 1 - (action - self.num_movement_actions),
-            )
-            return attacked_idx
-
-        def agent_can_shoot(shooter_idx, action):
-            attacked_idx = agent_being_shot(shooter_idx, action)
-            dist = jnp.linalg.norm(
-                state.unit_positions[shooter_idx] - state.unit_positions[attacked_idx]
-            )
-            return (
-                state.unit_alive[shooter_idx]
-                & state.unit_alive[attacked_idx]
-                & (dist < self.unit_type_attack_ranges[state.unit_types[shooter_idx]])
-            )
-
-        attacked_agents = set(
-            int(agent_being_shot(i, actions[agent]))
-            for i, agent in enumerate(self.agents)
-            if actions[agent] > self.num_movement_actions - 1
-            and agent_can_shoot(i, actions[agent])
+    def agent_being_shot(self, shooter_idx: int, action: int) -> int:
+        attacked_idx = jax.lax.cond(
+            shooter_idx < self.num_allies,
+            lambda: action + self.num_allies - self.num_movement_actions,
+            lambda: self.num_allies - 1 - (action - self.num_movement_actions),
         )
-        # render circles
-        ax.clear()
-        ax.set_xlim([0.0, self.map_width])
-        ax.set_ylim([0.0, self.map_height])
-        ax.set_title(f"Step {env_step}")
-        for i in range(self.num_allies):
-            if state.unit_alive[i]:
-                color = "blue" if i not in attacked_agents else "cornflowerblue"
-                c = Circle(
-                    state.unit_positions[i],
-                    self.unit_type_radiuses[state.unit_types[i]],
-                    color=color,
-                )
-                ax.add_patch(c)
-                ax.text(
-                    state.unit_positions[i][0]
-                    - (1.0 / jnp.sqrt(2))
-                    * self.unit_type_radiuses[state.unit_types[i]],
-                    state.unit_positions[i][1]
-                    - (1.0 / jnp.sqrt(2))
-                    * self.unit_type_radiuses[state.unit_types[i]],
-                    self.unit_type_shorthands[state.unit_types[i]],
-                    fontsize="xx-small",
-                    color="white",
-                )
-        for i in range(self.num_enemies):
-            idx = i + self.num_allies
-            if state.unit_alive[idx]:
-                color = "green" if idx not in attacked_agents else "limegreen"
-                c = Circle(
-                    state.unit_positions[idx],
-                    self.unit_type_radiuses[state.unit_types[idx]],
-                    color=color,
-                )
-                ax.add_patch(c)
-                ax.text(
-                    state.unit_positions[idx][0]
-                    - (1.0 / jnp.sqrt(2))
-                    * self.unit_type_radiuses[state.unit_types[idx]],
-                    state.unit_positions[idx][1]
-                    - (1.0 / jnp.sqrt(2))
-                    * self.unit_type_radiuses[state.unit_types[idx]],
-                    self.unit_type_shorthands[state.unit_types[idx]],
-                    fontsize="xx-small",
-                    color="white",
-                )
+        return attacked_idx
 
-        # render bullets
-        for agent in self.agents:
-            i = self.agent_ids[agent]
-            attacked_idx = agent_being_shot(i, actions[agent])
-            if actions[agent] < self.num_movement_actions or not agent_can_shoot(
-                i, actions[agent]
-            ):
-                continue
-            frac = step / self.world_steps_per_env_step
-            bullet_pos = (1 - frac) * state.unit_positions[
-                i
-            ] + frac * state.unit_positions[attacked_idx]
-            r = Rectangle(bullet_pos, 0.5, 0.5, color="gray")
-            ax.add_patch(r)
+    def agent_can_shoot(self, state: State, shooter_idx: int, action: int) -> bool:
+        attacked_idx = self.agent_being_shot(shooter_idx, action)
+        dist = jnp.linalg.norm(
+            state.unit_positions[shooter_idx] - state.unit_positions[attacked_idx]  # type: ignore
+        )
+        shooter_unit_type: bool = state.unit_types[shooter_idx]  # type: ignore
+        shooter_range: jax.Array = self.unit_type_attack_ranges[shooter_unit_type]
+        shooter_alive: bool = state.unit_alive[shooter_idx]  # type: ignore
+        target_alive: bool = state.unit_alive[attacked_idx]  # type: ignore
+        target_in_range = dist < shooter_range
 
-        with io.BytesIO() as buff:
-            ax.figure.savefig(buff, format="raw")
-            buff.seek(0)
-            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
-        w, h = ax.figure.canvas.get_width_height()
-        im = data.reshape((w, h, -1))
-
-        return ax.imshow(im)
-
-    def update_render(
-        self,
-        im,
-        state: State,
-        step: int,
-        env_step: int,
-    ):
-        ax = im.axes
-        return self.init_render(ax, state, step, env_step)
+        return shooter_alive & target_alive & target_in_range
