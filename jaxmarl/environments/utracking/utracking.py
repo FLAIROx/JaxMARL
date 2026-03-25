@@ -178,14 +178,14 @@ class UTracking(MultiAgentEnv):
 
         if difficulty != "manual":
             if difficulty == "easy":
-                landmark_rel_speed = (0.0, 0.35)
-                dirchange_time_range_landmark = (5, 15)
+                landmark_rel_speed = (0.1, 0.35)
+                dirchange_time_range_landmark = (50, 200)
             elif difficulty == "medium":
-                landmark_rel_speed = (0.15, 0.5)
-                dirchange_time_range_landmark = (2, 10)
+                landmark_rel_speed = (0.2, 0.5)
+                dirchange_time_range_landmark = (35, 100)
             elif difficulty == "hard":
                 landmark_rel_speed = (0.5, 0.7)
-                dirchange_time_range_landmark = (5, 15)
+                dirchange_time_range_landmark = (10, 50)
             elif difficulty == "expert":
                 landmark_rel_speed = (0.83, 0.86)
                 dirchange_time_range_landmark = (5, 15)
@@ -411,7 +411,8 @@ class UTracking(MultiAgentEnv):
             key_ranges, pos
         )
         range_buffer, range_buffer_head, comm_drop = self.communicate(
-            key_comm, ranges_real_2d, ranges_2d, pos, range_buffer, range_buffer_head
+            key_comm, ranges_real_2d, ranges_2d, pos, range_buffer, range_buffer_head, 
+            allow_communication=self.steps_for_new_range == 1,  # allow comunication at reset only if steps_for_new_range=1
         )
 
         # init particle filter state if required
@@ -441,6 +442,12 @@ class UTracking(MultiAgentEnv):
         agent_obs_noise = jax.random.normal(rng_noise, shape=agent_delta_xyz.shape) * self.agent_obs_noise_std
         agent_delta_xyz_noisy = agent_delta_xyz.at[:, :, :2].add(agent_obs_noise[:, :, :2])
         last_observed_agent_pos = agent_delta_xyz_noisy.copy()
+        # If comm interval > 1, mask other-agent positions at t=0 (first comm hasn't happened yet)
+        last_observed_agent_pos = jnp.where(
+            self.steps_for_agent_communication > 1,
+            jnp.zeros_like(last_observed_agent_pos),
+            last_observed_agent_pos,
+        )
         obs = self.get_obs(ranges, pos, pos, land_pred_pos, last_observed_agent_pos)
         obs["world_state"] = self.get_global_state(
             delta_xyz, ranges, comm_drop, pos, vel, land_pred_pos
@@ -557,6 +564,7 @@ class UTracking(MultiAgentEnv):
                 pos,
                 state.range_buffer,
                 state.range_buffer_head,
+                allow_communication=should_compute_agent_comm,
             )
             rng_pred, rng_rest = jax.random.split(rng_)
             pf_state_, land_pred_pos_ = self.update_predictions(
@@ -931,16 +939,29 @@ class UTracking(MultiAgentEnv):
         done = t == self.max_steps
 
         # penalize if agent lost all landmarks
-        # i.e. any agent is at distance > max_range_dist*3 from all landmarks
+        # i.e. any agent is at distance > max_range_dist from the closest landmark
         if self.penalty_for_lost_agent:
             any_agent_lost = (
-                distances_2d[:, self.num_agents :].max(axis=1)
+                distances_2d[:, self.num_agents :].min(axis=1)
                 >= self.max_range_dist
             ).any()
-            done = done | any_agent_lost
+            rew = jnp.where(any_agent_lost, 0.0, rew)
 
         # INFO
         # return different infos if the env is gonna be used for rendering or training
+
+        # succesful step is when all landmarks are followed and no agent is lost (i.e. at least one agent within max_range_dist from each landmark)
+        successful_step_threshold = (
+            distances_2d[:, self.num_agents :].min(axis=1)
+            <= self.max_range_dist
+        ).all(keepdims=True) & (min_land_dist <= 400).all(keepdims=True)
+        successful_step = (
+            distances_2d[:, self.num_agents :].min(axis=1)
+            <= self.max_range_dist 
+        ).all(keepdims=True) & (min_land_dist <= self.rew_dist_thr).all(keepdims=True)
+        successful_step_with_crash = successful_step_threshold & (agent_dist > self.min_valid_distance).all(keepdims=True)
+        successful_step_threshold_with_crash = successful_step_threshold & (agent_dist > self.min_valid_distance).all(keepdims=True)
+        
         info = {
             "follow_rew": follow_rew,
             "tracking_rew": tracking_rew,
@@ -949,7 +970,7 @@ class UTracking(MultiAgentEnv):
             "landmarks_lost": (min_land_dist >= self.max_range_dist).sum(keepdims=True)
             / self.num_landmarks,
             "agents_lost": (
-                distances_2d[:, self.num_agents :].max(axis=1)
+                distances_2d[:, self.num_agents :].min(axis=1)
                 >= self.max_range_dist * 2
             ).sum(keepdims=True)
             / self.num_agents,
@@ -957,7 +978,16 @@ class UTracking(MultiAgentEnv):
             "land_dist_mean": min_land_dist.mean(keepdims=True),
             "crash": (agent_dist < self.min_valid_distance).any(keepdims=True),
             "normalized_reward": cum_rew + rew / self.max_steps,
+            "successful_step_threshold": successful_step_threshold,
+            "successful_step": successful_step,
+            "successful_step_with_crash": successful_step_with_crash,
+            "successful_step_threshold_with_crash": successful_step_threshold_with_crash,
         }
+        # for i in range(self.num_landmarks):
+        #     info[f"landmark_{i}_pred_error"] = pred_2d_err[i]
+        #     info[f"landmark_{i}_min_dist"] = min_land_dist[i]
+        for i in range(self.num_agents):
+            info[f"agent_{i}_min_land_dist"] = distances_2d[i, self.num_agents :].min(keepdims=True)
         if self.infos_for_render:
             info["render"] = {
                 "pos": pos,
@@ -1077,6 +1107,7 @@ class UTracking(MultiAgentEnv):
         pos: chex.Array,
         range_buffer: chex.Array,
         range_buffer_head: chex.Array,
+        allow_communication: bool = True,
     ) -> Tuple[chex.Array, chex.Array, chex.Array]:
 
         rng, key_comm = jax.random.split(rng)
@@ -1092,13 +1123,11 @@ class UTracking(MultiAgentEnv):
             ranges_real[:, : self.num_agents] > self.max_comm_dist
         )  # too far
 
-        # communication is dropped also for the agents that are too far
-        comm_drop = comm_drop | (
-            ranges_real[:, : self.num_agents] > self.max_comm_dist
-        )  # too far
+        # mask the communication if allow_communication is False (used during reset)
+        comm_drop = jnp.where(allow_communication, comm_drop, jnp.ones_like(comm_drop, dtype=bool))
         comm_drop = fill_diagonal_zeros(comm_drop).astype(bool)
 
-        # exchange landmark ranges between agents
+
         land_ranges = jnp.tile(ranges[:, self.num_agents :], (self.num_agents, 1, 1))
         land_ranges = jnp.where(
             comm_drop[..., np.newaxis], 0, land_ranges
