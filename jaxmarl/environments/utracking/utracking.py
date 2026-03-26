@@ -106,6 +106,7 @@ class UTracking(MultiAgentEnv):
         max_init_distance: float = 500.0,  # maximum initial distance between vehicles
         max_range_dist: float = 1500.0,  # above this distance can't recieve landmark ranges
         max_comm_dist: float = 1500.0,  # above this distance can't communicate
+        max_range_for_prediction: float = 600.0,  # above this distance the range is considered unreliable for predictions and is masked out
         prop_agent: int = 30,  # rpm of agent's propellor, defines the speeds for agents (30rpm is ~1m/s)
         landmark_rel_speed: float = (
             0.1,
@@ -210,7 +211,7 @@ class UTracking(MultiAgentEnv):
         self.max_init_distance = max_init_distance
         self.max_range_dist = max_range_dist
         self.max_comm_dist = max_comm_dist
-        self.max_comm_dist = max_comm_dist
+        self.max_range_for_prediction = max_range_for_prediction
         self.prop_agent = prop_agent
         self.rudder_range_landmark = np.array(rudder_range_landmark)
         self.dirchange_time_range_landmark = dirchange_time_range_landmark
@@ -564,7 +565,7 @@ class UTracking(MultiAgentEnv):
                 pos,
                 state.range_buffer,
                 state.range_buffer_head,
-                allow_communication=should_compute_agent_comm,
+                allow_communication=True,
             )
             rng_pred, rng_rest = jax.random.split(rng_)
             pf_state_, land_pred_pos_ = self.update_predictions(
@@ -616,14 +617,21 @@ class UTracking(MultiAgentEnv):
 
         # conditionally compute new agent communication
         def compute_new_agent_comm():
-            # Update last_observed_agent_pos: keep last values where comm_drop, update otherwise
-            new_agent_delta = delta_xyz[:, :self.num_agents]
-            # Add noise to agent observations (only xyz, not angle)
-            rng_noise, _ = jax.random.split(rng_after)
+            # Use current positions directly (same convention as delta_xyz: pos[i,:3] - pos[j,:3])
+            # Shape: [num_agents, num_agents, 3] — decoupled from cached delta_xyz
+            new_agent_delta = pos[:self.num_agents, np.newaxis, :3] - pos[np.newaxis, :self.num_agents, :3]
+            rng_comm, rng_noise = jax.random.split(rng_after)
             agent_obs_noise = jax.random.normal(rng_noise, shape=new_agent_delta.shape) * self.agent_obs_noise_std
             new_agent_delta_noisy = new_agent_delta.at[:, :, :2].add(agent_obs_noise[:, :, :2])
+            # Fresh comm_drop for this agent comm event based on current positions
+            agent_pos_xy = pos[:self.num_agents, :2]
+            diff_xy = agent_pos_xy[:, np.newaxis, :] - agent_pos_xy[np.newaxis, :, :]
+            agent_dists_2d = jnp.sqrt(jnp.sum(diff_xy ** 2, axis=-1))
+            fresh_comm_drop = jax.random.uniform(rng_comm, shape=(self.num_agents, self.num_agents)) < self.lost_comm_prob
+            fresh_comm_drop = fresh_comm_drop | (agent_dists_2d > self.max_comm_dist)
+            fresh_comm_drop = fill_diagonal_zeros(fresh_comm_drop).astype(bool)
             updated_last_observed = jnp.where(
-                comm_drop[:, :, None],
+                fresh_comm_drop[:, :, None],
                 state.last_observed_agent_pos,  # keep last observed if communication dropped
                 new_agent_delta_noisy  # update with new noisy position if communication succeeded
             )
@@ -1215,9 +1223,13 @@ class UTracking(MultiAgentEnv):
         pos_xy = jnp.swapaxes(pos_xy, -1, -2)  # num_agents, num_landmarks, num_obs, xy
         z = range_buffer[:, :, 2]
         mask = (z != 0.0).astype(int)  # range==0 means communication drop
+        mask = jnp.logical_and(mask, z <= self.max_range_for_prediction)  # also consider as drop the ranges that are above max range distance
 
         rng_ = jax.random.split(rng, (self.num_agents, self.num_landmarks))
-        pf_state, pred_xy = jax.vmap(jax.vmap(self.pf.step_and_predict))(
+        # pf_state, pred_xy = jax.vmap(jax.vmap(partial(self.pf.step_and_predict, dt=self.steps_for_new_range*self.dt)))(
+        #     rng_, pf_state, pos_xy, z, mask
+        # )
+        pf_state, pred_xy = jax.vmap(jax.vmap(partial(self.pf.step_and_predict, dt=self.dt)))(
             rng_, pf_state, pos_xy, z, mask
         )
         pred_z = self.estimate_depth(pred_xy, pos, ranges)
