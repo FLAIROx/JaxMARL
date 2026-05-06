@@ -500,8 +500,8 @@ class OvercookedV2(MultiAgentEnv):
     def _get_obs_shape(self) -> Tuple[int]:
         if self.agent_view_size:
             view_size = self.agent_view_size * 2 + 1
-            view_width = min(self.width, view_size)
-            view_height = min(self.height, view_size)
+            view_width = view_size
+            view_height = view_size
         else:
             view_width = self.width
             view_height = self.height
