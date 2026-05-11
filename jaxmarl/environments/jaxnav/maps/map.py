@@ -4,6 +4,7 @@ import numpy as np
 from functools import partial
 import matplotlib.axes._axes as axes
 import chex 
+import warnings
 
 class Map(object):
     """ Base class for a map """
@@ -13,22 +14,30 @@ class Map(object):
         num_agents,
         rad,
         map_size,
+        min_dist_to_goal : float = None,
+        max_dist_to_goal : float = None,
         start_pad=1.5,
         valid_path_check=False,
     ):
         assert start_pad>=1.0, 'start_pad must be greater than or equal to 1.0'
-        
         self.num_agents = num_agents
         self.rad = rad
         self.map_size = map_size
         self.start_pad=start_pad
         self.valid_path_check = valid_path_check
         
-        # Test case sampling TODO fix this to be not hard coded
-        self.dist_to_goal = 50 # 5
+        low_lim = 1 + rad 
+        high_lim = map_size[1] - 1 - rad
+        
+        self.min_dist_to_goal = min_dist_to_goal if min_dist_to_goal is not None else low_lim 
+        self.max_dist_to_goal = max_dist_to_goal if max_dist_to_goal is not None else high_lim  
+
+        assert self.min_dist_to_goal <= self.max_dist_to_goal, 'min_dist_to_goal must be smaller or equal to max_dist_to_goal'
+
         self.rrt_samples = 1000
         self.rrt_step_size = 0.25
         self.goal_radius = 0.3
+        self._validate_dist_to_goal(self.min_dist_to_goal,self.max_dist_to_goal)
         
     @partial(jax.jit, static_argnums=[0])
     def sample_scenario(self, key):
@@ -55,18 +64,26 @@ class Map(object):
         radii = jnp.array([self.rad*self.start_pad, self.goal_radius])
 
         def _sample_pair(key: chex.PRNGKey):
-            """ Sample a start and goal pose for an agent """
-            key_s, key_g, key_t = jax.random.split(key, 3)
-            low_lim = 1 + self.rad 
-            high_lim = self.map_size[1] - 1 - self.rad
+            """ Sample a start and goal pose for an agent """  
+            key_s, key_g, key_t, key_d, key_angle = jax.random.split(key, 5) 
+        
+            low_lim = 1 + self.rad                             
+            high_lim = self.map_size[1] - 1 - self.rad         
+            
             start = jax.random.uniform(key_s, (1, 2), minval=low_lim, maxval=high_lim)
-            g_low_lim = jnp.clip(start - self.dist_to_goal, low_lim, high_lim)
-            g_high_lim = jnp.clip(start + self.dist_to_goal, low_lim, high_lim)
-            goal = jax.random.uniform(key_g, (1, 2), minval=g_low_lim, maxval=g_high_lim)
+           
+            distance = jax.random.uniform(key_d,minval =self.min_dist_to_goal, maxval =self.max_dist_to_goal)
+            
+            angle = jax.random.uniform(key_angle, (1,), minval=-jnp.pi, maxval=jnp.pi)
+
+            offset = jnp.concatenate([distance * jnp.cos(angle), distance * jnp.sin(angle)] , axis=0)
+            goal = jnp.clip(start + offset, low_lim, high_lim)  # clip as a safety net
+            
             theta = jax.random.uniform(key_t, (2, 1), minval=-jnp.pi, maxval=jnp.pi)
             positions = jnp.concatenate([start, goal], axis=0)
             poses = jnp.concatenate([positions, theta], axis=1)
             return poses
+
         
         def _agent_collision(pos, test_case, rad): 
             dists = jnp.linalg.norm(test_case-pos, axis=1) <= rad*2
@@ -432,8 +449,38 @@ class Map(object):
         y_seq: jnp.ndarray,
     ) -> None:
         raise NotImplementedError
-     
+    
+    def _validate_dist_to_goal(self, min_dist_to_goal: float, max_dist_to_goal: float) -> None:
+        """Validate that the specified goal distances are achievable given the map size.
+
+            If min_dist_to_goal exceeds valid_size, every sampled goal will be clipped,
+            making the distance constraint impossible to satisfy and resulting in
+            effectively uniform sampling regardless of the specified range.
             
+            If max_dist_to_goal exceeds valid_size, only large distances will be clipped
+            but small ones remain valid, so sampling still works partially.
+            
+            Args:
+                min_dist_to_goal: Minimum desired Euclidean distance between start and goal.
+                max_dist_to_goal: Maximum desired Euclidean distance between start and goal.
+            """
+        low_lim = 1 + self.rad
+        high_lim = self.map_size[1] - 1 - self.rad
+        valid_size = high_lim - low_lim
+
+        if min_dist_to_goal > valid_size:
+            raise ValueError(
+                f"min_dist_to_goal ({min_dist_to_goal}) exceeds the valid map range "
+                f"({valid_size}). Every sample will be clipped, making the distance "
+                f"constraint impossible to satisfy and resulting in uniform sampling."
+            )
+        if max_dist_to_goal > valid_size:
+            warnings.warn(
+                f"max_dist_to_goal ({max_dist_to_goal}) exceeds the valid map range "
+                f"({valid_size}). Distances larger than {valid_size} will be clipped.",
+                UserWarning
+            )
+                
     
         
     
