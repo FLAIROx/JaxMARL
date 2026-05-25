@@ -393,7 +393,7 @@ class OvercookedV3Visualizer:
                 (0.7, 0.3),
                 (0.7, 0.7),
             )
-            direction_reordering = jnp.array([3, 1, 0, 2])
+            direction_reordering = jnp.array([1, 3, 2, 0])
             dir_idx = direction_reordering[direction]
             arrow_fn = rendering.rotate_fn(
                 arrow_fn, cx=0.5, cy=0.5, theta=0.5 * math.pi * dir_idx
@@ -423,7 +423,7 @@ class OvercookedV3Visualizer:
                 (0.7, 0.3),
                 (0.7, 0.7),
             )
-            direction_reordering = jnp.array([3, 1, 0, 2])
+            direction_reordering = jnp.array([1, 3, 2, 0])
             dir_idx = direction_reordering[direction]
             arrow_fn = rendering.rotate_fn(
                 arrow_fn, cx=0.5, cy=0.5, theta=0.5 * math.pi * dir_idx

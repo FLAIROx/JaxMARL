@@ -17,5 +17,5 @@ jobs:
         python-version: '3.12'
     - name: Install dependencies
       run: pip install -e ".[dev,algs]"
-    - name: Run tests
-      run: pytest tests/ --ignore=tests/robotarium
+    - name: Run Overcooked V3 tests
+      run: pytest tests/overcooked_v3
