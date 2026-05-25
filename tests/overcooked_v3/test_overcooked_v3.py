@@ -5,6 +5,11 @@ import jax.numpy as jnp
 import pytest
 from jaxmarl import make
 from jaxmarl.environments.overcooked_v3 import OvercookedV3, overcooked_v3_layouts
+from jaxmarl.environments.overcooked_v3.common import Actions, Position, StaticObject
+from jaxmarl.environments.overcooked_v3.layouts import (
+    Layout,
+    coordinated_temporal_conveyor,
+)
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 
 
@@ -337,6 +342,95 @@ class TestOvercookedV3Conveyors:
 
         # Should have some item conveyors
         assert jnp.any(state.item_conveyor_active_mask)
+
+    def test_agents_cannot_move_onto_item_conveyors(self):
+        """Agents should not be able to occupy item conveyor cells."""
+        layout = Layout.from_string(
+            coordinated_temporal_conveyor,
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(
+            layout=layout,
+            enable_item_conveyors=True,
+            enable_player_conveyors=True,
+        )
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        # Put agent 0 immediately left of the vertical item conveyor at (6, 4).
+        state = state.replace(
+            agents=state.agents.replace(
+                pos=Position(
+                    x=jnp.array([5, 2], dtype=jnp.int32),
+                    y=jnp.array([4, 4], dtype=jnp.int32),
+                )
+            )
+        )
+        assert state.grid[4, 6, 0] == StaticObject.ITEM_CONVEYOR
+
+        actions = {"agent_0": int(Actions.right), "agent_1": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step(subkey, state, actions)
+
+        assert new_state.agents.pos.x[0] == 5
+        assert new_state.agents.pos.y[0] == 4
+
+    def test_agents_can_move_onto_player_conveyors(self):
+        """Agents should still be able to occupy player conveyor cells."""
+        layout = Layout.from_string(
+            """
+WWWWW
+WA]XW
+W0BPW
+WWWWW
+""",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, enable_player_conveyors=False)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        assert state.grid[1, 2, 0] == StaticObject.PLAYER_CONVEYOR
+
+        actions = {"agent_0": int(Actions.right)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step(subkey, state, actions)
+
+        assert new_state.agents.pos.x[0] == 2
+        assert new_state.agents.pos.y[0] == 1
+
+    def test_player_conveyors_do_not_push_agents_onto_item_conveyors(self):
+        """Player conveyors should not push agents onto item conveyors."""
+        layout = Layout.from_string(
+            """
+WWWWW
+WA]>X
+W0BPW
+WWWWW
+""",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, enable_player_conveyors=True)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        state = state.replace(
+            agents=state.agents.replace(
+                pos=Position(
+                    x=jnp.array([2], dtype=jnp.int32),
+                    y=jnp.array([1], dtype=jnp.int32),
+                )
+            )
+        )
+        assert state.grid[1, 2, 0] == StaticObject.PLAYER_CONVEYOR
+        assert state.grid[1, 3, 0] == StaticObject.ITEM_CONVEYOR
+
+        actions = {"agent_0": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step(subkey, state, actions)
+
+        assert new_state.agents.pos.x[0] == 2
+        assert new_state.agents.pos.y[0] == 1
 
 
 class TestOvercookedV3Registration:

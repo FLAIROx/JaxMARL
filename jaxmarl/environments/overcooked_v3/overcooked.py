@@ -376,6 +376,12 @@ class OvercookedV3(MultiAgentEnv):
         recipe = self.possible_recipes[recipe_idx]
         return DynamicObject.get_recipe_encoding(recipe)
 
+    @staticmethod
+    def _is_agent_walkable(static_object):
+        return (static_object == StaticObject.EMPTY) | (
+            static_object == StaticObject.PLAYER_CONVEYOR
+        )
+
     def _randomize_agent_positions(self, state: State, key: chex.PRNGKey) -> State:
         """Randomize agent positions within their rooms."""
         num_agents = self.num_agents
@@ -488,9 +494,7 @@ class OvercookedV3(MultiAgentEnv):
 
                 # Check if new position is walkable
                 new_cell_static = grid[new_pos.y, new_pos.x, 0]
-                is_walkable = (new_cell_static == StaticObject.EMPTY) | \
-                              (new_cell_static == StaticObject.ITEM_CONVEYOR) | \
-                              (new_cell_static == StaticObject.PLAYER_CONVEYOR)
+                is_walkable = self._is_agent_walkable(new_cell_static)
 
                 new_pos = tree_select(is_walkable, new_pos, pos)
                 return agent.replace(pos=new_pos, dir=direction)
@@ -931,9 +935,7 @@ class OvercookedV3(MultiAgentEnv):
 
             # Check if destination is walkable
             dest_static = grid[new_pos.y, new_pos.x, 0]
-            dest_walkable = (dest_static == StaticObject.EMPTY) | \
-                           (dest_static == StaticObject.ITEM_CONVEYOR) | \
-                           (dest_static == StaticObject.PLAYER_CONVEYOR)
+            dest_walkable = self._is_agent_walkable(dest_static)
 
             should_push = is_on & dest_walkable
 
