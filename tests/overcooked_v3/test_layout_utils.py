@@ -2,6 +2,7 @@
 
 import pytest
 from jaxmarl.environments.overcooked_v3.layouts import Layout, overcooked_v3_layouts
+from jaxmarl.environments.overcooked_v3.overcooked import OvercookedV3
 
 
 class TestToString:
@@ -153,6 +154,55 @@ WBWXW
 
         assert not is_valid
         assert any("ingredient" in msg.lower() for msg in messages)
+
+    def test_ragged_layout_rejected(self):
+        """Test that implicit empty padding is rejected."""
+        layout_str = """
+WWWWW
+W0A
+WWWWW
+"""
+        with pytest.raises(ValueError, match="rectangular"):
+            Layout.from_string(layout_str, possible_recipes=[[0, 0, 0]])
+
+    def test_playable_validation_requires_plate(self):
+        """Test that soup-delivery validation treats missing plates as fatal."""
+        layout_str = """
+WWWWW
+W0APW
+WWXWW
+"""
+        layout = Layout.from_string(layout_str, possible_recipes=[[0, 0, 0]])
+        is_playable, messages = layout.validate_playable()
+
+        assert not is_playable
+        assert any("plate" in msg.lower() for msg in messages)
+
+    def test_playable_validation_rejects_mixed_recipe(self):
+        """Test current pot mechanics reject mixed recipes."""
+        layout_str = """
+WWWWWWWW
+W0A1   W
+W P B XW
+WWWWWWWW
+"""
+        layout = Layout.from_string(layout_str, possible_recipes=[[0, 0, 1]])
+        is_playable, messages = layout.validate_playable()
+
+        assert not is_playable
+        assert any("mixed" in msg.lower() for msg in messages)
+
+    def test_env_init_rejects_unplayable_layout(self):
+        """Test OvercookedV3 raises immediately for unplayable layouts."""
+        layout_str = """
+WWWWW
+W0APW
+WWXWW
+"""
+        layout = Layout.from_string(layout_str, possible_recipes=[[0, 0, 0]])
+
+        with pytest.raises(ValueError, match="Invalid OvercookedV3 layout"):
+            OvercookedV3(layout=layout)
 
 
 class TestAnnotateLayoutString:

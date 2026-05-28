@@ -184,6 +184,13 @@ class OvercookedV3(MultiAgentEnv):
         elif not isinstance(layout, Layout):
             raise ValueError("Invalid layout, must be a Layout object or a string key")
 
+        is_playable, validation_messages = layout.validate_playable()
+        if not is_playable:
+            formatted_messages = "\n".join(
+                f"- {message}" for message in validation_messages
+            )
+            raise ValueError(f"Invalid OvercookedV3 layout:\n{formatted_messages}")
+
         num_agents = len(layout.agent_positions)
         super().__init__(num_agents=num_agents)
 
@@ -618,7 +625,9 @@ class OvercookedV3(MultiAgentEnv):
     ):
         """Process an interact action for an agent."""
         inventory = agent.inventory
-        fwd_pos = agent.get_fwd_pos()
+        fwd_pos, fwd_pos_in_bounds = agent.pos.checked_move(
+            agent.dir, self.width, self.height
+        )
 
         shaped_reward = jnp.array(0.0, dtype=float)
 
@@ -630,14 +639,20 @@ class OvercookedV3(MultiAgentEnv):
         plated_recipe = recipe | DynamicObject.PLATE | DynamicObject.COOKED
 
         # What is the object?
-        object_is_plate_pile = interact_item == StaticObject.PLATE_PILE
-        object_is_ingredient_pile = StaticObject.is_ingredient_pile(interact_item)
+        object_is_plate_pile = fwd_pos_in_bounds & (
+            interact_item == StaticObject.PLATE_PILE
+        )
+        object_is_ingredient_pile = (
+            fwd_pos_in_bounds & StaticObject.is_ingredient_pile(interact_item)
+        )
         object_is_pile = object_is_plate_pile | object_is_ingredient_pile
-        object_is_pot = interact_item == StaticObject.POT
-        object_is_goal = interact_item == StaticObject.GOAL
-        object_is_wall = interact_item == StaticObject.WALL
-        object_is_conveyor = (interact_item == StaticObject.ITEM_CONVEYOR) | \
-                             (interact_item == StaticObject.PLAYER_CONVEYOR)
+        object_is_pot = fwd_pos_in_bounds & (interact_item == StaticObject.POT)
+        object_is_goal = fwd_pos_in_bounds & (interact_item == StaticObject.GOAL)
+        object_is_wall = fwd_pos_in_bounds & (interact_item == StaticObject.WALL)
+        object_is_conveyor = fwd_pos_in_bounds & (
+            (interact_item == StaticObject.ITEM_CONVEYOR)
+            | (interact_item == StaticObject.PLAYER_CONVEYOR)
+        )
         object_has_no_ingredients = interact_ingredients == 0
 
         # What is in inventory?
@@ -767,10 +782,16 @@ class OvercookedV3(MultiAgentEnv):
             inventory_is_plate_now = new_inventory == DynamicObject.PLATE
             successful_plate_pickup = successful_pickup * inventory_is_plate_now
             num_plates_in_inventory = jnp.sum(all_inventories == DynamicObject.PLATE)
-            num_nonempty_pots = jnp.sum(
-                (grid[:, :, 0] == StaticObject.POT) & (grid[:, :, 1] != 0)
+            pot_ingredient_counts = jax.vmap(jax.vmap(DynamicObject.ingredient_count))(
+                grid[:, :, 1]
             )
-            is_plate_pickup_useful = num_plates_in_inventory < num_nonempty_pots
+            full_unburned_pots = (
+                (grid[:, :, 0] == StaticObject.POT)
+                & (pot_ingredient_counts == 3)
+                & ((grid[:, :, 1] & DynamicObject.BURNED) == 0)
+            )
+            num_useful_pots = jnp.sum(full_unburned_pots)
+            is_plate_pickup_useful = num_plates_in_inventory < num_useful_pots
             shaped_reward += (
                 is_plate_pickup_useful
                 * successful_plate_pickup
@@ -871,27 +892,43 @@ class OvercookedV3(MultiAgentEnv):
             # Calculate destination
             dir_vec = DIR_TO_VEC[direction]
 
-            dest_x = jnp.clip(x + dir_vec[0], 0, self.width - 1)
-            dest_y = jnp.clip(y + dir_vec[1], 0, self.height - 1)
+            raw_dest_x = x + dir_vec[0]
+            raw_dest_y = y + dir_vec[1]
+            dest_in_bounds = (
+                (raw_dest_x >= 0)
+                & (raw_dest_x < self.width)
+                & (raw_dest_y >= 0)
+                & (raw_dest_y < self.height)
+            )
+            dest_x = jnp.clip(raw_dest_x, 0, self.width - 1)
+            dest_y = jnp.clip(raw_dest_y, 0, self.height - 1)
 
             # Check if destination can receive item
             dest_static = grid[dest_y, dest_x, 0]
             dest_item = grid[dest_y, dest_x, 1]
             dest_can_receive = (
-                ((dest_static == StaticObject.WALL) |
-                 (dest_static == StaticObject.ITEM_CONVEYOR) |
-                 (dest_static == StaticObject.PLAYER_CONVEYOR) |
-                 (dest_static == StaticObject.GOAL))
+                dest_in_bounds
+                & (
+                    (dest_static == StaticObject.WALL)
+                    | (dest_static == StaticObject.ITEM_CONVEYOR)
+                    | (dest_static == StaticObject.PLAYER_CONVEYOR)
+                    | (dest_static == StaticObject.GOAL)
+                )
                 & (dest_item == 0)
             )
 
             should_move = is_active & has_item & dest_can_receive
+            should_disappear = is_active & has_item & ~dest_in_bounds
 
             # Move item
             new_grid = jax.lax.select(
-                should_move,
-                grid.at[y, x, 1].set(0).at[dest_y, dest_x, 1].set(current_item),
-                grid
+                should_disappear,
+                grid.at[y, x, 1].set(0),
+                jax.lax.select(
+                    should_move,
+                    grid.at[y, x, 1].set(0).at[dest_y, dest_x, 1].set(current_item),
+                    grid,
+                )
             )
 
             return new_grid, None

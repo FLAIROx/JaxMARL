@@ -62,11 +62,11 @@ WBWXW
 
 # New layout with conveyor belts (example)
 conveyor_demo = """
-WWWPWWW
+WWPWWWW
 0A >  X
 W  v  W
 W  > AW
-WWWBWWW
+WWBWWWW
 """
 
 # Player conveyor demo
@@ -81,7 +81,7 @@ WWWBWWW
 # Player conveyor loop - 2x2 clockwise loop for testing
 # ] pushes right, } pushes down, [ pushes left, { pushes up
 player_conveyor_loop = """
-WWWWW
+WWPBW
 W]}AW
 W{[0W
 WWXWW
@@ -91,48 +91,48 @@ race_against_the_clock = """
 XWWWWWWWWWW 2
             1
  WWWWWWWWWW 0
-AW        WWW
+AB        WWW
 PW          W
-AW        WWW
+AB        WWW
  WWWWWWWWWW 0
             1
 XWWWWWWWWWW 2
 """
 
 maze_conveyor_hell  = """
-01 W   W   v
-A  W W W  Wv
-vW W W W  Wv
+01 W   W WWW
+A  W W W  WW
+vW W W W  WW
 vW   W    Wv
 vWWWWWWWW Wv
 vW>>>>>>> Wv
 vW WWWWWWPWv
 A       WXW 
-B
+B          W
 """
 
 coordinated_temporal_conveyor = """
 >>>>>>vW   X
       vW  A 
      WvW    
-     Wv    B
+     Wv   PB
   A  WvWWWWW
-01   Wv>>>>>
+01    v>>>>W
 """
 
 general_conveyor_level_1 = """
 012    P
-       W
+ A     W
        W
 ]]]]]]]]
 [[[[[[[[
        W
-       W
+      AW
 BX     P
 """
 
 general_conveyor_level_2 = """
-W W   1
+W W   1WWWW
 0  WW WW  P
 2A  ]]]   P
  A  W W    
@@ -140,7 +140,7 @@ W W   1
     [[[   B
    WW WW  B
    XW W    
-   XW W
+   XW WWWWW
 """
 
 general_conveyor_level_3 = """
@@ -384,6 +384,147 @@ class Layout:
         return is_valid, all_messages
 
     @staticmethod
+    def _is_agent_walkable_tile(obj) -> bool:
+        return obj in (StaticObject.EMPTY, StaticObject.PLAYER_CONVEYOR)
+
+    def _has_adjacent_walkable_tile(self, y: int, x: int) -> bool:
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            adj_y = y + dy
+            adj_x = x + dx
+            if not (0 <= adj_y < self.height and 0 <= adj_x < self.width):
+                continue
+            if self._is_agent_walkable_tile(self.static_objects[adj_y, adj_x]):
+                return True
+        return False
+
+    def _has_interactable_object(self, target_obj) -> bool:
+        for y in range(self.height):
+            for x in range(self.width):
+                if (
+                    self.static_objects[y, x] == target_obj
+                    and self._has_adjacent_walkable_tile(y, x)
+                ):
+                    return True
+        return False
+
+    def _has_interactable_ingredient(self, ingredient_idx: int) -> bool:
+        target_obj = StaticObject.INGREDIENT_PILE_BASE + ingredient_idx
+        return self._has_interactable_object(target_obj)
+
+    def validate_playable(
+        self,
+        enforce_same_ingredient_recipes: bool = True,
+    ) -> Tuple[bool, List[str]]:
+        """Validate that the layout can support a soup-delivery episode.
+
+        This is stricter than validate(): missing pots/plates and impossible
+        recipes are fatal for training, even if they can be useful in demos.
+        """
+        errors = []
+        is_valid, base_messages = self.validate()
+        if not is_valid:
+            errors.extend(base_messages)
+
+        info = self.get_info()
+        ingredient_piles = set(info["num_ingredient_piles"].keys())
+
+        if info["num_agents"] < 1:
+            errors.append("Layout needs at least one agent")
+        if len(set(self.agent_positions)) != len(self.agent_positions):
+            errors.append(
+                f"Agent starting positions must be unique: {self.agent_positions}"
+            )
+        for agent_x, agent_y in self.agent_positions:
+            if not (0 <= agent_y < self.height and 0 <= agent_x < self.width):
+                errors.append(
+                    f"Agent start {(agent_x, agent_y)} is outside layout bounds"
+                )
+            elif not self._is_agent_walkable_tile(self.static_objects[agent_y, agent_x]):
+                errors.append(
+                    f"Agent start {(agent_x, agent_y)} is not on a walkable tile"
+                )
+
+        if info["num_pots"] < 1:
+            errors.append("Layout needs at least one pot")
+        elif not self._has_interactable_object(StaticObject.POT):
+            errors.append("Layout needs at least one pot adjacent to a walkable tile")
+
+        if info["num_plate_piles"] < 1:
+            errors.append("Layout needs at least one plate pile")
+        elif not self._has_interactable_object(StaticObject.PLATE_PILE):
+            errors.append("Layout needs at least one plate pile adjacent to a walkable tile")
+
+        if info["num_goals"] < 1:
+            errors.append("Layout needs at least one delivery zone")
+        elif not self._has_interactable_object(StaticObject.GOAL):
+            errors.append("Layout needs at least one delivery zone adjacent to a walkable tile")
+
+        if not ingredient_piles:
+            errors.append("Layout needs at least one ingredient pile")
+
+        if not self.possible_recipes:
+            errors.append("Layout needs at least one possible recipe")
+        else:
+            for recipe in self.possible_recipes:
+                if not isinstance(recipe, list) or len(recipe) != 3:
+                    continue
+
+                missing = sorted(set(recipe) - ingredient_piles)
+                if missing:
+                    errors.append(
+                        f"Recipe {recipe} requires missing ingredient piles: {missing}"
+                    )
+
+                blocked_ingredients = [
+                    ingredient_idx
+                    for ingredient_idx in sorted(set(recipe))
+                    if ingredient_idx in ingredient_piles
+                    and not self._has_interactable_ingredient(ingredient_idx)
+                ]
+                if blocked_ingredients:
+                    errors.append(
+                        f"Recipe {recipe} requires boxed-in ingredient piles: {blocked_ingredients}"
+                    )
+
+                if enforce_same_ingredient_recipes and len(set(recipe)) != 1:
+                    errors.append(
+                        f"Recipe {recipe} is mixed, but current pot logic only supports same-ingredient soups"
+                    )
+
+        item_conveyor_destinations = {}
+        direction_to_delta = {
+            Direction.UP: (-1, 0),
+            Direction.DOWN: (1, 0),
+            Direction.RIGHT: (0, 1),
+            Direction.LEFT: (0, -1),
+        }
+
+        for y, x, direction in self.item_conveyor_info:
+            if self.static_objects[y, x] != StaticObject.ITEM_CONVEYOR:
+                errors.append(
+                    f"Item conveyor at {(y, x)} is not encoded as an item conveyor tile"
+                )
+                continue
+
+            dy, dx = direction_to_delta[Direction(direction)]
+            dest = (y + dy, x + dx)
+            item_conveyor_destinations.setdefault(dest, []).append((y, x))
+
+        for dest, sources in item_conveyor_destinations.items():
+            if len(sources) > 1:
+                errors.append(
+                    f"Multiple item conveyors target {dest}: {sources}"
+                )
+
+        for y, x, _ in self.player_conveyor_info:
+            if self.static_objects[y, x] != StaticObject.PLAYER_CONVEYOR:
+                errors.append(
+                    f"Player conveyor at {(y, x)} is not encoded as a player conveyor tile"
+                )
+
+        return len(errors) == 0, errors
+
+    @staticmethod
     def annotate_layout_string(layout_string: str) -> str:
         """Add annotations to a layout string explaining the symbols.
 
@@ -432,7 +573,9 @@ Layout:
         return [list(recipe) for recipe in unique_recipes]
 
     @staticmethod
-    def from_string(grid, possible_recipes=None, swap_agents=False):
+    def from_string(
+        grid, possible_recipes=None, swap_agents=False, strict_rectangular=True
+    ):
         """Parse a string representation of the layout.
 
         Symbols:
@@ -468,6 +611,11 @@ Layout:
             rows = rows[:-1]
 
         row_lens = [len(row) for row in rows]
+        if strict_rectangular and len(set(row_lens)) != 1:
+            raise ValueError(
+                f"Layout rows must be rectangular, got row lengths: {row_lens}"
+            )
+
         static_objects = np.zeros((len(rows), max(row_lens)), dtype=int)
 
         char_to_static_item = {
@@ -498,6 +646,12 @@ Layout:
             "{": Direction.UP,
             "}": Direction.DOWN,
         }
+        valid_chars = (
+            set(char_to_static_item)
+            | set(item_conveyor_chars)
+            | set(player_conveyor_chars)
+            | {"A", "O"}
+        )
 
         agent_positions = []
         item_conveyor_info = []
@@ -528,6 +682,10 @@ Layout:
                     direction = player_conveyor_chars[char]
                     player_conveyor_info.append((r, c, direction))
                 else:
+                    if char not in valid_chars:
+                        raise ValueError(
+                            f"Unknown layout character {char!r} at row {r}, col {c}"
+                        )
                     obj = char_to_static_item.get(char, StaticObject.EMPTY)
                     static_objects[r, c] = obj
 
@@ -589,7 +747,9 @@ overcooked_v3_layouts = {
     ),
 
     # V2-style layouts with recipe indicators
-    "cramped_room_v2": Layout.from_string(cramped_room_v2),
+    "cramped_room_v2": Layout.from_string(
+        cramped_room_v2, possible_recipes=[[0, 0, 0]]
+    ),
 
     # Demo layouts with conveyors
     "conveyor_demo": Layout.from_string(
