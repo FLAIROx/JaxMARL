@@ -21,12 +21,20 @@ class MABraxEnv(MultiAgentEnv):
         auto_reset: bool = True,
         homogenisation_method: Optional[Literal["max", "concat"]] = None,
         backend: str = "positional",
+        agent_obs_mapping: Dict | None = None,
+        agent_action_mapping: Dict | None = None,
         **kwargs
     ):
         """Multi-Agent Brax environment.
 
         Args:
-            env_name: Name of the environment to be used.
+            env_name: Name of the environment to be used. Expected to be of the format 
+                `<NAME>_<ID>`, where name corresponds to the underlying brax envirornment
+                name (e.g. `ant`) and the id corresponds to a specific multi-agent mapping 
+                (i.e. 4x2). See `mappings.py` for supported env names. 
+                
+                ID can be omitted if agent_obs_mapping and agent_action_mapping 
+                are provided, allowing for custom multi-agent configurations. 
             episode_length: Length of an episode. Defaults to 1000.
             action_repeat: How many repeated actions to take per environment
                 step. Defaults to 1.
@@ -41,6 +49,13 @@ class MABraxEnv(MultiAgentEnv):
                 observations and actions are homogenised by masking the dimensions of
                 the other agents with zeros in the full observation and action vectors.
                 Defaults to None.
+            agent_obs_mapping: Mapping from agent name to a list of indices 
+                specifying which elements of the global Brax observation vector 
+                are visible to that agent.
+            agent_action_mapping: Mapping from agent name to a list of indices 
+                specifying which joints (action dimensions) of the global Brax 
+                environment are controlled by that agent.
+
         """
         base_env_name = env_name.split("_")[0]
         env = envs.create(
@@ -51,8 +66,22 @@ class MABraxEnv(MultiAgentEnv):
         self.action_repeat = action_repeat
         self.auto_reset = auto_reset
         self.homogenisation_method = homogenisation_method
-        self.agent_obs_mapping = _agent_observation_mapping[env_name]
-        self.agent_action_mapping = _agent_action_mapping[env_name]
+
+        if agent_action_mapping is None:
+            if env_name not in _agent_action_mapping:
+                raise ValueError(f"No action mapping defined for {env_name}. "
+                                    "Provide agent_action_mapping instead.")
+            agent_action_mapping = _agent_action_mapping[env_name]
+        
+        if agent_obs_mapping is None:
+            if env_name not in _agent_observation_mapping:
+                raise ValueError(f"No observation mapping defined for {env_name}. "
+                                    "Provide agent_obs_mapping instead.")
+            agent_obs_mapping =  _agent_observation_mapping[env_name]
+
+        self.agent_obs_mapping = agent_obs_mapping
+        self.agent_action_mapping = agent_action_mapping
+
         self.agents = list(self.agent_obs_mapping.keys())
 
         self.num_agents = len(self.agent_obs_mapping)

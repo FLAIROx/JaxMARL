@@ -500,8 +500,8 @@ class OvercookedV2(MultiAgentEnv):
     def _get_obs_shape(self) -> Tuple[int]:
         if self.agent_view_size:
             view_size = self.agent_view_size * 2 + 1
-            view_width = min(self.width, view_size)
-            view_height = min(self.height, view_size)
+            view_width = view_size
+            view_height = view_size
         else:
             view_width = self.width
             view_height = self.height
@@ -510,7 +510,8 @@ class OvercookedV2(MultiAgentEnv):
             match obs_type:
                 case ObservationType.DEFAULT:
                     num_ingredients = self.layout.num_ingredients
-                    num_layers = 18 + 4 * (num_ingredients + 2)
+                    #17(Invariable objects[5 position and directions for each agents, wall, goal, pot, plate pile, recipe indicator, button, pot timer] + 4*(num_ingredients+2) objects[Inventory for each agents, recipe, grid] + N(ingredient pile))
+                    num_layers = 17 + num_ingredients + 4 * (num_ingredients + 2)
 
                     if self.indicate_successful_delivery:
                         num_layers += 1

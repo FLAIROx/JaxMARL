@@ -4,6 +4,7 @@ import numpy as np
 import jax
 from jax import numpy as jnp
 from jaxmarl import make
+from jaxmarl.environments.hanabi.hanabi import HanabiEnv
 
 env = make("hanabi")
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -81,6 +82,74 @@ def get_injected_score(deck, actions):
 
     cum_rewards = first_episode_returns(rewards["__all__"], dones["__all__"])
     return cum_rewards
+
+
+def make_single_life_env():
+    return HanabiEnv(
+        num_agents=2,
+        num_colors=5,
+        num_ranks=5,
+        hand_size=5,
+        max_info_tokens=8,
+        max_life_tokens=1,
+    )
+
+
+def single_life_loss_deck():
+    # Player 0 starts with a rank-1 card in slot 0 while fireworks are empty, so play-0 is invalid.
+    deck = np.zeros((50, 2), dtype=int)
+    deck[:, 0] = 0
+    deck[:, 1] = 0
+    deck[0] = np.array([0, 1])
+    return jnp.array(deck)
+
+
+def single_life_actions(env):
+    return {
+        "agent_0": env.hand_size,  # play card at slot 0
+        "agent_1": env.num_moves - 1,  # noop for the non-acting player
+    }
+
+
+def test_step_game_terminates_immediately_when_last_life_is_lost():
+    env = make_single_life_env()
+    state = env.reset_game_from_deck_of_pairs(single_life_loss_deck())
+
+    next_state, _ = env.step_game(state, aidx=0, action=env.hand_size)
+
+    assert bool(next_state.out_of_lives)
+    assert bool(next_state.terminal)
+    assert int(jnp.sum(next_state.life_tokens)) == 0
+
+
+def test_step_env_reports_done_on_losing_final_life():
+    env = make_single_life_env()
+    _, state = env.reset_from_deck_of_pairs(single_life_loss_deck())
+
+    _, next_state, rewards, dones, info = env.step_env(
+        jax.random.PRNGKey(0), state, single_life_actions(env)
+    )
+
+    assert bool(next_state.terminal)
+    assert bool(dones["agent_0"])
+    assert bool(dones["agent_1"])
+    assert bool(dones["__all__"])
+    assert rewards["__all__"] == rewards["agent_0"] == rewards["agent_1"]
+    assert info == {}
+
+
+def test_step_autoresets_after_final_life_loss():
+    env = make_single_life_env()
+    _, state = env.reset_from_deck_of_pairs(single_life_loss_deck())
+
+    _, next_state, _, dones, _ = env.step(
+        jax.random.PRNGKey(0), state, single_life_actions(env)
+    )
+
+    assert bool(dones["__all__"])
+    assert not bool(next_state.terminal)
+    assert not bool(next_state.out_of_lives)
+    assert int(jnp.sum(next_state.life_tokens)) == env.max_life_tokens
 
 
 def test_injected_decks():

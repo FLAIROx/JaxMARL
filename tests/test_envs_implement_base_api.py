@@ -13,7 +13,7 @@ from jaxmarl.environments import MultiAgentEnv
 from jaxmarl.environments.spaces import Space
 # Import the specific environment to test. Replace 'MyEnv' with your environment's class.
 
-from jaxmarl.registration import make
+from jaxmarl.registration import make, SUBMODULE_ENVIRONMENTS
 
 envs_to_test = [
     "MPE_simple_v3",
@@ -45,6 +45,11 @@ envs_to_test = [
     "overcooked_v2",
     "coin_game",
     "jaxnav",
+]
+
+submodule_envs = [
+    "JaxRobotarium_navigation",
+    "JaxRobotarium_discovery",
 ]
 
 # A pytest fixture to instantiate the environment.
@@ -131,11 +136,26 @@ def test_envs(env_id):
     test_reset_returns_valid_observation(env)
     test_step_returns_correct_format(env)
 
+@pytest.mark.parametrize("env_id", submodule_envs)
+def test_submodule_envs(env_id):
+    env = make(env_id, **{"num_agents": 2})
+    test_observation_space_definition(env)
+    test_action_space_definition(env)
+    test_reset_returns_valid_observation(env)
+    test_step_returns_correct_format(env)
+
 if __name__ == "__main__":
     for env_id in envs_to_test:
         env_instance = make(env_id)
         print(f"Testing environment: {env_id}")
         test_inherits_base_env(env_instance)
+        test_observation_space_definition(env_instance)
+        test_action_space_definition(env_instance)
+        test_reset_returns_valid_observation(env_instance)
+        test_step_returns_correct_format(env_instance)
+    for env_id in submodule_envs:
+        env_instance = make(env_id, **{"num_agents": 2})
+        print(f"Testing submodule environment: {env_id}")
         test_observation_space_definition(env_instance)
         test_action_space_definition(env_instance)
         test_reset_returns_valid_observation(env_instance)

@@ -424,7 +424,7 @@ class HanabiGame(MultiAgentEnv):
         last_round_count = state.last_round_count + deck_empty
         last_round_done = last_round_count == self.num_agents + 1
         terminal = jnp.logical_or(
-            jnp.logical_or(state.out_of_lives, game_won), last_round_done
+            jnp.logical_or(out_of_lives, game_won), last_round_done
         )
 
         # define reward as difference in fireworks

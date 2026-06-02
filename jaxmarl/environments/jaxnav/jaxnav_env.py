@@ -201,7 +201,7 @@ class JaxNav(MultiAgentEnv):
     
     @partial(jax.jit, static_argnums=[0])  
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
-        """ Reset environment. Returns initial agent observations, states and the enviornment state """
+        """ Reset environment. Returns initial agent observations, states and the environment state """
         
         state = self.sample_test_case(key)
         obs = self._get_obs(state)

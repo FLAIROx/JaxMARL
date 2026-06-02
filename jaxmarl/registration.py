@@ -30,8 +30,21 @@ from .environments import (
     CoinGame,
     JaxNav,
     UTracking,
+    SUBMODULE_ENVIRONMENTS
 )
 
+# Handle submoduled environments
+if SUBMODULE_ENVIRONMENTS:
+    from .environments import (
+        Navigation,
+        Discovery,
+        MaterialTransport,
+        Warehouse,
+        ArcticTransport,
+        Foraging,
+        RWARE,
+        PredatorPrey
+    )
 
 
 def make(env_id: str, **env_kwargs):
@@ -122,6 +135,25 @@ def make(env_id: str, **env_kwargs):
     elif env_id == 'utracking':
         env = UTracking(**env_kwargs)
         
+    if SUBMODULE_ENVIRONMENTS:
+        # 10. JaxRobotarium Environments
+        if env_id == "JaxRobotarium_navigation":
+            env = Navigation(**env_kwargs)
+        elif env_id == "JaxRobotarium_discovery":
+            env = Discovery(**env_kwargs)
+        elif env_id == "JaxRobotarium_material_transport":
+            env = MaterialTransport(**env_kwargs)
+        elif env_id == "JaxRobotarium_warehouse":
+            env = Warehouse(**env_kwargs)
+        elif env_id == "JaxRobotarium_ arctic_transport":
+            env = ArcticTransport(**env_kwargs)
+        elif env_id == "JaxRobotarium_foraging":
+            env = Foraging(**env_kwargs)
+        elif env_id == "JaxRobotarium_rware":
+            env = RWARE(**env_kwargs)
+        elif env_id == "JaxRobotarium_predator_prey":
+            env = PredatorPrey(**env_kwargs)
+
     return env
 
 registered_envs = [
@@ -156,4 +188,12 @@ registered_envs = [
     "coin_game",
     "jaxnav",
     "utracking",
+    "JaxRobotarium_navigation",
+    "JaxRobotarium_discovery",
+    "JaxRobotarium_material_transport",
+    "JaxRobotarium_warehouse",
+    "JaxRobotarium_arctic_transport",
+    "JaxRobotarium_foraging",
+    "JaxRobotarium_rware",
+    "JaxRobotarium_predator_prey"
 ]

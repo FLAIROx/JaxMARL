@@ -25,3 +25,12 @@ from .coin_game import CoinGame
 from .jaxnav import JaxNav
 from .utracking import UTracking
 
+# Submoduled environments
+try:
+    print("Importing submoduled environments...")
+    from jaxrobotarium import Navigation, Discovery, MaterialTransport, Warehouse, ArcticTransport, Foraging, RWARE, PredatorPrey
+    SUBMODULE_ENVIRONMENTS = True
+    print("Submoduled environments imported successfully.")
+except ImportError:
+    print("Submoduled environments not found. Skipping import.")
+    SUBMODULE_ENVIRONMENTS = False
