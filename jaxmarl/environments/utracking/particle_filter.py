@@ -169,7 +169,15 @@ class ParticleFilter:
         )  # don't use the masks (num_particles, num_observers)
         weights = probs.prod(axis=1)  # (num_particles,)
 
-        return state.replace(weights=weights)
+        state = state.replace(weights=weights)
+        if True:
+            state = jax.lax.cond(
+                jnp.any(mask),
+                lambda _: state.replace(weights=weights),
+                lambda _: state,
+                operand=None,
+            )
+        return state
 
     @partial(jax.jit, static_argnums=0)
     def resample(self, key, state):
@@ -193,7 +201,7 @@ class ParticleFilter:
         indexes = jnp.searchsorted(cumulative_sum, positions, side="right")
 
         # Gather resampled particles based on the computed indexes
-        resampled_particles = jax.tree_map(lambda x: x[indexes], state.particles)
+        resampled_particles = jax.tree_util.tree_map (lambda x: x[indexes], state.particles)
 
         return ParticlesState(particles=resampled_particles, weights=state.weights)
 
@@ -231,7 +239,7 @@ class ParticleFilter:
         Estimates the position of the observer based on the particles.
         - state: ParticlesState
         """
-        p = jax.tree_map(
+        p = jax.tree_util.tree_map (
             lambda x: (x * state.weights).sum() / state.weights.sum(), state.particles
         )
         p = p.replace(theta=jnp.arctan2(p.vel_y, p.vel_x))
