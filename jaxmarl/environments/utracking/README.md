@@ -14,12 +14,12 @@ Learn decentralized policies that allow multiple agents to:
 - Maintain acoustic contact despite noise, delays, and communication loss
 - Avoid collisions while covering all targets
 
-### Key Features (why Utracking is difficult)
-- Partial observability: information acquired by agents is based on intermittent and noisy acoustic communications.
--	Coordination: successful tracking in challenging settings requires near-perfect coordination among agents.
--	Stochastic dynamics: agents’ trajectories are influenced by stochastic sea dynamics.
--	Approximate information: estimates of target positions are obtained through noisy Particle Filters (PF).
--	Long-horizon missions: tasks span hours of simulated time, requiring robust long-term decision making.
+### Wht Utracking is difficult
+- **Partial observability**: information acquired by agents is based on intermittent and noisy acoustic communications.
+-	**Coordination**: successful tracking in challenging settings requires near-perfect coordination among agents.
+-	**Stochastic dynamics**: agents’ trajectories are influenced by stochastic sea dynamics.
+-	**Approximate information**: estimates of target positions are obtained through noisy Particle Filters (PF).
+-	**Long-horizon missions**: tasks span hours of simulated time, requiring robust long-term decision making.
 
 
 ## RL Environment Specification
@@ -72,7 +72,7 @@ Notice that the observations and world_state will be returned as a matrix or fla
 
 Agents control only the rudder only of the AUVs (the velocity is fixed). This means that actions correspond to changes in the heading of the vehicles. The relationship between rudder change and heading change are defined by linear models which coefficents can be found at [jaxmarl/environments/utracking/traj_models/traj_linear_models.json](traj_models/traj_linear_models.json)
 
-- **Discrete (default)**: 5 rudder commands `[-0.24, -0.12, 0, 0.12, 24]`
+- **Discrete (default)**: 5 rudder commands `[-0.24, -0.12, 0, 0.12, 0.24]`
 
 - **Continuous (optional)**: continuous rudder angle in `[-0.24, 0.24]`
 
@@ -135,16 +135,13 @@ The tracking error for each landmark is computed using the **best prediction** a
 - Encourages safe navigation and collision avoidance
 
 **Lost Agent Penalty** (`penalty_for_lost_agent=False` by default):
-- **Terminates** the episode if any agent loses contact with all landmarks (distance > `max_range_dist`)
-- When enabled, creates a stricter requirement for maintaining connectivity
+- Sets the reward to **0.0** for any step in which an agent has lost contact with all landmarks (closest landmark distance > `max_range_dist`)
+- When enabled, creates a stricter incentive for maintaining connectivity (does not terminate the episode)
 
 
 ### Termination Conditions
 
-An episode terminates when:
-- Maximum number of steps (`max_steps`) is reached
-- (Optional) An agent permanently loses all landmarks
-- (Optional) Safety violation occurs (e.g., collision)
+An episode terminates only when the maximum number of steps (`max_steps`) is reached. Crashes and lost-agent events are handled through the reward (penalties / zeroed reward) rather than early termination, so all episodes have a fixed horizon.
 
 ---
 
@@ -160,10 +157,9 @@ Core parameters defining the mission structure and duration:
 |-----------|------|---------|-------------|
 | `num_agents` | int | 2 | Number of AUVs in the fleet |
 | `num_landmarks` | int | 2 | Number of underwater targets to track |
-| `dt` | int | 30 | Simulation timestep in seconds (must be in {30, 60, 120}) |
+| `dt` | int | 30 | Simulation timestep in seconds (must be in {20, 30, 60}) |
 | `max_steps` | int | 256 | Maximum episode length in timesteps |
 | `discrete_actions` | bool | True | Use discrete action space (5 rudder angles) vs continuous |
-| `actions_as_angles` | bool | False | Interpret actions as heading angles rather than rudder changes |
 
 ### Difficulty Presets
 
@@ -173,12 +169,14 @@ The `difficulty` parameter provides preset configurations for different challeng
 |-----------|------|---------|-------------|
 | `difficulty` | str | "medium" | Preset difficulty: `"manual"`, `"easy"`, `"medium"`, `"hard"`, `"expert"` |
 
-**Difficulty presets automatically configure**:
-- **easy**: Slower landmarks (`landmark_rel_speed=[0.1, 0.3]`), smaller turning angles (`rudder_range_landmark=[0.10, 0.15]`)
-- **medium**: Moderate landmark speed (`[0.1, 0.5]`) and maneuverability (`[0.10, 0.25]`)
-- **hard**: Faster landmarks (`[0.3, 0.7]`) and more aggressive turns (`[0.15, 0.30]`)
-- **expert**: Very fast targets (`[0.5, 1.0]`) with sharp maneuvers (`[0.20, 0.35]`)
+**Difficulty presets automatically configure** `landmark_rel_speed` (landmark speed as a fraction of agent speed) and `dirchange_time_range_landmark` (how many timesteps landmarks keep a heading before turning). Lower direction-change times mean more frequent, less predictable maneuvers:
+- **easy**: Slow landmarks (`landmark_rel_speed=[0.1, 0.35]`), infrequent turns (`dirchange_time_range_landmark=[50, 200]`)
+- **medium**: Moderate speed (`[0.2, 0.5]`) and turn frequency (`[35, 100]`)
+- **hard**: Fast landmarks (`[0.5, 0.7]`) turning more often (`[10, 50]`)
+- **expert**: Very fast targets (`[0.83, 0.86]`) with frequent, sharp maneuvers (`[5, 15]`)
 - **manual**: Use individually specified parameters (ignores preset)
+
+Note: presets do **not** modify `rudder_range_landmark` — the turn sharpness is taken from the explicitly provided value (default `[0.10, 0.25]`).
 
 ### Agent & Target Dynamics
 
@@ -200,7 +198,8 @@ Parameters modeling the underwater acoustic environment:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `max_range_dist` | float | 1500.0 | Maximum range for acoustic sensing (meters) |
+| `max_range_dist` | float | 1500.0 | Maximum range for acoustic sensing (meters); beyond this no landmark range is received |
+| `max_range_for_prediction` | float | 600.0 | Ranges above this distance are considered unreliable and masked out of the tracking/prediction update |
 | `max_comm_dist` | float | 1500.0 | Maximum range for agent-to-agent communication (meters) |
 | `range_noise_std` | float | 10.0 | Standard deviation of Gaussian noise on range measurements (meters) |
 | `agent_obs_noise_std` | float | 5.0 | Standard deviation of noise on communicated agent positions (meters) |
@@ -217,7 +216,7 @@ Parameters for the landmark position estimation subsystem:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `tracking_method` | str | "pf" | Method for estimating landmark positions: `"ls"` (Least Squares) or `"pf"` (Particle Filter) |
-| `tracking_buffer_len` | int | 32 | Number of historical range observations stored for LS method |
+| `tracking_buffer_len` | int | 32 | Number of historical range observations stored for the LS method (ignored by PF, where it is internally set to `num_agents` and used only to hold the current step's inter-agent communication) |
 | `min_steps_ls` | int | 2 | Minimum observations required before LS predictions start |
 | `pf_num_particles` | int | 5000 | Number of particles used by the Particle Filter |
 
@@ -299,15 +298,31 @@ Parameters controlling how information is represented:
 - Use `tracking_method="pf"` with realistic noise levels
 - Set `range_noise_std=10-20`, `lost_comm_prob=0.1-0.2`
 - Enable velocity and trajectory noise for robustness
-- Consider `steps_for_new_range=2` to model realistic acoustic delays
+- Consider `steps_for_new_range=4` to model realistic acoustic delays
 
 ### For Multi-Agent Coordination Research
-- Increase `num_agents` and `num_landmarks` (e.g., 4v4, 6v6)
-- Use `rew_tracking_coeff > 0` to require precision, not just coverage
-- Enable `penalty_for_lost_agent=True` for connectivity constraints
-- Experiment with `max_comm_dist < max_range_dist` to create comm challenges
+- Increase `num_agents` and `num_landmarks` (e.g., 3v3, 5v5)
+- Try to learn an optimal policy minimizing crashing and agents lost
 
 
+
+## Current Limitations
+
+UTracking implements **communication delays** through `steps_for_new_range` and `steps_for_agent_communication`, but in such a way that environment remains **fully synchronous**. These parameters are simplifications meant to approximate the kind of delays present in real acoustic systems.
+
+**How the two delay parameters work**
+- `steps_for_new_range` controls how often agents obtain a **new landmark range**. Between updates, the cached ranges and the frozen tracking predictions are reused; a new range is only computed every `steps_for_new_range` steps.
+- `steps_for_agent_communication` controls how often agents refresh their **observation of other agents' positions**. Between updates, the last successfully communicated position is reused.
+
+**What is simplified / assumed**
+- **Fixed, not time-varying delays.** Both intervals are constant for the whole episode. In real deployments the effective delay varies during a mission (range-dependent acoustic travel time, congestion, packet loss bursts, etc.); this variability is not modeled.
+- **No intra-signal lag for ranges.** When a new range arrives every `steps_for_new_range` steps (e.g. every 200 s), it is treated as a measurement taken *exactly* at the end of that interval, against the landmark's current position. There is no lag between when the acoustic signal was emitted and when it is consumed. 
+- **Ranges are shared immediately.** Every time a new range is received it is **instantly broadcast to all other agents** (subject to the usual `lost_comm_prob` / `max_comm_dist` dropouts), regardless of `steps_for_agent_communication`. That parameter delays *only* the exchange of agent positions, not the sharing of landmark ranges.
+- **No intra-signal lag for agent positions either.** As with ranges, a communicated agent position is assumed to be measured precisely at the end of the `steps_for_agent_communication` interval, even though a real delayed message would carry a stale position from when it was actually sent.
+
+In short, even though some basic communication delays are present, the environment is **synchronous**: all quantities are computed from the agents' and landmarks' current positions, and "delayed" information is simply a fresh measurement made less frequently rather than a genuinely time-lagged one. 
+
+**Next step:** a more robust **asynchronous** environment with **time-aware observation vectors** (observations tagged with the time at which each piece of information was actually acquired), so that policies can reason explicitly about the age of each range and communicated position.
 
 ## Connection with PyLrauv (Gazebo Evaluation)
 

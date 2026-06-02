@@ -984,7 +984,8 @@ class UTracking(MultiAgentEnv):
             / self.num_agents,
             "tracking_error_mean": pred_2d_err.mean(keepdims=True),
             "land_dist_mean": min_land_dist.mean(keepdims=True),
-            "crash": (agent_dist < self.min_valid_distance).any(keepdims=True),
+            "unsafe_distance": (agent_dist < self.min_valid_distance).any(keepdims=True),
+            "crash": (agent_dist < 5.0).any(keepdims=True),
             "normalized_reward": cum_rew + rew / self.max_steps,
             "successful_step_threshold": successful_step_threshold,
             "successful_step": successful_step,
@@ -1226,12 +1227,12 @@ class UTracking(MultiAgentEnv):
         mask = jnp.logical_and(mask, z <= self.max_range_for_prediction)  # also consider as drop the ranges that are above max range distance
 
         rng_ = jax.random.split(rng, (self.num_agents, self.num_landmarks))
-        # pf_state, pred_xy = jax.vmap(jax.vmap(partial(self.pf.step_and_predict, dt=self.steps_for_new_range*self.dt)))(
-        #     rng_, pf_state, pos_xy, z, mask
-        # )
-        pf_state, pred_xy = jax.vmap(jax.vmap(partial(self.pf.step_and_predict, dt=self.dt)))(
+        pf_state, pred_xy = jax.vmap(jax.vmap(partial(self.pf.step_and_predict, dt=self.steps_for_new_range*self.dt)))(
             rng_, pf_state, pos_xy, z, mask
         )
+        # pf_state, pred_xy = jax.vmap(jax.vmap(partial(self.pf.step_and_predict, dt=self.dt)))(
+        #     rng_, pf_state, pos_xy, z, mask
+        # )
         pred_z = self.estimate_depth(pred_xy, pos, ranges)
 
         return pf_state, jnp.concatenate((pred_xy, pred_z[..., np.newaxis]), axis=-1)
