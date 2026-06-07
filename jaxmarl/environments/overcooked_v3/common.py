@@ -29,6 +29,11 @@ class StaticObject(IntEnum):
     ITEM_CONVEYOR = 20
     PLAYER_CONVEYOR = 21
 
+    # Moving walls and buttons
+    MOVING_WALL = 22
+    BUTTON = 23
+    BARRIER = 24
+
     @staticmethod
     def is_ingredient_pile(obj):
         return (obj >= StaticObject.INGREDIENT_PILE_BASE) & (obj < StaticObject.ITEM_CONVEYOR)
@@ -41,6 +46,18 @@ class StaticObject(IntEnum):
     @staticmethod
     def ingredient_pile(idx):
         return StaticObject.INGREDIENT_PILE_BASE + idx
+
+
+class ButtonAction(IntEnum):
+    """Actions a button can trigger on its linked moving wall or barrier."""
+    TOGGLE_PAUSE = 0       # Pause/unpause the wall's movement
+    TOGGLE_DIRECTION = 1   # Reverse the wall's direction
+    TOGGLE_BOUNCE = 2      # Toggle bounce mode on/off
+    TRIGGER_MOVE = 3       # Move the wall one step (wall is paused by default)
+    
+    # Barrier actions (button target indexes refer to barriers instead of moving walls)
+    TOGGLE_BARRIER = 4     # Toggle barrier active state
+    TIMED_BARRIER = 5      # Deactivate barrier temporarily (auto-reactivates)
 
 
 class DynamicObject(IntEnum):

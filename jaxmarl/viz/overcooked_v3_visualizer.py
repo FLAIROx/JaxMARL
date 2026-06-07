@@ -13,8 +13,8 @@ except ImportError:
 
 from jaxmarl.viz.window import Window
 import jaxmarl.viz.grid_rendering_v2 as rendering
-from jaxmarl.environments.overcooked_v3.common import StaticObject, DynamicObject
-from jaxmarl.environments.overcooked_v3.settings import POT_COOK_TIME, POT_BURN_TIME
+from jaxmarl.environments.overcooked_v3.common import StaticObject, DynamicObject, Direction
+from jaxmarl.environments.overcooked_v3.settings import POT_COOK_TIME, POT_BURN_TIME, DEFAULT_BARRIER_DURATION
 
 TILE_PIXELS = 32
 
@@ -130,6 +130,10 @@ class OvercookedV3Visualizer:
         pot_timers = state.pot_cooking_timer
         pot_positions = state.pot_positions
         pot_active_mask = state.pot_active_mask
+        barrier_positions = state.barrier_positions
+        barrier_active = state.barrier_active
+        barrier_timer = state.barrier_timer
+        barrier_active_mask = state.barrier_active_mask
 
         num_agents = agents.dir.shape[0]
 
@@ -164,6 +168,39 @@ class OvercookedV3Visualizer:
 
         grid, _ = jax.lax.scan(
             _update_pot_timer_in_grid, grid, jnp.arange(pot_positions.shape[0])
+        )
+
+        # Update barrier info in grid for rendering
+        def _update_barrier_in_grid(grid, barrier_idx):
+            is_valid = barrier_active_mask[barrier_idx]
+            
+            def _update_barrier(grid):
+                barrier_y = barrier_positions[barrier_idx, 0]
+                barrier_x = barrier_positions[barrier_idx, 1]
+                
+                # Only update if static object is actually a barrier (not occupied by agent)
+                current_static = grid[barrier_y, barrier_x, 0]
+                is_barrier = current_static == StaticObject.BARRIER
+                
+                active = barrier_active[barrier_idx]
+                timer = barrier_timer[barrier_idx]
+                
+                # Encode barrier state in channel 2: [active (1 bit), timer_value (31 bits)]
+                barrier_state = jnp.where(active, 1, 0) | (timer << 1)
+                
+                # Only update if this is actually a barrier (not an agent standing on it)
+                new_grid = jax.lax.select(
+                    is_barrier,
+                    grid.at[barrier_y, barrier_x, 2].set(barrier_state),
+                    grid
+                )
+                return new_grid
+            
+            new_grid = jax.lax.select(is_valid, _update_barrier(grid), grid)
+            return new_grid, None
+
+        grid, _ = jax.lax.scan(
+            _update_barrier_in_grid, grid, jnp.arange(barrier_active_mask.shape[0])
         )
 
         static_objects = grid[:, :, 0]
@@ -432,9 +469,130 @@ class OvercookedV3Visualizer:
 
             return img
 
+        def _render_moving_wall(cell, img):
+            """Render moving wall - red block."""
+            img = rendering.fill_coords(
+                img, rendering.point_in_rect(0, 1, 0, 1), COLORS["red"]
+            )
+            # Render any item sitting on the wall
+            img = OvercookedV3Visualizer._render_dynamic_item(cell[1], img)
+            return img
+
+        def _render_button(cell, img):
+            """Render button - grey block with red circle."""
+            img = rendering.fill_coords(
+                img, rendering.point_in_rect(0, 1, 0, 1), COLORS["grey"]
+            )
+            # Outer red circle
+            img = rendering.fill_coords(
+                img, rendering.point_in_circle(0.5, 0.5, 0.35), COLORS["red"]
+            )
+            # Inner lighter circle
+            img = rendering.fill_coords(
+                img, rendering.point_in_circle(0.5, 0.5, 0.2),
+                jnp.array([255, 100, 100], dtype=jnp.uint8),
+            )
+            return img
+
+        def _render_barrier(cell, img):
+            """Render barrier with active/inactive indicators and progress bar.
+            
+            - Red cross on tiles to indicate barrier is ACTIVE
+            - Corner indicators for INACTIVE state
+            - Progress bar showing time until reactivation for timed barriers
+            """
+            barrier_state = cell[2]  # Barrier state stored in channel 2
+            is_active = barrier_state & 1
+            timer_value = barrier_state >> 1
+            
+            # Base background
+            img = rendering.fill_coords(
+                img, rendering.point_in_rect(0, 1, 0, 1), COLORS["black"]
+            )
+            
+            # Render center based on active/inactive state
+            # Active: red with white X
+            active_center = rendering.point_in_rect(0.1, 0.9, 0.1, 0.9)
+            img_active = rendering.fill_coords(img, active_center, COLORS["red"])
+            
+            # Draw white lines for X (two diagonal lines)
+            # Diagonal 1: top-left to bottom-right
+            img_x1 = rendering.fill_coords(
+                img_active,
+                rendering.point_in_rect(0.25, 0.75, 0.25, 0.35),
+                COLORS["white"]
+            )
+            # Diagonal 2: top-right to bottom-left  
+            img_x2 = rendering.fill_coords(
+                img_x1,
+                rendering.point_in_rect(0.25, 0.75, 0.65, 0.75),
+                COLORS["white"]
+            )
+            
+            # Inactive: light grey with corner dots
+            inactive_center = rendering.point_in_rect(0.1, 0.9, 0.1, 0.9)
+            img_inactive = rendering.fill_coords(img, inactive_center, COLORS["light_grey"])
+            
+            # Draw corner indicators (small circles)
+            corner_radius = 0.1
+            img_c1 = rendering.fill_coords(
+                img_inactive,
+                rendering.point_in_circle(0.2, 0.2, corner_radius),
+                COLORS["blue"]
+            )
+            img_c2 = rendering.fill_coords(
+                img_c1,
+                rendering.point_in_circle(0.8, 0.2, corner_radius),
+                COLORS["blue"]
+            )
+            img_c3 = rendering.fill_coords(
+                img_c2,
+                rendering.point_in_circle(0.2, 0.8, corner_radius),
+                COLORS["blue"]
+            )
+            img_c4 = rendering.fill_coords(
+                img_c3,
+                rendering.point_in_circle(0.8, 0.8, corner_radius),
+                COLORS["blue"]
+            )
+            
+            # Choose active or inactive version
+            img = jax.lax.select(is_active > 0, img_x2, img_c4)
+            
+            # Add progress bar if timer is active (not 0)
+            has_timer = timer_value > 0
+            
+            def _render_timer_bar_fn(img):
+                # Normalize timer to 0-1 range using DEFAULT_BARRIER_DURATION
+                max_timer = float(DEFAULT_BARRIER_DURATION)
+                progress = jnp.clip(timer_value / max_timer, 0.0, 1.0)
+                
+                # Progress bar at bottom showing remaining time
+                bar_height = 0.06
+                bar_top = 0.92
+                bar_left = 0.05
+                bar_width = 0.9 * progress
+                
+                progress_fn = rendering.point_in_rect(
+                    bar_left, bar_left + bar_width,
+                    bar_top - bar_height, bar_top
+                )
+                # Green for majority, yellow as warning
+                color = jax.lax.select(
+                    progress > 0.3,
+                    COLORS["green"],
+                    COLORS["yellow"]
+                )
+                return rendering.fill_coords(img, progress_fn, color)
+            
+            img = jax.lax.select(has_timer, _render_timer_bar_fn(img), img)
+            
+            return img
+
+
         # Build render function lookup
         # Map static object types to render functions
-        render_fns = [_render_empty] * 25  # Enough for all object types
+        render_fns = [_render_empty] * 26  # Enough for all object types (up to 25)
         render_fns[StaticObject.EMPTY] = _render_empty
         render_fns[StaticObject.WALL] = _render_wall
         render_fns[StaticObject.AGENT] = _render_agent
@@ -445,6 +603,9 @@ class OvercookedV3Visualizer:
         render_fns[StaticObject.PLATE_PILE] = _render_plate_pile
         render_fns[StaticObject.ITEM_CONVEYOR] = _render_item_conveyor
         render_fns[StaticObject.PLAYER_CONVEYOR] = _render_player_conveyor
+        render_fns[StaticObject.MOVING_WALL] = _render_moving_wall
+        render_fns[StaticObject.BUTTON] = _render_button
+        render_fns[StaticObject.BARRIER] = _render_barrier
 
         # Handle ingredient piles (10-19)
         is_ingredient_pile = (static_object >= StaticObject.INGREDIENT_PILE_BASE) & \
