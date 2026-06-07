@@ -242,6 +242,15 @@ W  # AW
 WWWBWWW
 """
 
+# Mixed button demo - one button controls a moving wall, the other controls a barrier
+moving_wall_barrier_button_demo = """
+WWWWWWWW
+W0A ! sW
+W P #  W
+W B XA!W
+WWWWWWWW
+"""
+
 
 @dataclass
 class Layout:
@@ -1097,6 +1106,15 @@ overcooked_v3_layouts = {
         possible_recipes=[[0, 0, 0]],
         barrier_config=[True, True],  # Barrier starts active
         button_config=[(0, ButtonAction.TIMED_BARRIER), (1, ButtonAction.TIMED_BARRIER)],  # Button controls barrier 0 with timed toggle
+    ),
+    "moving_wall_barrier_button_demo": Layout.from_string(
+        moving_wall_barrier_button_demo,
+        possible_recipes=[[0, 0, 0]],
+        barrier_config=[True],
+        button_config=[
+            (0, ButtonAction.TOGGLE_DIRECTION),
+            (0, ButtonAction.TOGGLE_BARRIER),
+        ],
     ),
     "middle_conveyor": Layout.from_string(
         middle_conveyor, possible_recipes=[[0, 0, 0]],
