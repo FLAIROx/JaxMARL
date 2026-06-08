@@ -37,7 +37,7 @@ dependencies = [
   "flax",
   "safetensors",
   "chex",
-  "brax>=0.10.3",   
+  "brax>=0.10.3",
   "matplotlib",
   "pillow",
   "jaxtyping>=0.2.28",
@@ -89,7 +89,7 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]   # pycodestyle errors, pyflakes, isort
-ignore = ["E501"]           # line length checked separately
+ignore = ["E501", "F722"]   # E501: line length; F722: jaxtyping scalar annotations ("") are valid but unparseable by ruff
 
 [tool.ruff.lint.per-file-ignores]
 "baselines/**" = ["E402"]  # baselines use top-level sys.path manipulation

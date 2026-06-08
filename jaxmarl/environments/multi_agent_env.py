@@ -1,13 +1,15 @@
-""" 
+"""
 Abstract base class for multi agent gym environments with JAX
 Based on the Gymnax and PettingZoo APIs
 """
 
-import jax
 from functools import partial
+from typing import Any, Dict, Optional, Tuple
+
+import jax
 from flax import struct
-from typing import Tuple, Optional, Dict, Any
-from jaxtyping import Array, Bool, Float, Num, Int, PRNGKeyArray
+from jaxtyping import Array, Bool, Float, Int, Num, PRNGKeyArray
+
 from jaxmarl.environments.spaces import Space
 
 Observations = Dict[str, Num[Array, "..."]]
@@ -16,6 +18,7 @@ Rewards = Dict[str, Float[Array, ""]]
 Dones = Dict[str, Bool[Array, ""]]
 Infos = Dict[str, Any]
 AvailActions = Dict[str, Bool[Array, "..."]]
+
 
 @struct.dataclass
 class State:
@@ -28,13 +31,14 @@ class State:
         done: Whether the episode has terminated.
         step: Current environment step count.
     """
+
     done: Bool[Array, ""]
     step: Int[Array, ""]
 
 
 class MultiAgentEnv(object):
     """Jittable abstract base class for all JaxMARL Environments.
-    
+
     Subclasses should implement ``reset``, ``step_env``, ``get_obs``,
     ``get_avail_actions``, and ``agent_classes``. The public ``step`` method
     handles automatic reset when ``dones["__all__"]`` is true.
@@ -51,6 +55,7 @@ class MultiAgentEnv(object):
                 commonly used to define array dimensions and agent metadata.
         """
         self.num_agents = num_agents
+        self.agents = ["agent_{}".format(i) for i in range(num_agents)]
         self.observation_spaces = dict()
         self.action_spaces = dict()
 
@@ -123,7 +128,7 @@ class MultiAgentEnv(object):
             A tuple containing next observations, next state, rewards, dones,
             and auxiliary info.
         """
-        
+
         raise NotImplementedError
 
     def get_obs(self, state: State) -> Observations:
@@ -139,7 +144,7 @@ class MultiAgentEnv(object):
 
     def observation_space(self, agent: str) -> Space:
         """Observation space for a given agent.
-        
+
         Args:
             agent: Agent name.
 
@@ -150,7 +155,7 @@ class MultiAgentEnv(object):
 
     def action_space(self, agent: str) -> Space:
         """Action space for a given agent.
-        
+
         Args:
             agent: Agent name.
 
@@ -162,7 +167,7 @@ class MultiAgentEnv(object):
     @partial(jax.jit, static_argnums=(0,))
     def get_avail_actions(self, state: State) -> AvailActions:
         """Returns the available actions for each agent.
-        
+
         Args:
             state: Environment state.
 
