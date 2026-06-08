@@ -1,7 +1,7 @@
 <h1 align="center">JaxMARL</h1>
 
 <p align="center">
-       <a href="https://pypi.python.org/pypi/jaxmarl">
+       <a href="https://pypi.org/pypi/jaxmarl">
         <img src="https://img.shields.io/pypi/pyversions/jaxmarl.svg" /></a>
        <a href="https://badge.fury.io/py/jaxmarl">
         <img src="https://badge.fury.io/py/jaxmarl.svg" /></a>
@@ -75,27 +75,37 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 <h2 name="install" id="install">Installation 🧗 </h2>
 
-**Environments** - Before installing, ensure you have the correct [JAX installation](https://github.com/google/jax#installation) for your hardware accelerator. We have tested up to JAX version 0.4.36. The JaxMARL environments can be installed directly from PyPi:
+**Environments** - Before installing, ensure you have JAX installed for your hardware:
+
+GPU (CUDA 13):
+```sh
+pip install "jax[cuda13]"
+```
+CPU only:
+```sh
+pip install jax
+```
+See the [JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) for TPU and other configurations.
+
+The JaxMARL environments can then be installed directly from PyPi:
 
 ``` bash
 pip install jaxmarl 
 ```
 
-**Algorithms** - If you would like to also run the algorithms, install the source code as follows:
+**Algorithms** - If you would like to also run the algorithms, install the source code and repository as follows:
 
-1. Clone the repository:
-    ``` bash
-    git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
-    ```
-2. Install requirements:
-    ``` bash
-    pip install -e .[algs]
-    export PYTHONPATH=./JaxMARL:$PYTHONPATH
-    ```
-3. For the fastest start, we recommend using our Dockerfile, the usage of which is outlined below.
+``` bash
+git clone https://github.com/FLAIROx/JaxMARL.git && cd JaxMARL
+pip install -e .[algs]
+```
 
-**Development** - If you would like to run our test suite, install the additonal dependencies with:
- `pip install -e .[dev]`, after cloning the repository.
+For the fastest start, **we recommend using our Dockerfile**, the usage of which is outlined below.
+
+**Development** - If you would like to run our test suite, install the additonal dependencies as follows after cloning the repository:
+``` sh
+pip install -e .[dev]
+```
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
 
