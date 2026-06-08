@@ -1,46 +1,43 @@
-FROM nvcr.io/nvidia/jax:24.10-py3
+FROM nvcr.io/nvidia/jax:26.05-py3
 
 # Create user
-ARG UID
-ARG MYUSER
-RUN useradd -u $UID --create-home ${MYUSER}
+ARG UID=1000
+ARG MYUSER=myuser
+ARG INSTALL_ROBOTARIUM=false
+RUN useradd -u $UID -o --create-home ${MYUSER}
 USER ${MYUSER}
 
 # default workdir
 WORKDIR /home/${MYUSER}/
-COPY --chown=${MYUSER} --chmod=765 . .
+COPY --chown=${MYUSER} --chmod=755 . .
 
 USER root
 
 # install tmux
 RUN apt-get update && \
-    apt-get install -y tmux
+    apt-get install -y --no-install-recommends tmux && \
+    rm -rf /var/lib/apt/lists/*
 
 #jaxmarl from source if needed, all the requirements
-RUN pip install -e .[algs,dev]
+RUN pip install --no-cache-dir -e .[algs,dev]
 
-# install submodules (currently each submodule needs to be added to safe.directory)
-RUN git config --global --add safe.directory /home/${MYUSER}
-
-# install jaxrobatrium env and robotarium sim submodules
-RUN git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium
-RUN git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator
-RUN git submodule update --init --recursive
-RUN cd jaxmarl/environments/robotarium && pip install -e .
-RUN cd jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && pip install -e .
+RUN git config --global --add safe.directory /home/${MYUSER} && \
+    if [ "$INSTALL_ROBOTARIUM" = "true" ]; then \
+        git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium && \
+        git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && \
+        git submodule update --init --recursive && \
+        pip install --no-cache-dir -e jaxmarl/environments/robotarium && \
+        pip install --no-cache-dir -e jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator ; \
+    fi
 
 USER ${MYUSER}
 
-#disabling preallocation
-RUN export XLA_PYTHON_CLIENT_PREALLOCATE=false
-#safety measures
-RUN export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25 
-RUN export TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=false
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
 
-# Uncomment below if you want jupyter 
+# Uncomment below if you want jupyter
 # RUN pip install jupyterlab
 
 #for secrets and debug
 ENV WANDB_API_KEY=""
 ENV WANDB_ENTITY=""
-RUN git config --global --add safe.directory /home/${MYUSER}
