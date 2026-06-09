@@ -1,52 +1,53 @@
 from .environments import (
-    SimpleMPE,
-    SimpleTagMPE,
-    SimpleWorldCommMPE,
-    SimpleSpreadMPE,
+    SMAX,
+    SUBMODULE_ENVIRONMENTS,
+    Ant,
+    CoinGame,
+    HalfCheetah,
+    Hanabi,
+    HeuristicEnemySMAX,
+    Hopper,
+    Humanoid,
+    InTheGrid,
+    InTheGrid_2p,
+    InTheMatrix,
+    JaxNav,
+    LearnedPolicyEnemySMAX,
+    MultiAgentEnv,
+    Overcooked,
+    OvercookedV2,
+    SimpleAdversaryMPE,
     SimpleCryptoMPE,
-    SimpleSpeakerListenerMPE,
     SimpleFacmacMPE,
     SimpleFacmacMPE3a,
     SimpleFacmacMPE6a,
     SimpleFacmacMPE9a,
+    SimpleMPE,
     SimplePushMPE,
-    SimpleAdversaryMPE,
     SimpleReferenceMPE,
-    SMAX,
-    HeuristicEnemySMAX,
-    LearnedPolicyEnemySMAX,
+    SimpleSpeakerListenerMPE,
+    SimpleSpreadMPE,
+    SimpleTagMPE,
+    SimpleWorldCommMPE,
     SwitchRiddle,
-    Ant,
-    Humanoid,
-    Hopper,
     Walker2d,
-    HalfCheetah,
-    InTheGrid,
-    InTheGrid_2p,
-    InTheMatrix,
-    Hanabi,
-    Overcooked,
-    OvercookedV2,
-    CoinGame,
-    JaxNav,
-    SUBMODULE_ENVIRONMENTS
 )
 
 # Handle submoduled environments
 if SUBMODULE_ENVIRONMENTS:
     from .environments import (
-        Navigation,
-        Discovery,
-        MaterialTransport,
-        Warehouse,
-        ArcticTransport,
-        Foraging,
         RWARE,
-        PredatorPrey
+        ArcticTransport,
+        Discovery,
+        Foraging,
+        MaterialTransport,
+        Navigation,
+        PredatorPrey,
+        Warehouse,
     )
 
 
-def make(env_id: str, **env_kwargs):
+def make(env_id: str, **env_kwargs) -> MultiAgentEnv:
     """A JAX-version of OpenAI's env.make(env_name), built off Gymnax"""
     if env_id not in registered_envs:
         raise ValueError(f"{env_id} is not in registered jaxmarl environments.")
@@ -111,7 +112,7 @@ def make(env_id: str, **env_kwargs):
         env = InTheGrid_2p(**env_kwargs)
     elif env_id == "storm_np":
         env = InTheMatrix(**env_kwargs)
-    
+
     # 6. Hanabi
     elif env_id == "hanabi":
         env = Hanabi(**env_kwargs)
@@ -125,7 +126,7 @@ def make(env_id: str, **env_kwargs):
     # 8. Coin Game
     elif env_id == "coin_game":
         env = CoinGame(**env_kwargs)
-        
+
     # 9. JaxNav
     elif env_id == "jaxnav":
         env = JaxNav(**env_kwargs)
@@ -150,6 +151,7 @@ def make(env_id: str, **env_kwargs):
             env = PredatorPrey(**env_kwargs)
 
     return env
+
 
 registered_envs = [
     "MPE_simple_v3",
@@ -189,5 +191,5 @@ registered_envs = [
     "JaxRobotarium_arctic_transport",
     "JaxRobotarium_foraging",
     "JaxRobotarium_rware",
-    "JaxRobotarium_predator_prey"
+    "JaxRobotarium_predator_prey",
 ]
