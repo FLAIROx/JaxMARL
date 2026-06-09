@@ -11,12 +11,12 @@ labels: bug
 - OS:
 
 **To reproduce**
-\```python
+```python
 # Minimal reproducible example
-\```
+```
 
 **Expected behaviour**
 
 **Actual behaviour / error output**
-\```
-\```
+```
+```
