@@ -1,28 +1,23 @@
-from collections import OrderedDict
 from enum import Enum
 from functools import partial
-from typing import List, Optional, Union
-import numpy as np
+from typing import Dict, List, Optional, Tuple, Union
+
+import chex
 import jax
 import jax.numpy as jnp
 from jax import lax
-from jaxmarl.environments import MultiAgentEnv
-from jaxmarl.environments import spaces
-from typing import Tuple, Dict
-import chex
-from flax import struct
-from flax.core.frozen_dict import FrozenDict
+
+from jaxmarl.environments import MultiAgentEnv, spaces
 from jaxmarl.environments.overcooked_v2.common import (
     ACTION_TO_DIRECTION,
-    MAX_INGREDIENTS,
     Actions,
-    StaticObject,
-    DynamicObject,
-    Direction,
-    Position,
     Agent,
+    Direction,
+    DynamicObject,
+    Position,
+    StaticObject,
 )
-from jaxmarl.environments.overcooked_v2.layouts import overcooked_v2_layouts, Layout
+from jaxmarl.environments.overcooked_v2.layouts import Layout, overcooked_v2_layouts
 from jaxmarl.environments.overcooked_v2.settings import (
     DELIVERY_REWARD,
     INDICATOR_ACTIVATION_COST,
@@ -32,11 +27,9 @@ from jaxmarl.environments.overcooked_v2.settings import (
 )
 from jaxmarl.environments.overcooked_v2.utils import (
     OvercookedPathPlanner,
-    compute_view_box,
-    get_closest_true_pos_no_directions,
+    compute_enclosed_spaces,
     mark_adjacent_cells,
     tree_select,
-    compute_enclosed_spaces,
 )
 
 
@@ -231,13 +224,11 @@ class OvercookedV2(MultiAgentEnv):
         key: chex.PRNGKey,
     ) -> Tuple[Dict[str, chex.Array], State]:
         if self.initial_state_buffer is not None:
-            num_states = jax.tree_util.tree_flatten(self.initial_state_buffer)[0][
-                0
-            ].shape[0]
+            num_states = jax.tree.flatten(self.initial_state_buffer)[0][0].shape[0]
             # jax.debug.print("num_states: {i}", i=num_states)
             print("num_states in buffer: ", num_states)
             sampled_state_idx = jax.random.randint(key, (), 0, num_states)
-            sampled_state = jax.tree_util.tree_map(
+            sampled_state = jax.tree.map(
                 lambda x: x[sampled_state_idx], self.initial_state_buffer
             )
             return self.reset_from_state(sampled_state, key)
@@ -410,7 +401,6 @@ class OvercookedV2(MultiAgentEnv):
         )
 
         def _sample_grid_states_wrapper(cell, key):
-
             def _sample_pot_states(key):
                 key, key_ing, key_num, key_timer = jax.random.split(key, 4)
                 raw_ingridients = jax.random.randint(
@@ -510,7 +500,7 @@ class OvercookedV2(MultiAgentEnv):
             match obs_type:
                 case ObservationType.DEFAULT:
                     num_ingredients = self.layout.num_ingredients
-                    #17(Invariable objects[5 position and directions for each agents, wall, goal, pot, plate pile, recipe indicator, button, pot timer] + 4*(num_ingredients+2) objects[Inventory for each agents, recipe, grid] + N(ingredient pile))
+                    # 17(Invariable objects[5 position and directions for each agents, wall, goal, pot, plate pile, recipe indicator, button, pot timer] + 4*(num_ingredients+2) objects[Inventory for each agents, recipe, grid] + N(ingredient pile))
                     num_layers = 17 + num_ingredients + 4 * (num_ingredients + 2)
 
                     if self.indicate_successful_delivery:
@@ -586,7 +576,6 @@ class OvercookedV2(MultiAgentEnv):
         return {f"agent_{i}": obs for i, obs in enumerate(all_obs)}
 
     def get_obs_default(self, state: State) -> Dict[str, chex.Array]:
-
         width = self.width
         height = self.height
         num_ingredients = self.layout.num_ingredients
@@ -679,8 +668,6 @@ class OvercookedV2(MultiAgentEnv):
                 ],
                 axis=-1,
             )
-
-
 
         def _agent_obs(agent_id):
             ingredient_mapping = None
@@ -830,7 +817,6 @@ class OvercookedV2(MultiAgentEnv):
                     mask = mask.at[pos.y, pos.x].set(inv == dynamic_locator)
 
                 mask &= reachable_area
-
 
                 obj_pos, is_valid = self.path_planer.get_closest_target_pos(
                     mask, pos, direction
