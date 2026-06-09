@@ -57,8 +57,6 @@ algs = [
 ]
 dev = [
   "pytest",
-  "pytest-xdist",
-  "pygame",
   "mpe2",
   "ruff",
   "pyright",
@@ -81,7 +79,6 @@ reportMissingImports = false
 reportMissingModuleSource = false
 
 [tool.pytest.ini_options]
-addopts = "-n auto --dist=loadfile"
 
 [tool.ruff]
 line-length = 88
