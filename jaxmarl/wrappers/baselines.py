@@ -25,6 +25,7 @@ from jaxmarl.environments.multi_agent_env import (
     Rewards,
     State,
 )
+from jaxmarl.environments.overcooked_v2 import OvercookedV2
 from jaxmarl.environments.overcooked_v2.common import DynamicObject
 from jaxmarl.environments.spaces import Box, Discrete, MultiDiscrete
 
@@ -73,7 +74,7 @@ class LogWrapper(JaxMARLWrapper):
         self.replace_info = replace_info
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, LogEnvState]:
         obs, env_state = self._env.reset(key)
         state = LogEnvState(
             env_state,
@@ -120,7 +121,7 @@ class OvercookedV2LogEnvState(LogEnvState):
 
 
 class OvercookedV2LogWrapper(JaxMARLWrapper):
-    def __init__(self, env: MultiAgentEnv, replace_info: bool = False):
+    def __init__(self, env: OvercookedV2, replace_info: bool = False):
         super().__init__(env)
         self.replace_info = replace_info
 
@@ -132,7 +133,7 @@ class OvercookedV2LogWrapper(JaxMARLWrapper):
         }
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, OvercookedV2LogEnvState]:
         obs, env_state = self._env.reset(key)
 
         recipe_returns = {
@@ -242,7 +243,7 @@ class SMAXLogWrapper(JaxMARLWrapper):
         self.replace_info = replace_info
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, SMAXLogEnvState]:
         obs, env_state = self._env.reset(key)
         state = SMAXLogEnvState(
             env_state,
