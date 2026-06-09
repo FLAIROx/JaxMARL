@@ -13,7 +13,7 @@
         <img src="https://img.shields.io/badge/arXiv-2311.10090-b31b1b.svg" /></a>
        <a href= "https://jaxmarl.foersterlab.com/">
         <img src="https://img.shields.io/badge/docs-green" /></a>
-       
+
 </p>
 
 [**Installation**](#install) | [**Quick Start**](#start) | [**Environments**](#environments) | [**Algorithms**](#algorithms) | [**Citation**](#cite)
@@ -38,7 +38,7 @@
 
 ## Multi-Agent Reinforcement Learning in JAX
 
-JaxMARL combines ease-of-use with GPU-enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplified version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
+JaxMARL combines ease-of-use with GPU-enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplified version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine.
 
 For more details, take a look at our [blog post](https://blog.foersterlab.com/jaxmarl/) or our [Colab notebook](https://colab.research.google.com/github/FLAIROx/JaxMARL/blob/main/jaxmarl/tutorials/JaxMARL_Walkthrough.ipynb), which walks through the basic usage.
 
@@ -47,8 +47,8 @@ For more details, take a look at our [blog post](https://blog.foersterlab.com/ja
 | Environment | Reference | README | Summary |
 | --- | --- | --- | --- |
 | 🔴 MPE | [Paper](https://arxiv.org/abs/1706.02275) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/mpe) | Communication orientated tasks in a multi-agent particle world
-| 🍲 Overcooked | [Paper](https://arxiv.org/abs/1910.05789) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/overcooked) | Fully-cooperative human-AI coordination tasks based on the video game of the same name | 
-| 🥘 OvercookedV2 | [Paper](https://arxiv.org/abs/2503.17821) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/overcooked_v2) | Partially observable and stochastic extention of Overcooked. Fully-cooperative. | 
+| 🍲 Overcooked | [Paper](https://arxiv.org/abs/1910.05789) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/overcooked) | Fully-cooperative human-AI coordination tasks based on the video game of the same name |
+| 🥘 OvercookedV2 | [Paper](https://arxiv.org/abs/2503.17821) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/overcooked_v2) | Partially observable and stochastic extention of Overcooked. Fully-cooperative. |
 | 🦾 Multi-Agent Brax | [Paper](https://arxiv.org/abs/2003.06709) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/mabrax) | Continuous multi-agent robotic control based on Brax, analogous to Multi-Agent MuJoCo |
 | 🎆 Hanabi | [Paper](https://arxiv.org/abs/1902.00506) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/hanabi) | Fully-cooperative partially-observable multiplayer card game |
 | 👾 SMAX | Novel | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/smax) | Simplified cooperative StarCraft micro-management environment |
@@ -57,16 +57,16 @@ For more details, take a look at our [blog post](https://blog.foersterlab.com/ja
 | 🪙 Coin Game | [Paper](https://arxiv.org/abs/1802.09640) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/coin_game) | Two-player grid world environment which emulates social dilemmas
 | 💡 Switch Riddle | [Paper](https://proceedings.neurips.cc/paper_files/paper/2016/hash/c7635bfd99248a2cdef8249ef7bfbef4-Abstract.html) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/switch_riddle) | Simple cooperative communication game included for debugging
 | 🤖 JaxRobotarium | [Paper](https://arxiv.org/abs/2505.06771) | [Source](https://github.com/GT-STAR-Lab/JaxRobotarium) | Multi-robot environment with open access sim2real through the [Robotarium](https://www.robotarium.gatech.edu/)
- 
+
 <h2 name="algorithms" id="algorithms">Baseline Algorithms 🦉 </h2>
 
 We follow CleanRL's philosophy of providing single file implementations which can be found within the `baselines` directory. We use Hydra to manage our config files, with specifics explained in each algorithm's README. Most files include `wandb` logging code, this is disabled by default but can be enabled within the file's config.
 
-| Algorithm | Reference | README | 
-| --- | --- | --- | 
-| IPPO | [Paper](https://arxiv.org/pdf/2011.09533.pdf) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/IPPO) | 
-| MAPPO | [Paper](https://arxiv.org/abs/2103.01955) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/MAPPO) | 
-| IQL | [Paper](https://arxiv.org/abs/1312.5602v1) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) | 
+| Algorithm | Reference | README |
+| --- | --- | --- |
+| IPPO | [Paper](https://arxiv.org/pdf/2011.09533.pdf) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/IPPO) |
+| MAPPO | [Paper](https://arxiv.org/abs/2103.01955) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/MAPPO) |
+| IQL | [Paper](https://arxiv.org/abs/1312.5602v1) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 | VDN | [Paper](https://arxiv.org/abs/1706.05296)  | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 | QMIX | [Paper](https://arxiv.org/abs/1803.11485) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
 | TransfQMIX | [Paper](https://www.southampton.ac.uk/~eg/AAMAS2023/pdfs/p1679.pdf) | [Source](https://github.com/FLAIROx/JaxMARL/tree/main/baselines/QLearning) |
@@ -90,7 +90,7 @@ See the [JAX installation guide](https://jax.readthedocs.io/en/latest/installati
 The JaxMARL environments can then be installed directly from PyPi:
 
 ``` bash
-pip install jaxmarl 
+pip install jaxmarl
 ```
 
 **Algorithms** - If you would like to also run the algorithms, install the source code and repository as follows:
@@ -105,6 +105,7 @@ For the fastest start, **we recommend using our Dockerfile**, the usage of which
 **Development** - If you would like to run our test suite, install the additonal dependencies as follows after cloning the repository:
 ``` sh
 pip install -e .[dev]
+pre-commit install
 ```
 
 <h2 name="start" id="start">Quick Start 🚀 </h2>
@@ -115,7 +116,7 @@ We take inspiration from the [PettingZoo](https://github.com/Farama-Foundation/P
 
 Actions, observations, rewards and done values are passed as dictionaries keyed by agent name, allowing for differing action and observation spaces. The done dictionary contains an additional `"__all__"` key, specifying whether the episode has ended. We follow a parallel structure, with each agent passing an action at each timestep. For asynchronous games, such as Hanabi, a dummy action is passed for agents not acting at a given timestep.
 
-```python 
+```python
 import jax
 from jaxmarl import make
 
@@ -147,7 +148,7 @@ make run
 ```
 
 ## Contributing 🔨
-Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. If you're looking for a project, we also have a few suggestions listed under the roadmap :) 
+Please contribute! Please take a look at our [contributing guide](https://github.com/FLAIROx/JaxMARL/blob/main/CONTRIBUTING.md) for how to add an environment/algorithm or submit a bug report. If you're looking for a project, we also have a few suggestions listed under the roadmap :)
 
 <h2 name="cite" id="cite">Citing JaxMARL 📜 </h2>
 If you use JaxMARL in your work, please cite us as follows:
