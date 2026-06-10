@@ -350,22 +350,22 @@ class HanabiGame(MultiAgentEnv):
 
             negative_color_hints = jnp.outer(1 - color_hint_matches, hint_color)
             negative_color_hints = jnp.repeat(
-                negative_color_hints, self.num_colors, axis=1
+                negative_color_hints, self.num_ranks, axis=1
             ).reshape(cur_knowledge.shape)
             negative_rank_hints = jnp.outer(1 - rank_hint_matches, hint_rank)
             negative_rank_hints = jnp.repeat(
-                negative_rank_hints, self.num_ranks, axis=0
+                negative_rank_hints, self.num_colors, axis=0
             ).reshape(cur_knowledge.shape)
 
             color_mask = (color_hint_matches * jnp.ones((self.num_colors, self.hand_size))).transpose()
             rank_mask = (rank_hint_matches * jnp.ones((self.num_ranks, self.hand_size))).transpose()
 
             color_hints = color_mask * (1 - hint_color * jnp.ones((self.hand_size, self.num_colors)))
-            color_hints = jnp.repeat(color_hints, self.num_colors, axis=1).reshape(
+            color_hints = jnp.repeat(color_hints, self.num_ranks, axis=1).reshape(
                 cur_knowledge.shape
             )
             rank_hints = rank_mask * (1 - hint_rank * jnp.ones((self.hand_size, self.num_ranks)))
-            rank_hints = jnp.repeat(rank_hints, self.num_ranks, axis=0).reshape(
+            rank_hints = jnp.repeat(rank_hints, self.num_colors, axis=0).reshape(
                 cur_knowledge.shape
             )
 
