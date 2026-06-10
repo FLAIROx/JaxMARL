@@ -242,7 +242,9 @@ class SMAX(MultiAgentEnv):
         elif self.action_type == "continuous":
             return Box(low=0.0, high=1.0, shape=(len(self.continuous_action_dims),))
         else:
-            raise ValueError("")
+            raise ValueError(
+                f"Unknown action_type: {self.action_type!r}. Expected 'discrete' or 'continuous'."
+            )
 
     def _get_obs_size(self):
         if self.observation_type == "unit_list":
@@ -256,7 +258,9 @@ class SMAX(MultiAgentEnv):
                 self.num_sections * self.max_units_per_section
             ) + len(self.own_features)
         else:
-            raise ValueError("Provided observation type is not valid")
+            raise ValueError(
+                f"Unknown observation_type: {self.observation_type!r}. Expected 'unit_list' or 'conic'."
+            )
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
@@ -850,14 +854,26 @@ class SMAX(MultiAgentEnv):
             state.prev_movement_actions[j_idx],
             jnp.zeros((2,)),
         )
+        max_j_action = jax.lax.cond(
+            j_idx < self.num_allies,
+            lambda: float(self.num_ally_actions - 1),
+            lambda: float(self.num_enemy_actions - 1),
+        )
         attack_action_obs = jax.lax.select(
             (team_i_idx == team_j_idx) | self.see_enemy_actions,
-            state.prev_attack_actions[j_idx],
-            0,
+            state.prev_attack_actions[j_idx].astype(jnp.float32) / max_j_action,
+            0.0,
         )
         features = features.at[3:5].set(move_action_obs)
         features = features.at[5].set(attack_action_obs)
-        features = features.at[6].set(state.unit_weapon_cooldowns[j_idx])
+        features = features.at[6].set(
+            jnp.clip(
+                state.unit_weapon_cooldowns[j_idx]
+                / self.unit_type_weapon_cooldowns[state.unit_types[j_idx]],
+                0.0,
+                1.0,
+            )
+        )
         features = features.at[7 + state.unit_types[j_idx]].set(1)
         return features
 
@@ -870,7 +886,14 @@ class SMAX(MultiAgentEnv):
         features = features.at[1:3].set(
             state.unit_positions[i] / jnp.array([self.map_width, self.map_height])
         )
-        features = features.at[3].set(state.unit_weapon_cooldowns[i])
+        features = features.at[3].set(
+            jnp.clip(
+                state.unit_weapon_cooldowns[i]
+                / self.unit_type_weapon_cooldowns[state.unit_types[i]],
+                0.0,
+                1.0,
+            )
+        )
         features = features.at[4 + state.unit_types[i]].set(1)
         return jax.lax.cond(
             state.unit_alive[i], lambda: features, lambda: empty_features
