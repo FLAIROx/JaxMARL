@@ -1,9 +1,8 @@
-FROM nvcr.io/nvidia/jax:26.05-py3
+FROM nvcr.io/nvidia/jax:26.04-py3
 
 # Create user
 ARG UID=1000
 ARG MYUSER=myuser
-ARG INSTALL_ROBOTARIUM=false
 RUN useradd -u $UID -o --create-home ${MYUSER}
 USER ${MYUSER}
 
@@ -22,13 +21,11 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir -e .[algs,dev]
 
 RUN git config --global --add safe.directory /home/${MYUSER} && \
-    if [ "$INSTALL_ROBOTARIUM" = "true" ]; then \
-        git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium && \
-        git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && \
-        git submodule update --init --recursive && \
-        pip install --no-cache-dir -e jaxmarl/environments/robotarium && \
-        pip install --no-cache-dir -e jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator ; \
-    fi
+    git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium && \
+    git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && \
+    git submodule update --init --recursive && \
+    pip install --no-cache-dir -e jaxmarl/environments/robotarium && \
+    pip install --no-cache-dir -e jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator
 
 USER ${MYUSER}
 

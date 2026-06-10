@@ -18,13 +18,11 @@ DOCKER_RUN=docker run $(RUN_FLAGS) $(IMAGE)
 USE_CUDA = $(if $(GPUS),true,false)
 ID = $(shell id -u)
 
-ROBOTARIUM ?= false
-
 .PHONY: build run test local-test workflow-test
 
 # make file commands
 build:
-	DOCKER_BUILDKIT=1 docker build --build-arg USE_CUDA=$(USE_CUDA) --build-arg MYUSER=$(MYUSER) --build-arg UID=$(ID) --build-arg INSTALL_ROBOTARIUM=$(ROBOTARIUM) --tag $(IMAGE) --progress=plain ${PWD}/.
+	DOCKER_BUILDKIT=1 docker build --build-arg USE_CUDA=$(USE_CUDA) --build-arg MYUSER=$(MYUSER) --build-arg UID=$(ID) --tag $(IMAGE) --progress=plain ${PWD}/.
 
 run:
 	$(DOCKER_RUN) /bin/bash
