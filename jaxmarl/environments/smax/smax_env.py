@@ -1,20 +1,20 @@
 import dataclasses
-import jax.numpy as jnp
+import io
+import math
+from functools import partial
+from typing import Dict, Tuple
+
+import chex
 import jax
-from jax.experimental import sparse
+import jax.numpy as jnp
+from flax.struct import dataclass
+
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
-from jaxmarl.environments.spaces import Box, Discrete
 from jaxmarl.environments.smax.distributions import (
     SurroundAndReflectPositionDistribution,
     UniformUnitTypeDistribution,
 )
-import chex
-from typing import Tuple, Dict, Optional
-from flax.struct import dataclass
-from enum import IntEnum
-from functools import partial
-import io
-import math
+from jaxmarl.environments.spaces import Box, Discrete
 
 
 @dataclass
@@ -262,12 +262,17 @@ class SMAX(MultiAgentEnv):
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Environment-specific reset."""
         key, team_0_key, team_1_key = jax.random.split(key, num=3)
-        team_0_start = jnp.stack([jnp.array([self.map_width / 4, self.map_height / 2])] * self.num_allies)
+        team_0_start = jnp.stack(
+            [jnp.array([self.map_width / 4, self.map_height / 2])] * self.num_allies
+        )
         team_0_start_noise = jax.random.uniform(
             team_0_key, shape=(self.num_allies, 2), minval=-2, maxval=2
         )
         team_0_start = team_0_start + team_0_start_noise
-        team_1_start = jnp.stack([jnp.array([self.map_width / 4 * 3, self.map_height / 2])] * self.num_enemies)
+        team_1_start = jnp.stack(
+            [jnp.array([self.map_width / 4 * 3, self.map_height / 2])]
+            * self.num_enemies
+        )
         team_1_start_noise = jax.random.uniform(
             team_1_key, shape=(self.num_enemies, 2), minval=-2, maxval=2
         )
@@ -479,6 +484,8 @@ class SMAX(MultiAgentEnv):
         return state.replace(unit_health=unit_health)
 
     def _push_units_away(self, state: State, firmness: float = 1.0):
+        # Only alive-alive pairs participate in collision resolution.
+        alive_pair = state.unit_alive[:, None] & state.unit_alive[None, :]
         delta_matrix = state.unit_positions[:, None] - state.unit_positions[None, :]
         dist_matrix = (
             jnp.linalg.norm(delta_matrix, axis=-1)
@@ -489,10 +496,16 @@ class SMAX(MultiAgentEnv):
             self.unit_type_radiuses[state.unit_types][:, None]
             + self.unit_type_radiuses[state.unit_types][None, :]
         )
-        overlap_term = jax.nn.relu(radius_matrix / dist_matrix - 1.0)
+        overlap_term = jnp.where(
+            alive_pair, jax.nn.relu(radius_matrix / dist_matrix - 1.0), 0.0
+        )
         unit_positions = (
             state.unit_positions
             + firmness * jnp.sum(delta_matrix * overlap_term[:, :, None], axis=1) / 2
+        )
+        # dead units keep their position unchanged
+        unit_positions = jnp.where(
+            state.unit_alive[:, None], unit_positions, state.unit_positions
         )
         return state.replace(unit_positions=unit_positions)
 
@@ -644,7 +657,8 @@ class SMAX(MultiAgentEnv):
                 jnp.minimum(new_pos, jnp.array([self.map_width, self.map_height])),
                 jnp.zeros((2,)),
             )
-            return new_pos
+            # dead units do not move
+            return jnp.where(state.unit_alive[idx], new_pos, pos)
 
         def update_agent_health(idx, action, key):
             # for team 1, their attack actions are labelled in
@@ -957,7 +971,10 @@ class SMAX(MultiAgentEnv):
         for key, state, actions in state_seq:
             states = self.step_env(key, state, actions, get_state_sequence=True)
             states = list(map(State, *dataclasses.astuple(states)))
-            viz_actions = {agent: states[0].prev_attack_actions[i] for i, agent in enumerate(self.agents)}
+            viz_actions = {
+                agent: states[0].prev_attack_actions[i]
+                for i, agent in enumerate(self.agents)
+            }
             expanded_state_seq.extend(
                 zip([key] * len(states), states, [viz_actions] * len(states))
             )
@@ -972,9 +989,8 @@ class SMAX(MultiAgentEnv):
         step: int,
         env_step: int,
     ):
-        from matplotlib.patches import Circle, Rectangle
-        import matplotlib.pyplot as plt
         import numpy as np
+        from matplotlib.patches import Circle, Rectangle
 
         _, state, actions = state
 
