@@ -82,16 +82,16 @@ def assert_same_trans(
 ):
     for agent in obs_zoo.keys():
         # print(f'{agent}: obs zoo {obs_zoo[agent]} len {len(obs_zoo[agent])}, obs jax {obs_jax[agent]} len {len(obs_jax[agent])}')
-        assert np.allclose(
-            obs_zoo[agent], obs_jax[agent], atol=atol
-        ), f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
-        assert np.allclose(
-            rew_zoo[agent], rew_jax[agent], atol=atol
-        ), f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
+        assert np.allclose(obs_zoo[agent], obs_jax[agent], atol=atol), (
+            f"Step: {step}, observations for agent {agent} do not match. \nzoo obs: {obs_zoo}, \njax obs: {obs_jax}"
+        )
+        assert np.allclose(rew_zoo[agent], rew_jax[agent], atol=atol), (
+            f"Step: {step}, Reward values for agent {agent} do not match, zoo rew: {rew_zoo[agent]}, jax rew: {rew_jax[agent]}"
+        )
         # print('done zoo', done_zoo, 'done jax', done_jax)
-        assert np.all(
-            done_zoo[agent] == done_jax[agent]
-        ), f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
+        assert np.all(done_zoo[agent] == done_jax[agent]), (
+            f"Step: {step}, Done values do not match for agent {agent},  zoo done: {done_zoo[agent]}, jax done: {done_jax[agent]}"
+        )
 
 
 def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
@@ -100,9 +100,9 @@ def assert_same_state(env_zoo, env_jax, state_jax, atol=1e-4):
     for k in state_zoo.keys():
         jax_value = getattr(state_jax, k)
         if k not in ["step"]:
-            assert np.allclose(
-                jax_value, state_zoo[k], atol=atol
-            ), f"State values do not match for key {k}, zoo value: {state_zoo[k]}, jax value: {jax_value}"
+            assert np.allclose(jax_value, state_zoo[k], atol=atol), (
+                f"State values do not match for key {k}, zoo value: {state_zoo[k]}, jax value: {jax_value}"
+            )
 
 
 @pytest.mark.parametrize(
@@ -148,6 +148,7 @@ def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
     for ep in tqdm.tqdm(
         range(num_episodes), desc=f"Testing {zoo_env_name}, episode:", leave=True
     ):
+        env_zoo.reset()
         for s in range(num_steps):
             actions = {
                 agent: env_zoo.action_space(agent).sample() for agent in env_zoo.agents
