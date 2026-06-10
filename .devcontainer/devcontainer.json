@@ -2,11 +2,14 @@
   "name": "JaxMARL",
   "build": {
     "dockerfile": "../Dockerfile",
-    "args": {
-      "INSTALL_ROBOTARIUM": "true"
-    }
   },
-  "runArgs": ["--gpus", "all", "--shm-size", "20g"],
+  "runArgs": [
+    "--gpus",
+    "all",
+    "--shm-size",
+    "20g"
+  ],
+  "privileged": true,
   "remoteUser": "myuser",
   "customizations": {
     "vscode": {
