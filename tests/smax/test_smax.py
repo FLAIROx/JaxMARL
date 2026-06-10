@@ -1,8 +1,8 @@
-import jax.numpy as jnp
 import jax
-from jaxmarl import make
-from jaxmarl.environments.smax.smax_env import State
+import jax.numpy as jnp
 import pytest
+
+from jaxmarl import make
 
 
 def create_env(key, continuous_action=False, conic_observation=False):
@@ -482,9 +482,7 @@ def test_continuous_obs_function(do_jit):
         state = state.replace(unit_positions=unit_positions)
         obs = env.get_obs(state)
         real_obs = obs["ally_0"][
-            expected_obs_idx
-            * 2
-            * len(env.unit_features) : (expected_obs_idx * 2 + 1)
+            expected_obs_idx * 2 * len(env.unit_features) : (expected_obs_idx * 2 + 1)
             * len(env.unit_features)
         ]
         assert jnp.allclose(
@@ -506,28 +504,33 @@ def test_continuous_obs_max_two_observed(do_jit):
         state = state.replace(unit_positions=unit_positions)
         obs = env.get_obs(state)
         real_obs = obs["ally_0"][
-            expected_obs_idx
-            * 2
-            * len(env.unit_features) : (expected_obs_idx * 2 + 1)
+            expected_obs_idx * 2 * len(env.unit_features) : (expected_obs_idx * 2 + 1)
             * len(env.unit_features)
         ]
-        expected_obs = jnp.array([1.0, 0.1374999999, 0.125, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0])
+        expected_obs = jnp.array(
+            [1.0, 0.1374999999, 0.125, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]
+        )
         assert jnp.allclose(
             real_obs,
             expected_obs,
         )
 
         real_obs = obs["ally_0"][
-            (expected_obs_idx * 2 + 1) * len(env.unit_features):
-            (2 * expected_obs_idx + 2) * len(env.unit_features)
+            (expected_obs_idx * 2 + 1) * len(env.unit_features) : (
+                2 * expected_obs_idx + 2
+            )
+            * len(env.unit_features)
         ]
         assert jnp.allclose(real_obs, expected_obs)
 
         real_obs = obs["ally_0"][
-            (expected_obs_idx * 2 + 2) * len(env.unit_features):
-            (expected_obs_idx * 2 + 3) * len(env.unit_features)
+            (expected_obs_idx * 2 + 2) * len(env.unit_features) : (
+                expected_obs_idx * 2 + 3
+            )
+            * len(env.unit_features)
         ]
         assert jnp.allclose(real_obs, jnp.zeros_like(real_obs))
+
 
 @pytest.mark.parametrize(("do_jit"), [False, True])
 def test_obs_function(do_jit):
@@ -538,7 +541,7 @@ def test_obs_function(do_jit):
         first_enemy_idx = (env.num_allies - 1) * len(env.unit_features)
         assert jnp.allclose(
             obs["ally_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, -0.5755913, 0.43648314, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.547233, -0.20625567, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
@@ -546,7 +549,7 @@ def test_obs_function(do_jit):
         )
         assert jnp.allclose(
             obs["enemy_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, 0.00752163, 0.5390887, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, -0.3168292, -0.4374621, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
@@ -626,12 +629,12 @@ def test_world_state(do_jit):
 
         world_state = jnp.zeros((env.state_size,))
         world_state = world_state.at[0 : len(env.own_features)].set(
-            jnp.array([0.5, 8.108914, 18.952662, -0.5, 1, 0, 0, 0, 0, 0])
+            jnp.array([0.5, 8.0, 18.5, -0.5, 1, 0, 0, 0, 0, 0])
         )
         idx = env.num_allies * len(env.own_features)
         end_idx = idx + len(env.own_features)
         world_state = world_state.at[idx:end_idx].set(
-            jnp.array([0.5, 24.217829, 12.844673, -0.5, 1, 0, 0, 0, 0, 0])
+            jnp.array([0.5, 24.0, 13.5, -0.5, 1, 0, 0, 0, 0, 0])
         )
         idx = env.num_agents * len(env.own_features) + env.num_allies
         end_idx = idx + env.num_enemies
