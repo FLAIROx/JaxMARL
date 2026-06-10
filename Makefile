@@ -34,5 +34,5 @@ local-test:
 	pytest ./tests/ -v
 
 workflow-test:
-	# without -it flag
-	docker run --rm -v ${PWD}:/home/workdir --shm-size 20G $(IMAGE) /bin/bash -c "pytest ./tests/"
+	# without -it flag; JAX_PLATFORMS=cpu prevents the CUDA plugin from segfaulting when no GPU driver is present
+	docker run --rm -e JAX_PLATFORMS=cpu -v ${PWD}:/home/workdir --shm-size 20G $(IMAGE) /bin/bash -c "pytest ./tests/"
