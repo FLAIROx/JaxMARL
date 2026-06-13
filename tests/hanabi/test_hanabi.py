@@ -1,13 +1,16 @@
-import os
 import json
-import numpy as np
+import os
+
 import jax
+import numpy as np
 from jax import numpy as jnp
+
 from jaxmarl import make
 from jaxmarl.environments.hanabi.hanabi import HanabiEnv
 
 env = make("hanabi")
 dir_path = os.path.dirname(os.path.realpath(__file__))
+
 
 def pad_array(arr, target_length):
     pad_size = target_length - len(arr)
@@ -157,19 +160,20 @@ def test_injected_decks():
     This tests consists in injecting in the Hanabi environment a set of decks and actions that are known to produce a certain score.
     The test checks if the scores produced by the environment are the same as the expected ones.
     """
-    print('Hanabi Test: test_injected_decks')
+    print("Hanabi Test: test_injected_decks")
     actions_seq = get_action_sequences()
     decks = get_decks()
     true_scores = get_scores()
     scores = jax.jit(jax.vmap(get_injected_score))(decks, actions_seq)
-    assert (
-        true_scores == scores
-    ).all(), "The injected decks-actions didn't produce the expeceted scores"
+    assert (true_scores == scores).all(), (
+        "The injected decks-actions didn't produce the expeceted scores"
+    )
     print("Test passed")
 
 
 def main():
     test_injected_decks()
+
 
 if __name__ == "__main__":
     main()

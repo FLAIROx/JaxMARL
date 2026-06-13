@@ -1,6 +1,8 @@
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from functools import partial
+
 import jax
+
+from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 
 
 class RolloutManager:

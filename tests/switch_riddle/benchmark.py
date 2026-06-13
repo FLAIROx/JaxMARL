@@ -1,8 +1,10 @@
-from jaxmarl import make
+import time
+
+import jax
 from rollout_menager import RolloutManager
 from switch_riddle_nojax import SwitchRiddleNoJax
-import time
-import jax
+
+from jaxmarl import make
 
 
 def get_no_jax_time(parallel_envs, num_agents, max_steps):
