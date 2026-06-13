@@ -1,35 +1,33 @@
-import os
 import copy
+import os
+from functools import partial
+from typing import Any
+
+import chex
+import flashbax as fbx
+import flax.linen as nn
+import hydra
 import jax
 import jax.numpy as jnp
 import numpy as np
-from functools import partial
-from typing import NamedTuple, Dict, Union, Any
-
-import chex
 import optax
-import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
-from gymnax.wrappers.purerl import LogWrapper
-import hydra
 from omegaconf import OmegaConf
-import gymnax
-import flashbax as fbx
-import wandb
 
+import wandb
 from jaxmarl import make
-from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.environments.overcooked import overcooked_layouts
+from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.wrappers.baselines import (
-    SMAXLogWrapper,
-    MPELogWrapper,
-    LogWrapper,
     CTRolloutManager,
+    LogWrapper,
+    MPELogWrapper,
+    SMAXLogWrapper,
 )
 
-class ScannedRNN(nn.Module):
 
+class ScannedRNN(nn.Module):
     @partial(
         nn.scan,
         variable_broadcast="params",
@@ -288,7 +286,9 @@ def make_train(config, env):
                 timestep = Timestep(
                     obs=last_obs,
                     actions=actions,
-                    rewards=jax.tree.map(lambda x:config.get("REW_SCALE", 1)*x, rewards),
+                    rewards=jax.tree.map(
+                        lambda x: config.get("REW_SCALE", 1) * x, rewards
+                    ),
                     dones=last_dones,
                     avail_actions=avail_actions,
                 )
@@ -350,7 +350,7 @@ def make_train(config, env):
                 _obs = batchify(minibatch.obs)
                 _dones = batchify(minibatch.dones)
                 _actions = batchify(minibatch.actions)
-                #_rewards = batchify(minibatch.rewards)
+                # _rewards = batchify(minibatch.rewards)
                 _avail_actions = batchify(minibatch.avail_actions)
 
                 _, q_next_target = jax.vmap(network.apply, in_axes=(None, 0, 0, 0))(
@@ -474,9 +474,12 @@ def make_train(config, env):
             if config["WANDB_MODE"] != "disabled":
 
                 def callback(metrics, original_seed):
-                    if config.get('WANDB_LOG_ALL_SEEDS', False):
+                    if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
-                            {f"rng{int(original_seed)}/{k}": v for k, v in metrics.items()}
+                            {
+                                f"rng{int(original_seed)}/{k}": v
+                                for k, v in metrics.items()
+                            }
                         )
                     wandb.log(metrics)
 
@@ -492,6 +495,7 @@ def make_train(config, env):
                 return None
 
             params = train_state.params
+
             def _greedy_env_step(step_state, unused):
                 params, env_state, last_obs, last_dones, hstate, rng = step_state
                 rng, key_s = jax.random.split(rng)
@@ -624,7 +628,7 @@ def single_run(config):
         OmegaConf.save(
             config,
             os.path.join(
-                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+                save_dir, f"{alg_name}_{env_name}_seed{config['SEED']}_config.yaml"
             ),
         )
 
@@ -632,7 +636,7 @@ def single_run(config):
             params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+                f"{alg_name}_{env_name}_seed{config['SEED']}_vmap{i}.safetensors",
             )
             save_params(params, save_path)
 
@@ -640,7 +644,10 @@ def single_run(config):
 def tune(default_config):
     """Hyperparameter sweep with wandb."""
 
-    default_config = {**default_config, **default_config["alg"]}  # merge the alg config with the main config
+    default_config = {
+        **default_config,
+        **default_config["alg"],
+    }  # merge the alg config with the main config
     env_name = default_config["ENV_NAME"]
     alg_name = default_config.get("ALG_NAME", "vdn_rnn")
     env, env_name = env_from_config(default_config)
@@ -658,7 +665,7 @@ def tune(default_config):
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, config["NUM_SEEDS"])
         train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-        outs = jax.block_until_ready(train_vjit(rngs))
+        jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {
         "name": f"{alg_name}_{env_name}",

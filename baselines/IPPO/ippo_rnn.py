@@ -454,7 +454,7 @@ def make_train(config):
                     update_steps % int(config["NUM_UPDATES"] * config["TEST_INTERVAL"])
                     == 0,
                     lambda _: _get_greedy_metrics(_rng, train_state.params),
-                    lambda _: (test_metrics),
+                    lambda _: test_metrics,
                     operand=None,
                 )
                 metrics.update({"test_" + k: v for k, v in test_metrics.items()})
@@ -626,7 +626,7 @@ def main(config):
         OmegaConf.save(
             config,
             os.path.join(
-                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+                save_dir, f"{alg_name}_{env_name}_seed{config['SEED']}_config.yaml"
             ),
         )
 
@@ -634,7 +634,7 @@ def main(config):
             params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}_rng{int(rng[0])}.safetensors',
+                f"{alg_name}_{env_name}_seed{config['SEED']}_vmap{i}_rng{int(rng[0])}.safetensors",
             )
             save_params(params, save_path)
 

@@ -1,31 +1,31 @@
 """
 Specific to this implementation: CNN network and Reward Shaping Annealing as per Overcooked paper.
 """
-import os
+
 import copy
-import jax
-import jax.numpy as jnp
-import numpy as np
-from functools import partial
+import os
 from typing import Any
 
 import chex
-import optax
 import flax.linen as nn
-from flax.training.train_state import TrainState
 import hydra
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from flax.training.train_state import TrainState
 from omegaconf import OmegaConf
-import wandb
 
+import wandb
 from jaxmarl import make
+from jaxmarl.environments.overcooked import overcooked_layouts
 from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.wrappers.baselines import (
-    SMAXLogWrapper,
-    MPELogWrapper,
-    LogWrapper,
     CTRolloutManager,
+    LogWrapper,
+    MPELogWrapper,
+    SMAXLogWrapper,
 )
-from jaxmarl.environments.overcooked import overcooked_layouts
 
 
 class CNN(nn.Module):
@@ -37,11 +37,17 @@ class CNN(nn.Module):
         activation = nn.relu
 
         if self.norm_type == "layer_norm":
-            normalize = lambda x: nn.LayerNorm()(x)
+
+            def normalize(x):
+                return nn.LayerNorm()(x)
         elif self.norm_type == "batch_norm":
-            normalize = lambda x: nn.BatchNorm(use_running_average=not train)(x)
+
+            def normalize(x):
+                return nn.BatchNorm(use_running_average=not train)(x)
         else:
-            normalize = lambda x: x
+
+            def normalize(x):
+                return x
 
         x = nn.Conv(
             features=32,
@@ -77,25 +83,31 @@ class QNetwork(nn.Module):
     def __call__(self, x: jnp.ndarray, train=False):
 
         if self.norm_type == "layer_norm":
-            normalize = lambda x: nn.LayerNorm()(x)
+
+            def normalize(x):
+                return nn.LayerNorm()(x)
         elif self.norm_type == "batch_norm":
-            normalize = lambda x: nn.BatchNorm(use_running_average=not train)(x)
+
+            def normalize(x):
+                return nn.BatchNorm(use_running_average=not train)(x)
         else:
-            normalize = lambda x: x
+
+            def normalize(x):
+                return x
 
         if self.norm_input:
             x = nn.BatchNorm(use_running_average=not train)(x)
         else:
-            x_dummy = nn.BatchNorm(use_running_average=not train)(x)
+            _ = nn.BatchNorm(use_running_average=not train)(x)
 
         x = CNN(norm_type=self.norm_type)(x, train=train)
-        for l in range(self.num_layers):
+        for _ in range(self.num_layers):
             x = nn.Dense(self.hidden_size)(x)
             x = normalize(x)
             x = nn.relu(x)
 
         q_vals = nn.Dense(self.action_dim)(x)
-        
+
         return q_vals
 
 
@@ -108,6 +120,7 @@ class Transition:
     avail_actions: chex.Array
     q_vals: chex.Array
 
+
 class CustomTrainState(TrainState):
     batch_stats: Any
     timesteps: int = 0
@@ -117,9 +130,9 @@ class CustomTrainState(TrainState):
 
 def make_train(config, env):
 
-    assert (
-        (config["NUM_ENVS"]*config["NUM_STEPS"]) % config["NUM_MINIBATCHES"] == 0
-    ), "NUM_ENVS*NUM_STEPS must be divisible by NUM_MINIBATCHES"
+    assert (config["NUM_ENVS"] * config["NUM_STEPS"]) % config[
+        "NUM_MINIBATCHES"
+    ] == 0, "NUM_ENVS*NUM_STEPS must be divisible by NUM_MINIBATCHES"
 
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -319,8 +332,10 @@ def make_train(config, env):
 
             def _compute_targets(last_q, q_vals, reward, done):
                 def _get_target(lambda_returns_and_next_q, rew_q_done):
-                    reward, q, done = rew_q_done # (num_envs) except for q (num_agents, num_envs, num_actions)
-                    lambda_returns, next_q = lambda_returns_and_next_q # (num_envs)
+                    reward, q, done = (
+                        rew_q_done  # (num_envs) except for q (num_agents, num_envs, num_actions)
+                    )
+                    lambda_returns, next_q = lambda_returns_and_next_q  # (num_envs)
                     target_bootstrap = reward + config["GAMMA"] * (1 - done) * next_q
                     delta = lambda_returns - next_q
                     lambda_returns = (
@@ -328,12 +343,12 @@ def make_train(config, env):
                     )
                     lambda_returns = (1 - done) * lambda_returns + done * reward
                     next_q = jnp.max(q, axis=-1)
-                    next_q = next_q.sum(axis=0) # sum over agents (vdn)
+                    next_q = next_q.sum(axis=0)  # sum over agents (vdn)
                     return (lambda_returns, next_q), lambda_returns
 
                 lambda_returns = reward[-1] + config["GAMMA"] * (1 - done[-1]) * last_q
                 last_q = jnp.max(q_vals[-1], axis=-1)
-                last_q = jnp.sum(last_q, axis=0) # sum over agents
+                last_q = jnp.sum(last_q, axis=0)  # sum over agents
                 _, targets = jax.lax.scan(
                     _get_target,
                     (lambda_returns, last_q),
@@ -343,16 +358,16 @@ def make_train(config, env):
                 targets = jnp.concatenate((targets, lambda_returns[np.newaxis]))
                 return targets
 
-            if config["NUM_STEPS"] > 1: # q-lambda returns
-                q_vals = transitions.q_vals - (1 - transitions.avail_actions) * 1e10 # mask invalid actions
+            if config["NUM_STEPS"] > 1:  # q-lambda returns
+                q_vals = (
+                    transitions.q_vals - (1 - transitions.avail_actions) * 1e10
+                )  # mask invalid actions
                 lambda_targets = _compute_targets(
                     last_q,
                     q_vals,  # vdn sum,
                     transitions.reward[:, 0],  # _all_
                     transitions.done[:, 0],  # _all_
-                ).reshape(
-                    -1
-                )  # (num_steps*num_envs)
+                ).reshape(-1)  # (num_steps*num_envs)
             else:  # standard 1 step qlearning
                 lambda_targets = (
                     transitions.reward[-1, 0]
@@ -390,9 +405,7 @@ def make_train(config, env):
                             q_vals,
                             jnp.expand_dims(minibatch.action, axis=-1),
                             axis=-1,
-                        ).squeeze(
-                            axis=-1
-                        )  # (num_agents, batch_size,)
+                        ).squeeze(axis=-1)  # (num_agents, batch_size,)
                         vdn_chosen_action_qvals = jnp.sum(
                             chosen_action_qvals, axis=0
                         )  # (batch_size)
@@ -587,7 +600,7 @@ def single_run(config):
     config = {**config, **config["alg"]}  # merge the alg config with the main config
     print("Config:\n", OmegaConf.to_yaml(config))
 
-    alg_name = config.get('ALG_NAME', "pqn_vdn_cnn")
+    alg_name = config.get("ALG_NAME", "pqn_vdn_cnn")
     env, env_name = env_from_config(copy.deepcopy(config))
 
     wandb.init(
@@ -619,7 +632,7 @@ def single_run(config):
         OmegaConf.save(
             config,
             os.path.join(
-                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+                save_dir, f"{alg_name}_{env_name}_seed{config['SEED']}_config.yaml"
             ),
         )
 
@@ -627,7 +640,7 @@ def single_run(config):
             params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+                f"{alg_name}_{env_name}_seed{config['SEED']}_vmap{i}.safetensors",
             )
             save_params(params, save_path)
 
@@ -656,7 +669,7 @@ def tune(default_config):
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, config["NUM_SEEDS"])
         train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-        outs = jax.block_until_ready(train_vjit(rngs))
+        jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {
         "name": f"{alg_name}_{env_name}",
@@ -687,7 +700,7 @@ def tune(default_config):
     }
 
     wandb.login()
-    sweep_id = wandb.sweep(
+    wandb.sweep(
         sweep_config, entity=default_config["ENTITY"], project=default_config["PROJECT"]
     )
     wandb.agent("11ecmms5", wrapped_make_train, count=300)

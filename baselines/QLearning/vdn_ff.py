@@ -1,29 +1,28 @@
-import os
 import copy
-import jax
-import jax.numpy as jnp
-import numpy as np
+import os
 from typing import Any
 
-import flax
 import chex
-import optax
-import flax.linen as nn
-from flax.training.train_state import TrainState
-import hydra
-from omegaconf import OmegaConf
 import flashbax as fbx
-import wandb
+import flax.linen as nn
+import hydra
+import jax
+import jax.numpy as jnp
+import optax
+from flax.training.train_state import TrainState
+from omegaconf import OmegaConf
 
+import wandb
 from jaxmarl import make
-from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.environments.overcooked import overcooked_layouts
+from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.wrappers.baselines import (
-    SMAXLogWrapper,
-    MPELogWrapper,
-    LogWrapper,
     CTRolloutManager,
+    LogWrapper,
+    MPELogWrapper,
+    SMAXLogWrapper,
 )
+
 
 class QNetwork(nn.Module):
     action_dim: int
@@ -32,7 +31,7 @@ class QNetwork(nn.Module):
 
     @nn.compact
     def __call__(self, x: jnp.ndarray):
-        for l in range(1, self.num_layers - 1):
+        for _ in range(1, self.num_layers - 1):
             x = nn.Dense(self.hidden_size)(x)
             x = nn.relu(x)
         x = nn.Dense(self.action_dim)(x)
@@ -261,9 +260,7 @@ def make_train(config, env):
 
                 vdn_target = minibatch.first.rewards["__all__"] + (
                     1 - minibatch.first.dones["__all__"]
-                ) * config["GAMMA"] * jnp.sum(
-                    q_next_target, axis=0
-                )  # sum over agents
+                ) * config["GAMMA"] * jnp.sum(q_next_target, axis=0)  # sum over agents
 
                 def _loss_fn(params):
                     q_vals = jax.vmap(network.apply, in_axes=(None, 0))(
@@ -354,9 +351,12 @@ def make_train(config, env):
             if config["WANDB_MODE"] != "disabled":
 
                 def callback(metrics, original_seed):
-                    if config.get('WANDB_LOG_ALL_SEEDS', False):
+                    if config.get("WANDB_LOG_ALL_SEEDS", False):
                         metrics.update(
-                            {f"rng{int(original_seed)}/{k}": v for k, v in metrics.items()}
+                            {
+                                f"rng{int(original_seed)}/{k}": v
+                                for k, v in metrics.items()
+                            }
                         )
                     wandb.log(metrics, step=metrics["update_step"])
 
@@ -493,7 +493,7 @@ def single_run(config):
         OmegaConf.save(
             config,
             os.path.join(
-                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+                save_dir, f"{alg_name}_{env_name}_seed{config['SEED']}_config.yaml"
             ),
         )
 
@@ -501,7 +501,7 @@ def single_run(config):
             params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+                f"{alg_name}_{env_name}_seed{config['SEED']}_vmap{i}.safetensors",
             )
             save_params(params, save_path)
 
@@ -509,7 +509,10 @@ def single_run(config):
 def tune(default_config):
     """Hyperparameter sweep with wandb."""
 
-    default_config = {**default_config, **default_config["alg"]}  # merge the alg config with the main config
+    default_config = {
+        **default_config,
+        **default_config["alg"],
+    }  # merge the alg config with the main config
     env_name = default_config["ENV_NAME"]
     alg_name = default_config["ALG_NAME"]
     env, env_name = env_from_config(default_config)
@@ -527,7 +530,7 @@ def tune(default_config):
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, config["NUM_SEEDS"])
         train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-        outs = jax.block_until_ready(train_vjit(rngs))
+        jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {
         "name": f"{alg_name}_{env_name}",
