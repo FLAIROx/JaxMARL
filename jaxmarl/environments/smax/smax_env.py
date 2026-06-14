@@ -2,14 +2,26 @@ import dataclasses
 import io
 import math
 from functools import partial
-from typing import Dict, Tuple
+from typing import Tuple
 
 import chex
 import jax
 import jax.numpy as jnp
 from flax.struct import dataclass
+from jaxtyping import PRNGKeyArray
 
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
+from jaxmarl.environments.multi_agent_env import (
+    Actions,
+    AvailActions,
+    Dones,
+    Infos,
+    MultiAgentEnv,
+    Observations,
+    Rewards,
+)
+from jaxmarl.environments.multi_agent_env import (
+    State as BaseState,
+)
 from jaxmarl.environments.smax.distributions import (
     SurroundAndReflectPositionDistribution,
     UniformUnitTypeDistribution,
@@ -18,7 +30,15 @@ from jaxmarl.environments.spaces import Box, Discrete
 
 
 @dataclass
-class State:
+class State(BaseState):
+    """SMAX game state.
+
+    From BaseState:
+        done: bool  # episode terminated
+        step: int   # current timestep (formerly 'time')
+
+    """
+
     unit_positions: chex.Array
     unit_alive: chex.Array
     unit_teams: chex.Array
@@ -27,8 +47,6 @@ class State:
     unit_weapon_cooldowns: chex.Array
     prev_movement_actions: chex.Array
     prev_attack_actions: chex.Array
-    time: int
-    terminal: bool
 
 
 @dataclass
@@ -263,7 +281,7 @@ class SMAX(MultiAgentEnv):
             )
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
         """Environment-specific reset."""
         key, team_0_key, team_1_key = jax.random.split(key, num=3)
         team_0_start = jnp.stack(
@@ -310,8 +328,8 @@ class SMAX(MultiAgentEnv):
             unit_types=unit_types,
             prev_movement_actions=jnp.zeros((self.num_agents, 2)),
             prev_attack_actions=jnp.zeros((self.num_agents,), dtype=jnp.int32),
-            time=0,
-            terminal=False,
+            step=0,
+            done=False,
             unit_weapon_cooldowns=unit_weapon_cooldowns,
         )
         state = self._push_units_away(state)
@@ -323,24 +341,24 @@ class SMAX(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0, 4))
     def step_env(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: State,
-        actions: Dict[str, chex.Array],
+        actions: Actions,
         get_state_sequence: bool = False,
-    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
-        actions = jnp.array([actions[i] for i in self.agents])
+    ) -> Tuple[Observations, State, Rewards, Dones, Infos]:
+        actions_arr = jnp.array([actions[i] for i in self.agents])
         key, action_key = jax.random.split(key)
-        actions = self._decode_actions(action_key, state, actions)
-        return self.step_env_no_decode(key, state, actions, get_state_sequence)
+        decoded_actions = self._decode_actions(action_key, state, actions_arr)
+        return self.step_env_no_decode(key, state, decoded_actions, get_state_sequence)
 
     @partial(jax.jit, static_argnums=(0, 4))
     def step_env_no_decode(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: State,
-        actions: Dict[str, chex.Array],
+        actions: Tuple[chex.Array, chex.Array],
         get_state_sequence: bool = False,
-    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+    ) -> Tuple[Observations, State, Rewards, Dones, Infos]:
         """Environment-specific step transition."""
 
         health_before = jnp.copy(state.unit_health)
@@ -368,17 +386,17 @@ class SMAX(MultiAgentEnv):
         )
         health_after = state.unit_health
         state = state.replace(
-            terminal=self.is_terminal(state),
+            done=self.is_terminal(state),
             prev_movement_actions=actions[0],
             prev_attack_actions=actions[1],
-            time=state.time + 1,
+            step=state.step + 1,
         )
         obs = self.get_obs(state)
         dones = {
             agent: ~state.unit_alive[self.agent_ids[agent]] for agent in self.agents
         }
         rewards = self.compute_reward(state, health_before, health_after)
-        dones["__all__"] = state.terminal
+        dones["__all__"] = state.done
         world_state = self.get_world_state(state)
         infos = {}
         obs["world_state"] = jax.lax.stop_gradient(world_state)
@@ -391,7 +409,7 @@ class SMAX(MultiAgentEnv):
                 infos,
             )
         else:
-            return states
+            return states  # type: ignore[return-value]
 
     @partial(jax.jit, static_argnums=(0,))
     def compute_reward(self, state, health_before, health_after):
@@ -463,7 +481,7 @@ class SMAX(MultiAgentEnv):
     def is_terminal(self, state):
         all_dead = jnp.all(jnp.logical_not(state.unit_alive[: self.num_allies]))
         all_enemy_dead = jnp.all(jnp.logical_not(state.unit_alive[self.num_allies :]))
-        over_time_limit = state.time >= self.max_steps
+        over_time_limit = state.step >= self.max_steps
         return all_dead | all_enemy_dead | over_time_limit
 
     def _update_dead_agents(
@@ -639,10 +657,10 @@ class SMAX(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0,))
     def _world_step(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: State,
         actions: Tuple[chex.Array, chex.Array],
-    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+    ) -> State:
         def update_position(idx, vec):
             # Compute the movements slightly strangely.
             # The velocities below are for diagonal directions
@@ -779,13 +797,16 @@ class SMAX(MultiAgentEnv):
         return jnp.concatenate([unit_obs, unit_teams, unit_types], axis=-1)
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Observations:
         if self.observation_type == "unit_list":
             return self.get_obs_unit_list(state)
         elif self.observation_type == "conic":
             return self.get_obs_conic(state)
+        raise ValueError(
+            f"Unknown observation_type: {self.observation_type!r}. Expected 'unit_list' or 'conic'."
+        )
 
-    def get_obs_conic(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs_conic(self, state: State) -> Observations:
         def get_features(i: int):
             relative_pos = (
                 state.unit_positions - state.unit_positions[i]
@@ -899,7 +920,7 @@ class SMAX(MultiAgentEnv):
             state.unit_alive[i], lambda: features, lambda: empty_features
         )
 
-    def get_obs_unit_list(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs_unit_list(self, state: State) -> Observations:
         """Applies observation function to state."""
 
         def get_features(i, j):
@@ -943,7 +964,7 @@ class SMAX(MultiAgentEnv):
         return {agent: obs[self.agent_ids[agent]] for agent in self.agents}
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
+    def get_avail_actions(self, state: State) -> AvailActions:
         @partial(jax.jit, static_argnums=(1,))
         def get_individual_avail_actions(i, team):
             num_actions = {0: self.num_ally_actions, 1: self.num_enemy_actions}[team]
@@ -993,7 +1014,7 @@ class SMAX(MultiAgentEnv):
         expanded_state_seq = []
         for key, state, actions in state_seq:
             states = self.step_env(key, state, actions, get_state_sequence=True)
-            states = list(map(State, *dataclasses.astuple(states)))
+            states = list(map(State, *dataclasses.astuple(states)))  # type: ignore[arg-type]
             viz_actions = {
                 agent: states[0].prev_attack_actions[i]
                 for i, agent in enumerate(self.agents)
@@ -1002,13 +1023,13 @@ class SMAX(MultiAgentEnv):
                 zip([key] * len(states), states, [viz_actions] * len(states))
             )
 
-            state = state.replace(terminal=self.is_terminal(state))
+            state = state.replace(done=self.is_terminal(state))
         return expanded_state_seq
 
     def init_render(
         self,
         ax,
-        state: Tuple[State, Dict],
+        state,
         step: int,
         env_step: int,
     ):

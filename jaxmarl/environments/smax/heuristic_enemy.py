@@ -1,8 +1,7 @@
-import jax.numpy as jnp
-import jax
-from flax.struct import dataclass
 import chex
-from functools import partial
+import jax
+import jax.numpy as jnp
+from flax.struct import dataclass
 
 
 @dataclass

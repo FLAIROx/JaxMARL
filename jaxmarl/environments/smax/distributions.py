@@ -1,7 +1,8 @@
-import chex
+from functools import partial
+
 import jax
 import jax.numpy as jnp
-from functools import partial
+from jaxtyping import PRNGKeyArray
 
 
 class Distribution:
@@ -14,13 +15,13 @@ class Distribution:
         self.map_height = map_height
 
     @partial(jax.jit, static_argnums=(0,))
-    def generate(self, key: chex.PRNGKey):
+    def generate(self, key: PRNGKeyArray):
         raise NotImplementedError
 
 
 class ReflectPositionDistribution(Distribution):
     @partial(jax.jit, static_argnums=(0,))
-    def generate(self, key: chex.PRNGKey):
+    def generate(self, key: PRNGKeyArray):
         key, ally_key = jax.random.split(key)
         ally_pos = jax.random.uniform(
             ally_key,
@@ -31,7 +32,9 @@ class ReflectPositionDistribution(Distribution):
         enemy_pos = jnp.zeros((self.n_enemies, 2))
 
         if self.n_enemies >= self.n_allies:
-            enemy_pos = enemy_pos.at[: self.n_allies, 0].set(self.map_width - ally_pos[:, 0])
+            enemy_pos = enemy_pos.at[: self.n_allies, 0].set(
+                self.map_width - ally_pos[:, 0]
+            )
             enemy_pos = enemy_pos.at[: self.n_allies, 1].set(ally_pos[:, 1])
             enemy_pos = enemy_pos.at[self.n_allies :, :].set(
                 jax.random.uniform(
@@ -42,7 +45,9 @@ class ReflectPositionDistribution(Distribution):
                 )
             )
         else:
-            enemy_pos = enemy_pos.at[:, 0].set(self.map_width - ally_pos[: self.n_enemies, 0])
+            enemy_pos = enemy_pos.at[:, 0].set(
+                self.map_width - ally_pos[: self.n_enemies, 0]
+            )
             enemy_pos = enemy_pos.at[:, 1].set(ally_pos[: self.n_enemies, 1])
 
         return jnp.concatenate([ally_pos, enemy_pos])
@@ -60,7 +65,8 @@ class SurroundPositionDistribution(Distribution):
                 centre_noise_key, shape=(n_inside, 2), minval=-2, maxval=2
             )
             centre_pos = centre_pos.at[:, :].set(
-                jnp.array([self.map_width / 2, self.map_height / 2]) + centre_start_noise
+                jnp.array([self.map_width / 2, self.map_height / 2])
+                + centre_start_noise
             )
             n_groups = 4
             key_, key_groups = jax.random.split(key_)
@@ -69,7 +75,9 @@ class SurroundPositionDistribution(Distribution):
                 jnp.log(jnp.ones((n_groups,)) / n_groups),
                 shape=(n_outside,),
             )
-            centre = jnp.array([[self.map_width / 2.0, self.map_height / 2.0]] * n_groups)
+            centre = jnp.array(
+                [[self.map_width / 2.0, self.map_height / 2.0]] * n_groups
+            )
             edges = jnp.array(
                 [
                     [0.0, 0.0],
@@ -94,12 +102,16 @@ class SurroundPositionDistribution(Distribution):
         ally_inside_positions = jnp.concatenate(
             [ally_inside_positions["inside"], ally_inside_positions["outside"]]
         )
-        enemy_inside_positions = draw_positions(enemy_key, self.n_enemies, self.n_allies)
+        enemy_inside_positions = draw_positions(
+            enemy_key, self.n_enemies, self.n_allies
+        )
         enemy_inside_positions = jnp.concatenate(
             [enemy_inside_positions["outside"], enemy_inside_positions["inside"]]
         )
         ally_inside = jax.random.randint(key, shape=(), minval=0, maxval=2)
-        return jax.lax.select(ally_inside, ally_inside_positions, enemy_inside_positions)
+        return jax.lax.select(
+            ally_inside, ally_inside_positions, enemy_inside_positions
+        )
 
 
 class SurroundAndReflectPositionDistribution(Distribution):
@@ -137,15 +149,15 @@ class UniformUnitTypeDistribution(Distribution):
 
         if self.n_enemies >= self.n_allies:
             enemy_unit_types = jnp.zeros((self.n_enemies,), dtype=jnp.uint8)
-            enemy_unit_types = enemy_unit_types.at[:self.n_allies].set(ally_unit_types)
-            enemy_unit_types.at[self.n_allies:].set(
-                    jax.random.categorical(
-                        enemy_key,
-                        jnp.log(jnp.ones((self.n_unit_types)) / self.n_unit_types),
-                        shape=(self.n_enemies - self.n_allies,),
-                    ).astype(jnp.uint8)
-                )
+            enemy_unit_types = enemy_unit_types.at[: self.n_allies].set(ally_unit_types)
+            enemy_unit_types.at[self.n_allies :].set(
+                jax.random.categorical(
+                    enemy_key,
+                    jnp.log(jnp.ones((self.n_unit_types)) / self.n_unit_types),
+                    shape=(self.n_enemies - self.n_allies,),
+                ).astype(jnp.uint8)
+            )
         else:
-            enemy_unit_types = ally_unit_types[:self.n_enemies]
+            enemy_unit_types = ally_unit_types[: self.n_enemies]
 
         return jnp.concatenate([ally_unit_types, enemy_unit_types], dtype=jnp.uint8)

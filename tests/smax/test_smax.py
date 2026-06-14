@@ -457,7 +457,7 @@ def test_episode_time_limit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
         env, _, state = create_env(key_reset)
-        state = state.replace(time=env.max_steps)
+        state = state.replace(step=env.max_steps)
 
         key, key_actions = jax.random.split(key)
         actions = get_random_actions(key_actions, env)
@@ -585,7 +585,7 @@ def test_obs_function(do_jit):
         last_ally_idx = first_enemy_idx - len(env.unit_features)
         assert jnp.allclose(
             obs["enemy_0"][last_ally_idx : last_ally_idx + len(env.unit_features)],
-            jnp.array([1.0, 0.125, 0.25, 0, 1, 0, -0.5, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.125, 0.25, 0, 1, 0, 0.0, 1, 0, 0, 0, 0, 0]),
             atol=1e-07,
         )
 

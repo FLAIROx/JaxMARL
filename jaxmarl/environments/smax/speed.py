@@ -1,15 +1,15 @@
-from typing import Sequence, NamedTuple, Any
-from flax.linen.initializers import constant, orthogonal
+import time
+from typing import Sequence
+
+import distrax
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
-from flax.training.train_state import TrainState
 import numpy as np
-import optax
-import distrax
+from flax.linen.initializers import constant, orthogonal
+
 from jaxmarl import make
-from jaxmarl.environments.smax import map_name_to_scenario, Scenario
-import time
+from jaxmarl.environments.smax import Scenario, map_name_to_scenario
 
 
 def batchify(x: dict, agent_list, num_actors):
@@ -21,11 +21,36 @@ def unbatchify(x: dict, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
 
+
 EXTRA_SCENARIOS = {
-    "5m": Scenario(jnp.zeros((10,), dtype=jnp.uint8), num_allies=5, num_enemies=5, smacv2_position_generation=False, smacv2_unit_type_generation=False),
-    "50m": Scenario(jnp.zeros((100,), dtype=jnp.uint8), num_allies=50, num_enemies=50, smacv2_position_generation=False, smacv2_unit_type_generation=False),
-    "500m": Scenario(jnp.zeros((1000,), dtype=jnp.uint8), num_allies=500, num_enemies=500, smacv2_position_generation=False, smacv2_unit_type_generation=False),
-    "5000m": Scenario(jnp.zeros((10000,), dtype=jnp.uint8), num_allies=5000, num_enemies=5000, smacv2_position_generation=False, smacv2_unit_type_generation=False)
+    "5m": Scenario(
+        jnp.zeros((10,), dtype=jnp.uint8),
+        num_allies=5,
+        num_enemies=5,
+        smacv2_position_generation=False,
+        smacv2_unit_type_generation=False,
+    ),
+    "50m": Scenario(
+        jnp.zeros((100,), dtype=jnp.uint8),
+        num_allies=50,
+        num_enemies=50,
+        smacv2_position_generation=False,
+        smacv2_unit_type_generation=False,
+    ),
+    "500m": Scenario(
+        jnp.zeros((1000,), dtype=jnp.uint8),
+        num_allies=500,
+        num_enemies=500,
+        smacv2_position_generation=False,
+        smacv2_unit_type_generation=False,
+    ),
+    "5000m": Scenario(
+        jnp.zeros((10000,), dtype=jnp.uint8),
+        num_allies=5000,
+        num_enemies=5000,
+        smacv2_position_generation=False,
+        smacv2_unit_type_generation=False,
+    ),
 }
 
 
@@ -167,13 +192,13 @@ def main():
         "ENV_NAME": "HeuristicEnemySMAX",
         "NUM_SEEDS": 1,
         "SEED": 0,
-        "ACTION_SELECTION": "random"
+        "ACTION_SELECTION": "random",
     }
     benchmark_fn = make_benchmark(config)
     rng = jax.random.PRNGKey(config["SEED"])
     benchmark_jit = jax.jit(benchmark_fn).lower(rng).compile()
     before = time.perf_counter_ns()
-    runner_state = jax.block_until_ready(benchmark_jit(rng))
+    _ = jax.block_until_ready(benchmark_jit(rng))
     after = time.perf_counter_ns()
     num_steps = config["NUM_ENVS"] * config["NUM_STEPS"]
     total_time = (after - before) / 1e9
