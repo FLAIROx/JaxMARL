@@ -4,7 +4,7 @@ Based on the Gymnax and PettingZoo APIs
 """
 
 from functools import partial
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, TypeAlias
 
 import jax
 from flax import struct
@@ -18,6 +18,10 @@ Rewards = Dict[str, Float[Array, ""]]
 Dones = Dict[str, Bool[Array, ""]]
 Infos = Dict[str, Any]
 AvailActions = Dict[str, Bool[Array, "..."]]
+
+# Batched variants: arrays indexed over agents, before splitting into agent-keyed dicts.
+BatchedActions: TypeAlias = Int[Array, " num_agents"]
+BatchedObservations: TypeAlias = Float[Array, " num_agents *obs_shape"]
 
 
 @struct.dataclass
