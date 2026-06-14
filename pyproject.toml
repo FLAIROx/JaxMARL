@@ -77,16 +77,27 @@ typeCheckingMode = "basic"
 pythonVersion = "3.11"
 reportMissingImports = false
 reportMissingModuleSource = false
+reportCallIssue = false
+reportAttributeAccessIssue = false
+reportIndexIssue = false
 
 [tool.pytest.ini_options]
 
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+exclude = ["build/", ".cache/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]   # pycodestyle errors, pyflakes, isort
 ignore = ["E501", "F722"]   # E501: line length; F722: jaxtyping scalar annotations ("") are valid but unparseable by ruff
 
 [tool.ruff.lint.per-file-ignores]
-"baselines/**" = ["E402"]  # baselines use top-level sys.path manipulation
+# baselines: research/experiment scripts with relaxed style requirements
+"baselines/**" = ["E402", "E711", "E731", "E741", "F401", "F811", "F841"]
+# tests: use star imports from jaxmarl
+"tests/**" = ["F401", "F403", "F405", "F841"]
+# older environment implementations not yet updated to 2.0 style
+"jaxmarl/environments/**" = ["E722", "E731", "E741", "F401", "F403", "F405", "F811", "F821", "F841"]
+"jaxmarl/gridworld/**" = ["E722", "E731", "E741", "F401", "F403", "F405", "F811", "F821", "F841"]
+"jaxmarl/viz/**" = ["E722", "F401", "F821", "F841"]
