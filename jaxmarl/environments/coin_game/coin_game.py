@@ -3,6 +3,7 @@ from typing import Tuple
 import chex
 import jax
 import jax.numpy as jnp
+from flax import struct
 from jaxtyping import PRNGKeyArray
 
 from jaxmarl.environments import spaces
@@ -14,25 +15,28 @@ from jaxmarl.environments.multi_agent_env import (
     Observations,
     Rewards,
 )
+from jaxmarl.environments.multi_agent_env import State as BaseState
 
 
-@chex.dataclass
-class EnvState:
-    red_pos: jnp.ndarray
-    blue_pos: jnp.ndarray
-    red_coin_pos: jnp.ndarray
-    blue_coin_pos: jnp.ndarray
-    inner_t: int
+@struct.dataclass
+class EnvState(BaseState):
+    # From BaseState:
+    #   step: Int[Array, ""]  -- current step within the inner episode
+    #   done: Bool[Array, ""] -- True when the inner episode resets
+    red_pos: chex.Array
+    blue_pos: chex.Array
+    red_coin_pos: chex.Array
+    blue_coin_pos: chex.Array
     outer_t: int
     # stats
-    red_coop: jnp.ndarray
-    red_defect: jnp.ndarray
-    blue_coop: jnp.ndarray
-    blue_defect: jnp.ndarray
-    counter: jnp.ndarray  # 9
-    coop1: jnp.ndarray  # 9
-    coop2: jnp.ndarray  # 9
-    last_state: jnp.ndarray  # 2
+    red_coop: chex.Array
+    red_defect: chex.Array
+    blue_coop: chex.Array
+    blue_defect: chex.Array
+    counter: chex.Array  # 9
+    coop1: chex.Array  # 9
+    coop2: chex.Array  # 9
+    last_state: chex.Array  # 2
 
 
 STATES = jnp.array(
@@ -184,8 +188,9 @@ class CoinGame(MultiAgentEnv):
                         blue_pos=state.red_pos,
                         red_coin_pos=state.blue_coin_pos,
                         blue_coin_pos=state.red_coin_pos,
-                        inner_t=0,
+                        step=0,
                         outer_t=0,
+                        done=False,
                         red_coop=state.blue_coop,
                         red_defect=state.blue_defect,
                         blue_coop=state.red_coop,
@@ -295,8 +300,9 @@ class CoinGame(MultiAgentEnv):
                 blue_pos=new_blue_pos,
                 red_coin_pos=new_red_coin_pos,
                 blue_coin_pos=new_blue_coin_pos,
-                inner_t=state.inner_t + 1,
+                step=state.step + 1,
                 outer_t=state.outer_t,
+                done=False,
                 red_coop=next_red_coop,
                 red_defect=next_red_defect,
                 blue_coop=next_blue_coop,
@@ -310,7 +316,7 @@ class CoinGame(MultiAgentEnv):
             obs = _state_to_obs(next_state)
 
             # now calculate if done for inner or outer episode
-            inner_t = next_state.inner_t
+            inner_t = next_state.step
             outer_t = next_state.outer_t
             reset_inner = inner_t == num_inner_steps
 
@@ -331,10 +337,9 @@ class CoinGame(MultiAgentEnv):
                     reset_state.blue_coin_pos,
                     next_state.blue_coin_pos,
                 ),
-                inner_t=jnp.where(
-                    reset_inner, jnp.zeros_like(inner_t), next_state.inner_t
-                ),
+                step=jnp.where(reset_inner, jnp.zeros_like(inner_t), next_state.step),
                 outer_t=jnp.where(reset_inner, outer_t + 1, outer_t),
+                done=reset_inner,
                 red_coop=next_state.red_coop,
                 red_defect=next_state.red_defect,
                 blue_coop=next_state.blue_coop,
@@ -399,8 +404,9 @@ class CoinGame(MultiAgentEnv):
                 blue_pos=all_pos[1, :],
                 red_coin_pos=all_pos[2, :],
                 blue_coin_pos=all_pos[3, :],
-                inner_t=0,
+                step=0,
                 outer_t=0,
+                done=False,
                 red_coop=empty_stats,
                 red_defect=empty_stats,
                 blue_coop=empty_stats,
@@ -512,7 +518,7 @@ class CoinGame(MultiAgentEnv):
         )
 
         ax2 = fig.add_subplot(122)
-        ax2.text(0.0, 0.95, "Timestep: %s" % (state.inner_t))
+        ax2.text(0.0, 0.95, "Timestep: %s" % (state.step))
         ax2.text(0.0, 0.75, "Episode: %s" % (state.outer_t))
         ax2.text(0.0, 0.45, "Red Coop: %s" % (state.red_coop[state.outer_t].sum()))
         ax2.text(
