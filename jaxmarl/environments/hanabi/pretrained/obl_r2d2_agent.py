@@ -6,16 +6,18 @@ This implementation had the goal to perform inference with pretrained params, fo
 is kept as minimal as possible.
 """
 
-import jax
-from jax import numpy as jnp
-import flax.linen as nn
 from functools import partial
 from typing import Tuple
-from chex import Array, PRNGKey
+
+import flax.linen as nn
+import jax
+from chex import Array
 from flax.linen.module import compact, nowrap
+from jax import numpy as jnp
+from jaxtyping import PRNGKeyArray
+
 
 class MultiLayerLSTM(nn.RNNCellBase):
-
     num_layers: int
     features: int
 
@@ -24,9 +26,9 @@ class MultiLayerLSTM(nn.RNNCellBase):
 
         new_hs = []
         new_cs = []
-        for l in range(self.num_layers):
-            new_carry, y = nn.LSTMCell(self.features, name=f"l{l}")(
-                jax.tree.map(lambda x: x[l], carry), inputs
+        for layer_idx in range(self.num_layers):
+            new_carry, y = nn.LSTMCell(self.features, name=f"l{layer_idx}")(
+                jax.tree.map(lambda x, i=layer_idx: x[i], carry), inputs
             )
             new_cs.append(new_carry[0])
             new_hs.append(new_carry[1])
@@ -37,7 +39,7 @@ class MultiLayerLSTM(nn.RNNCellBase):
 
     @nowrap
     def initialize_carry(
-        self, rng: PRNGKey, batch_dims: Tuple[int, ...]
+        self, rng: PRNGKeyArray, batch_dims: Tuple[int, ...]
     ) -> Tuple[Array, Array]:
         mem_shape = (self.num_layers,) + batch_dims + (self.features,)
         c = jnp.zeros(mem_shape)
@@ -50,7 +52,6 @@ class MultiLayerLSTM(nn.RNNCellBase):
 
 
 class OBLAgentR2D2(nn.Module):
-
     hid_dim: int = 512
     out_dim: int = 21
     num_lstm_layer: int = 2
@@ -103,12 +104,11 @@ class OBLAgentR2D2(nn.Module):
 
     @nowrap
     def initialize_carry(
-        self, rng: PRNGKey, batch_dims: Tuple[int, ...]
+        self, rng: PRNGKeyArray, batch_dims: Tuple[int, ...]
     ) -> Tuple[Array, Array]:
         return MultiLayerLSTM(
             num_layers=self.num_lstm_layer, features=self.hid_dim
         ).initialize_carry(rng, batch_dims)
-
 
 
 def example():
@@ -116,33 +116,36 @@ def example():
     from jaxmarl import make
     from jaxmarl.wrappers.baselines import load_params
 
-    weight_file = "./obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors"
+    weight_file = (
+        "./obl-r2d2-flax/icml_OBL1/OFF_BELIEF1_SHUFFLE_COLOR0_BZA0_BELIEF_a.safetensors"
+    )
     params = load_params(weight_file)
 
     agent = OBLAgentR2D2()
     agent_carry = agent.initialize_carry(jax.random.PRNGKey(0), batch_dims=(2,))
-    
+
     rng = jax.random.PRNGKey(0)
-    env = make('hanabi')
+    env = make("hanabi")
     obs, env_state = env.reset(rng)
     env.render(env_state)
 
-    batchify = lambda x: jnp.stack([x[agent] for agent in env.agents])
-    unbatchify = lambda x: {agent:x[i] for i, agent in enumerate(env.agents)}
+    def batchify(x):
+        return jnp.stack([x[agent] for agent in env.agents])
 
-    agent_input = (
-        batchify(obs),
-        batchify(env.get_legal_moves(env_state))
-    )
+    def unbatchify(x):
+        return {agent: x[i] for i, agent in enumerate(env.agents)}
+
+    agent_input = (batchify(obs), batchify(env.get_legal_moves(env_state)))
     agent_carry, actions = agent.greedy_act(params, agent_carry, agent_input)
     actions = unbatchify(actions)
 
     obs, env_state, rewards, done, info = env.step(rng, env_state, actions)
 
-    print('actions:', {agent:env.action_encoding[int(a)] for agent, a in actions.items()})
+    print(
+        "actions:", {agent: env.action_encoding[int(a)] for agent, a in actions.items()}
+    )
     env.render(env_state)
+
 
 if __name__ == "__main__":
     example()
-
-
