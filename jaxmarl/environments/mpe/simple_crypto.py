@@ -1,11 +1,20 @@
+from functools import partial
+from typing import Tuple
+
+import chex
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
 from flax import struct
-from functools import partial
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments.mpe.default_params import (
+    ADVERSARY_COLOUR,
+    AGENT_COLOUR,
+    CONTINUOUS_ACT,
+    DISCRETE_ACT,
+)
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
-from jaxmarl.environments.mpe.default_params import *
+from jaxmarl.environments.multi_agent_env import Observations, Rewards
 from jaxmarl.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
@@ -31,7 +40,13 @@ class SimpleCryptoMPE(SimpleMPE):
     Note, currently only have continuous actions implemented.
     """
 
-    def __init__(self, num_agents=3, num_landmarks=2, action_type=DISCRETE_ACT, **kwargs,):
+    def __init__(
+        self,
+        num_agents=3,
+        num_landmarks=2,
+        action_type=DISCRETE_ACT,
+        **kwargs,
+    ):
         assert num_agents == 3, "Simple Crypto only supports 3 agents"
         assert num_landmarks == 2, "Simple Crypto only supports 2 landmarks"
 
@@ -102,7 +117,7 @@ class SimpleCryptoMPE(SimpleMPE):
             **kwargs,
         )
 
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, CryptoState]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, CryptoState]:
         key_a, key_l, key_g, key_k = jax.random.split(key, 4)
 
         p_pos = jnp.concatenate(
@@ -150,7 +165,7 @@ class SimpleCryptoMPE(SimpleMPE):
         c = c.at[action].set(1.0)
         return u, c
 
-    def get_obs(self, state: CryptoState) -> Dict[str, chex.Array]:
+    def get_obs(self, state: CryptoState) -> Observations:
         goal_colour = state.goal_colour
         comm = state.c[SPEAKER_IDX]
 
@@ -176,9 +191,9 @@ class SimpleCryptoMPE(SimpleMPE):
         obs = {SPEAKER: _speaker(), LISTENER: _listener(), ADVERSARY: _adversary()}
         return obs
 
-    def rewards(self, state: CryptoState) -> Dict[str, float]:
+    def rewards(self, state: CryptoState) -> Rewards:
         comm_diff = jnp.sum(
-            jnp.square(state.c - state.goal_colour), axis=1
+            jnp.square(jnp.subtract(state.c, state.goal_colour)), axis=1
         )  # check axis
 
         comm_zeros = ~jnp.all(state.c == 0)  # Ensure communication has happend

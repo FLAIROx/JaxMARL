@@ -1,14 +1,23 @@
+from functools import partial
+from typing import Tuple
+
+import chex
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
-from functools import partial
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments.mpe.default_params import (
+    AGENT_COLOUR,
+    CONTINUOUS_ACT,
+    DISCRETE_ACT,
+)
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
-from jaxmarl.environments.mpe.default_params import *
+from jaxmarl.environments.multi_agent_env import Observations, Rewards
 from jaxmarl.environments.spaces import Box, Discrete
 
 # Obstacle Colours
-OBS_COLOUR = [(191, 64, 64), (64, 191, 64), (64, 64, 191)]
+LANDMARK_COLOURS = [(191, 64, 64), (64, 191, 64), (64, 64, 191)]
+
 
 class SimpleReferenceMPE(SimpleMPE):
     def __init__(
@@ -41,7 +50,7 @@ class SimpleReferenceMPE(SimpleMPE):
             raise NotImplementedError("Action type not implemented")
 
         observation_spaces = {i: Box(-jnp.inf, jnp.inf, (21,)) for i in agents}
-        colour = [AGENT_COLOUR] * num_agents + OBS_COLOUR
+        colour = [AGENT_COLOUR] * num_agents + LANDMARK_COLOURS
 
         silent = jnp.full((num_agents), 0)
         collide = jnp.full((num_entites), False)
@@ -61,7 +70,7 @@ class SimpleReferenceMPE(SimpleMPE):
             **kwargs,
         )
 
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
         key_a, key_l, key_g = jax.random.split(key, 3)
 
         p_pos = jnp.concatenate(
@@ -89,7 +98,7 @@ class SimpleReferenceMPE(SimpleMPE):
     def get_obs(
         self,
         state: State,
-    ) -> Dict[str, chex.Array]:
+    ) -> Observations:
         @partial(jax.vmap, in_axes=(0, None))
         def _common_stats(aidx: int, state: State):
             """Values needed in all observations"""
@@ -102,10 +111,13 @@ class SimpleReferenceMPE(SimpleMPE):
 
         landmark_pos = _common_stats(self.agent_range, state)
 
+        goal = state.goal
+        assert goal is not None
+
         def _agent(aidx):
             other_idx = (aidx + 1) % 2
             colour = jnp.full((3,), 0.25)
-            colour = colour.at[state.goal[other_idx]].set(0.75)
+            colour = colour.at[goal[other_idx]].set(0.75)
             return jnp.concatenate(
                 [
                     state.p_vel[aidx].flatten(),  # 2
@@ -124,8 +136,8 @@ class SimpleReferenceMPE(SimpleMPE):
     ) -> Tuple[chex.Array, chex.Array]:
         u = jnp.zeros((self.dim_p,))
         c = jnp.zeros((self.dim_c,))
-        u_act = action % 5
-        c_act = action // 5
+        u_act = jnp.mod(action, 5)
+        c_act = jnp.floor_divide(action, 5)
         idx = jax.lax.select(u_act <= 2, 0, 1)
         u_val = jax.lax.select(u_act % 2 == 0, 1.0, -1.0) * (u_act != 0)
         u = u.at[idx].set(u_val)
@@ -133,13 +145,15 @@ class SimpleReferenceMPE(SimpleMPE):
         c = c.at[c_act].set(1.0)
         return u, c
 
-    def rewards(self, state: State) -> Dict[str, float]:
+    def rewards(self, state: State) -> Rewards:
+        goal = state.goal
+        assert goal is not None
+
         @partial(jax.vmap, in_axes=(0, None))
         def _agent(aidx, state):
             other_idx = (aidx + 1) % 2
             return -1 * jnp.linalg.norm(
-                state.p_pos[other_idx]
-                - state.p_pos[self.num_agents + state.goal[other_idx]]
+                state.p_pos[other_idx] - state.p_pos[self.num_agents + goal[other_idx]]
             )
 
         agent_rew = _agent(self.agent_range, state)

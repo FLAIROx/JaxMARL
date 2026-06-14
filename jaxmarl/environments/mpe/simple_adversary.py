@@ -1,10 +1,18 @@
+from functools import partial
+from typing import Tuple
+
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
-from functools import partial
-from jaxmarl.environments.mpe.simple import State, SimpleMPE
-from jaxmarl.environments.mpe.default_params import *
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments.mpe.default_params import (
+    ADVERSARY_COLOUR,
+    AGENT_COLOUR,
+    DISCRETE_ACT,
+    OBS_COLOUR,
+)
+from jaxmarl.environments.mpe.simple import SimpleMPE, State
+from jaxmarl.environments.multi_agent_env import Observations, Rewards
 from jaxmarl.environments.spaces import Box
 
 
@@ -63,7 +71,7 @@ class SimpleAdversaryMPE(SimpleMPE):
             **kwargs,
         )
 
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
         key_a, key_l, key_g = jax.random.split(key, 3)
 
         p_pos = jnp.concatenate(
@@ -88,7 +96,7 @@ class SimpleAdversaryMPE(SimpleMPE):
 
         return self.get_obs(state), state
 
-    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Observations:
         @partial(jax.vmap, in_axes=(0, None))
         def _common_stats(aidx, state: State):
             """Values needed in all observations"""
@@ -111,8 +119,11 @@ class SimpleAdversaryMPE(SimpleMPE):
 
         landmark_pos, other_pos = _common_stats(self.agent_range, state)
 
+        goal = state.goal
+        assert goal is not None
+
         def _good(aidx):
-            goal_rel_pos = state.p_pos[state.goal + self.num_agents] - state.p_pos[aidx]
+            goal_rel_pos = state.p_pos[goal + self.num_agents] - state.p_pos[aidx]
 
             return jnp.concatenate(
                 [
@@ -139,18 +150,20 @@ class SimpleAdversaryMPE(SimpleMPE):
     def rewards(
         self,
         state: State,
-    ) -> Dict[str, float]:
+    ) -> Rewards:
+        goal = state.goal
+        assert goal is not None
         adv_rew = jnp.sum(
             jnp.linalg.norm(
                 state.p_pos[: self.num_adversaries]
-                - state.p_pos[state.goal + self.num_agents],
+                - state.p_pos[goal + self.num_agents],
                 axis=1,
             )
         )
         pos_rew = -1 * jnp.min(
             jnp.linalg.norm(
                 state.p_pos[self.num_adversaries : self.num_agents]
-                - state.p_pos[state.goal + self.num_agents],
+                - state.p_pos[goal + self.num_agents],
                 axis=1,
             )
         )
@@ -158,7 +171,7 @@ class SimpleAdversaryMPE(SimpleMPE):
 
         def _ad(aidx):
             return -1 * jnp.linalg.norm(
-                state.p_pos[aidx] - state.p_pos[state.goal + self.num_agents]
+                state.p_pos[aidx] - state.p_pos[goal + self.num_agents]
             )
 
         rew = {a: _ad(i) for i, a in enumerate(self.adversaries)}

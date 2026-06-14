@@ -1,16 +1,19 @@
+from functools import partial
+from typing import Optional, Tuple
+
+import chex
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
-from functools import partial
-from jaxmarl.environments.mpe.simple import (
-    SimpleMPE,
-    State,
-    AGENT_COLOUR,
+
+from jaxmarl.environments.mpe.default_params import (
     ADVERSARY_COLOUR,
+    AGENT_COLOUR,
+    CONTINUOUS_ACT,
+    DISCRETE_ACT,
     OBS_COLOUR,
 )
-from jaxmarl.environments.mpe.default_params import *
+from jaxmarl.environments.mpe.simple import SimpleMPE, State
+from jaxmarl.environments.multi_agent_env import Actions, Observations, Rewards
 from jaxmarl.environments.spaces import Box, Discrete
 
 # NOTE food and forests are part of world.landmarks
@@ -136,12 +139,12 @@ class SimpleWorldCommMPE(SimpleMPE):
             **kwargs,
         )
 
-    def set_actions(self, actions: dict):
+    def set_actions(self, actions: Actions):
         """Extract actions for each agent from their action array."""
-        return self.action_decoder(None, actions)
+        return self.action_decoder(None, actions)  # type: ignore[arg-type]
 
     def _decode_discrete_action(
-        self, a_idx: int, actions: chex.Array
+        self, a_idx: Optional[int], actions: chex.Array
     ) -> Tuple[chex.Array, chex.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def u_decoder(a_idx, a):
@@ -170,7 +173,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         return u, c
 
     def _decode_continuous_action(
-        self, a_idx: int, actions: chex.Array
+        self, a_idx: Optional[int], actions: chex.Array
     ) -> Tuple[chex.Array, chex.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def _set_u(a_idx, action):
@@ -188,7 +191,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         c = c.at[self.leader_idx].set(lact[5:])
         return u, c
 
-    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Observations:
         """Returns observations of all agents"""
 
         @partial(jax.vmap, in_axes=(0, None))
@@ -214,8 +217,8 @@ class SimpleWorldCommMPE(SimpleMPE):
             same_forest = jnp.any(
                 forest[aidx] * forest, axis=1
             )  # True if other and ego agent in same forest
-            no_forest = (
-                jnp.all(~forest, axis=1) & ~in_forest
+            no_forest = jnp.all(jnp.logical_not(forest), axis=1) & jnp.logical_not(
+                in_forest
             )  # True if other not in a forest and ego agent also not in a forest
 
             leader = aidx == self.leader_idx
@@ -294,7 +297,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         )
         return obs
 
-    def rewards(self, state: State) -> Dict[str, float]:
+    def rewards(self, state: State) -> Rewards:
         """Computes rewards for all agents"""
 
         @partial(jax.vmap, in_axes=[0, None])
@@ -303,7 +306,7 @@ class SimpleWorldCommMPE(SimpleMPE):
                 aidx < self.num_adversaries,
                 self.adversary_reward,
                 self.agent_reward,
-                *(aidx, state)
+                *(aidx, state),
             )
 
         r = _reward(self.agent_range, state)

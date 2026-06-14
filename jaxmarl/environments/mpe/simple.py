@@ -1,33 +1,59 @@
-""" 
+"""
 Base class for MPE PettingZoo envs.
 
 TODO: viz for communication env, e.g. crypto
 """
 
+from functools import partial
+from typing import Dict, Optional, Tuple
+
+import chex
 import jax
 import jax.numpy as jnp
-import numpy as onp
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
-from jaxmarl.environments.mpe.default_params import *
-import chex
-from jaxmarl.environments.spaces import Box, Discrete
 from flax import struct
-from typing import Tuple, Optional, Dict
-from functools import partial
+from jaxtyping import PRNGKeyArray
 
-import matplotlib.pyplot as plt
-import matplotlib
+from jaxmarl.environments.mpe.default_params import (
+    AGENT_COLOUR,
+    CONTACT_FORCE,
+    CONTACT_MARGIN,
+    CONTINUOUS_ACT,
+    DAMPING,
+    DISCRETE_ACT,
+    DT,
+    MAX_STEPS,
+    OBS_COLOUR,
+)
+from jaxmarl.environments.multi_agent_env import (
+    Actions,
+    Dones,
+    Infos,
+    MultiAgentEnv,
+    Observations,
+    Rewards,
+)
+from jaxmarl.environments.multi_agent_env import (
+    State as BaseState,
+)
+from jaxmarl.environments.spaces import Box, Discrete
+
 
 @struct.dataclass
-class State:
-    """Basic MPE State"""
+class State(BaseState):
+    """Basic MPE State
+
+    From BaseState:
+        done: chex.Array  # bool [num_agents, ]
+        step: int  # current step
+
+    """
 
     p_pos: chex.Array  # [num_entities, [x, y]]
     p_vel: chex.Array  # [n, [x, y]]
     c: chex.Array  # communication state [num_agents, [dim_c]]
-    done: chex.Array  # bool [num_agents, ]
-    step: int  # current step
-    goal: int = None  # index of target landmark, used in: SimpleSpeakerListenerMPE, SimpleReferenceMPE, SimplePushMPE, SimpleAdversaryMPE
+    goal: Optional[chex.Array] = (
+        None  # index of target landmark, used in: SimpleSpeakerListenerMPE, SimpleReferenceMPE, SimplePushMPE, SimpleAdversaryMPE
+    )
 
 
 class SimpleMPE(MultiAgentEnv):
@@ -48,7 +74,7 @@ class SimpleMPE(MultiAgentEnv):
         **kwargs,
     ):
         # Agent and entity constants
-        self.num_agents = num_agents
+        super().__init__(num_agents)
         self.num_landmarks = num_landmarks
         self.num_entities = num_agents + num_landmarks
         self.agent_range = jnp.arange(num_agents)
@@ -56,11 +82,11 @@ class SimpleMPE(MultiAgentEnv):
 
         # Setting, and sense checking, entity names and agent action spaces
         if agents is None:
-            self.agents = [f"agent_{i}" for i in range(num_agents)]
+            pass
         else:
-            assert (
-                len(agents) == num_agents
-            ), f"Number of agents {len(agents)} does not match number of agents {num_agents}"
+            assert len(agents) == num_agents, (
+                f"Number of agents {len(agents)} does not match number of agents {num_agents}"
+            )
             self.agents = agents
         self.a_to_i = {a: i for i, a in enumerate(self.agents)}
         self.classes = self.create_agent_classes()
@@ -68,11 +94,11 @@ class SimpleMPE(MultiAgentEnv):
         if landmarks is None:
             self.landmarks = [f"landmark {i}" for i in range(num_landmarks)]
         else:
-            assert (
-                len(landmarks) == num_landmarks
-            ), f"Number of landmarks {len(landmarks)} does not match number of landmarks {num_landmarks}"
+            assert len(landmarks) == num_landmarks, (
+                f"Number of landmarks {len(landmarks)} does not match number of landmarks {num_landmarks}"
+            )
             self.landmarks = landmarks
-        self.l_to_i = {l: i + self.num_agents for i, l in enumerate(self.landmarks)}
+        self.l_to_i = {lm: i + self.num_agents for i, lm in enumerate(self.landmarks)}
 
         if action_spaces is None:
             if action_type == DISCRETE_ACT:
@@ -80,9 +106,9 @@ class SimpleMPE(MultiAgentEnv):
             elif action_type == CONTINUOUS_ACT:
                 self.action_spaces = {i: Box(0.0, 1.0, (5,)) for i in self.agents}
         else:
-            assert (
-                len(action_spaces.keys()) == num_agents
-            ), f"Number of action spaces {len(action_spaces.keys())} does not match number of agents {num_agents}"
+            assert len(action_spaces.keys()) == num_agents, (
+                f"Number of action spaces {len(action_spaces.keys())} does not match number of agents {num_agents}"
+            )
             self.action_spaces = action_spaces
 
         if observation_spaces is None:
@@ -90,9 +116,9 @@ class SimpleMPE(MultiAgentEnv):
                 i: Box(-jnp.inf, jnp.inf, (4,)) for i in self.agents
             }
         else:
-            assert (
-                len(observation_spaces.keys()) == num_agents
-            ), f"Number of observation spaces {len(observation_spaces.keys())} does not match number of agents {num_agents}"
+            assert len(observation_spaces.keys()) == num_agents, (
+                f"Number of observation spaces {len(observation_spaces.keys())} does not match number of agents {num_agents}"
+            )
             self.observation_spaces = observation_spaces
 
         self.colour = (
@@ -118,9 +144,9 @@ class SimpleMPE(MultiAgentEnv):
         self.dt = dt
         if "rad" in kwargs:
             self.rad = kwargs["rad"]
-            assert (
-                len(self.rad) == self.num_entities
-            ), f"Rad array length {len(self.rad)} does not match number of entities {self.num_entities}"
+            assert len(self.rad) == self.num_entities, (
+                f"Rad array length {len(self.rad)} does not match number of entities {self.num_entities}"
+            )
             assert jnp.all(self.rad > 0), f"Rad array must be positive, got {self.rad}"
         else:
             self.rad = jnp.concatenate(
@@ -129,12 +155,12 @@ class SimpleMPE(MultiAgentEnv):
 
         if "moveable" in kwargs:
             self.moveable = kwargs["moveable"]
-            assert (
-                len(self.moveable) == self.num_entities
-            ), f"Moveable array length {len(self.moveable)} does not match number of entities {self.num_entities}"
-            assert (
-                self.moveable.dtype == bool
-            ), f"Moveable array must be boolean, got {self.moveable}"
+            assert len(self.moveable) == self.num_entities, (
+                f"Moveable array length {len(self.moveable)} does not match number of entities {self.num_entities}"
+            )
+            assert self.moveable.dtype == bool, (
+                f"Moveable array must be boolean, got {self.moveable}"
+            )
         else:
             self.moveable = jnp.concatenate(
                 [
@@ -145,47 +171,47 @@ class SimpleMPE(MultiAgentEnv):
 
         if "silent" in kwargs:
             self.silent = kwargs["silent"]
-            assert (
-                len(self.silent) == self.num_agents
-            ), f"Silent array length {len(self.silent)} does not match number of agents {self.num_agents}"
+            assert len(self.silent) == self.num_agents, (
+                f"Silent array length {len(self.silent)} does not match number of agents {self.num_agents}"
+            )
         else:
             self.silent = jnp.full((self.num_agents), 1)
 
         if "collide" in kwargs:
             self.collide = kwargs["collide"]
-            assert (
-                len(self.collide) == self.num_entities
-            ), f"Collide array length {len(self.collide)} does not match number of entities {self.num_entities}"
+            assert len(self.collide) == self.num_entities, (
+                f"Collide array length {len(self.collide)} does not match number of entities {self.num_entities}"
+            )
         else:
             self.collide = jnp.full((self.num_entities), False)
 
         if "mass" in kwargs:
             self.mass = kwargs["mass"]
-            assert (
-                len(self.mass) == self.num_entities
-            ), f"Mass array length {len(self.mass)} does not match number of entities {self.num_entities}"
-            assert jnp.all(
-                self.mass > 0
-            ), f"Mass array must be positive, got {self.mass}"
+            assert len(self.mass) == self.num_entities, (
+                f"Mass array length {len(self.mass)} does not match number of entities {self.num_entities}"
+            )
+            assert jnp.all(self.mass > 0), (
+                f"Mass array must be positive, got {self.mass}"
+            )
         else:
             self.mass = jnp.full((self.num_entities), 1.0)
 
         if "accel" in kwargs:
             self.accel = kwargs["accel"]
-            assert (
-                len(self.accel) == self.num_agents
-            ), f"Accel array length {len(self.accel)} does not match number of agents {self.num_agents}"
-            assert jnp.all(
-                self.accel > 0
-            ), f"Accel array must be positive, got {self.accel}"
+            assert len(self.accel) == self.num_agents, (
+                f"Accel array length {len(self.accel)} does not match number of agents {self.num_agents}"
+            )
+            assert jnp.all(self.accel > 0), (
+                f"Accel array must be positive, got {self.accel}"
+            )
         else:
             self.accel = jnp.full((self.num_agents), 5.0)
 
         if "max_speed" in kwargs:
             self.max_speed = kwargs["max_speed"]
-            assert (
-                len(self.max_speed) == self.num_entities
-            ), f"Max speed array length {len(self.max_speed)} does not match number of entities {self.num_entities}"
+            assert len(self.max_speed) == self.num_entities, (
+                f"Max speed array length {len(self.max_speed)} does not match number of entities {self.num_entities}"
+            )
         else:
             self.max_speed = jnp.concatenate(
                 [jnp.full((self.num_agents), -1), jnp.full((self.num_landmarks), 0.0)]
@@ -193,25 +219,25 @@ class SimpleMPE(MultiAgentEnv):
 
         if "u_noise" in kwargs:
             self.u_noise = kwargs["u_noise"]
-            assert (
-                len(self.u_noise) == self.num_agents
-            ), f"U noise array length {len(self.u_noise)} does not match number of agents {self.num_agents}"
+            assert len(self.u_noise) == self.num_agents, (
+                f"U noise array length {len(self.u_noise)} does not match number of agents {self.num_agents}"
+            )
         else:
             self.u_noise = jnp.full((self.num_agents), 0)
 
         if "c_noise" in kwargs:
             self.c_noise = kwargs["c_noise"]
-            assert (
-                len(self.c_noise) == self.num_agents
-            ), f"C noise array length {len(self.c_noise)} does not match number of agents {self.num_agents}"
+            assert len(self.c_noise) == self.num_agents, (
+                f"C noise array length {len(self.c_noise)} does not match number of agents {self.num_agents}"
+            )
         else:
             self.c_noise = jnp.full((self.num_agents), 0)
 
         if "damping" in kwargs:
             self.damping = kwargs["damping"]
-            assert (
-                self.damping >= 0
-            ), f"Damping must be non-negative, got {self.damping}"
+            assert self.damping >= 0, (
+                f"Damping must be non-negative, got {self.damping}"
+            )
         else:
             self.damping = DAMPING
 
@@ -226,8 +252,14 @@ class SimpleMPE(MultiAgentEnv):
             self.contact_margin = CONTACT_MARGIN
 
     @partial(jax.jit, static_argnums=[0])
-    def step_env(self, key: chex.PRNGKey, state: State, actions: dict):
+    def step_env(
+        self,
+        key: PRNGKeyArray,
+        state: State,
+        actions: Actions,
+    ) -> Tuple[Observations, State, Rewards, Dones, Infos]:
         u, c = self.set_actions(actions)
+        c = jnp.asarray(c)
         if (
             c.shape[1] < self.dim_c
         ):  # This is due to the MPE code carrying around 0s for the communication channels
@@ -262,7 +294,7 @@ class SimpleMPE(MultiAgentEnv):
         return obs, state, reward, dones, info
 
     @partial(jax.jit, static_argnums=[0])
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
         """Initialise with random positions"""
 
         key_a, key_l = jax.random.split(key)
@@ -289,7 +321,7 @@ class SimpleMPE(MultiAgentEnv):
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
-    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Observations:
         """Return dictionary of agent observations"""
 
         @partial(jax.vmap, in_axes=[0, None])
@@ -304,7 +336,7 @@ class SimpleMPE(MultiAgentEnv):
         obs = _observation(self.agent_range, state)
         return {a: obs[i] for i, a in enumerate(self.agents)}
 
-    def rewards(self, state: State) -> Dict[str, float]:
+    def rewards(self, state: State) -> Rewards:
         """Assign rewards for all agents"""
 
         @partial(jax.vmap, in_axes=[0, None])
@@ -316,7 +348,7 @@ class SimpleMPE(MultiAgentEnv):
         r = _reward(self.agent_range, state)
         return {agent: r[i] for i, agent in enumerate(self.agents)}
 
-    def set_actions(self, actions: Dict):
+    def set_actions(self, actions: Actions) -> Tuple[chex.Array, chex.Array]:
         """Extract u and c actions for all agents from actions Dict."""
 
         actions = jnp.array([actions[i] for i in self.agents]).reshape(
@@ -340,12 +372,12 @@ class SimpleMPE(MultiAgentEnv):
     ) -> Tuple[chex.Array, chex.Array]:
         u = jnp.zeros((self.dim_p,))
         idx = jax.lax.select(action <= 2, 0, 1)
-        u_val = jax.lax.select(action % 2 == 0, 1.0, -1.0) * (action != 0)
+        u_val = jax.lax.select(jnp.mod(action, 2) == 0, 1.0, -1.0) * (action != 0)
         u = u.at[idx].set(u_val)
         u = u * self.accel[a_idx] * self.moveable[a_idx]
         return u, jnp.zeros((self.dim_c,))
 
-    def _world_step(self, key: chex.PRNGKey, state: State, u: chex.Array):
+    def _world_step(self, key: PRNGKeyArray, state: State, u: chex.Array):
         p_force = jnp.zeros((self.num_agents, 2))
 
         # apply agent physical controls
@@ -370,7 +402,7 @@ class SimpleMPE(MultiAgentEnv):
 
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0])
     def _apply_comm_action(
-        self, key: chex.PRNGKey, c: chex.Array, c_noise: int, silent: int
+        self, key: PRNGKeyArray, c: chex.Array, c_noise: int, silent: int
     ) -> chex.Array:
         silence = jnp.zeros(c.shape)
         noise = jax.random.normal(key, shape=c.shape) * c_noise
@@ -380,7 +412,7 @@ class SimpleMPE(MultiAgentEnv):
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0, 0])
     def _apply_action_force(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         p_force: chex.Array,
         u: chex.Array,
         u_noise: int,
@@ -396,12 +428,12 @@ class SimpleMPE(MultiAgentEnv):
         def __env_force_outer(idx: int):
             @partial(jax.vmap, in_axes=[None, 0])
             def __env_force_inner(idx_a: int, idx_b: int):
-                l = idx_b <= idx_a
+                skip = idx_b <= idx_a
                 l_a = jnp.zeros((2, 2))
 
                 collision_force = self._get_collision_force(idx_a, idx_b, state)
 
-                xx = jax.lax.select(l, l_a, collision_force)
+                xx = jax.lax.select(skip, l_a, collision_force)
                 # jax.debug.print('{a} {b} {f}', a=idx_a, b=idx_b, f=xx)
                 return xx
 
@@ -490,7 +522,7 @@ class SimpleMPE(MultiAgentEnv):
         m = x < 1.0
         mr = (x - 0.9) * 10
         br = jnp.min(jnp.array([jnp.exp(2 * x - 2), 10]))
-        return jax.lax.select(m, mr, br) * ~w   
+        return jax.lax.select(m, mr, br) * ~w
 
 
 if __name__ == "__main__":
