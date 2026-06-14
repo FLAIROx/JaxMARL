@@ -1,16 +1,18 @@
 import math
-from jaxmarl.environments.overcooked_v2.utils import compute_view_box
-from jaxmarl.viz.window import Window
-import jaxmarl.viz.grid_rendering_v2 as rendering
+from functools import partial
+
+import imageio
 import jax
 import jax.numpy as jnp
-from jaxmarl.environments.overcooked_v2.common import StaticObject, DynamicObject
+
+import jaxmarl.viz.grid_rendering_v2 as rendering
+from jaxmarl.environments.overcooked_v2.common import DynamicObject, StaticObject
 from jaxmarl.environments.overcooked_v2.settings import (
-    POT_COOK_TIME,
     INDICATOR_ACTIVATION_TIME,
+    POT_COOK_TIME,
 )
-import imageio
-from functools import partial
+from jaxmarl.environments.overcooked_v2.utils import compute_view_box
+from jaxmarl.viz.window import Window
 
 TILE_PIXELS = 32
 
