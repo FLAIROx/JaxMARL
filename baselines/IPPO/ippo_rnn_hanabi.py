@@ -217,7 +217,6 @@ def make_train(config):
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
-                    jnp.tile(done["__all__"], env.num_agents),
                     last_done,
                     action.squeeze(),
                     value.squeeze(),
@@ -397,17 +396,17 @@ def make_train(config):
             )
             train_state = update_state[0]
             metric = traj_batch.info
-            ratio_0 = loss_info[1][3].at[0, 0].get().mean()
-            loss_info = jax.tree.map(lambda x: x.mean(), loss_info)
-            metric["loss"] = {
-                "total_loss": loss_info[0],
-                "value_loss": loss_info[1][0],
-                "actor_loss": loss_info[1][1],
-                "entropy": loss_info[1][2],
-                "ratio": loss_info[1][3],
-                "ratio_0": ratio_0,
-                "approx_kl": loss_info[1][4],
-                "clip_frac": loss_info[1][5],
+            metric["loss_info"] = {
+                "total_loss": loss_info[0].mean(),
+                "value_loss": loss_info[1][0].mean(),
+                "actor_loss": loss_info[1][1].mean(),
+                "entropy": loss_info[1][2].mean(),
+                "ratio": loss_info[1][3].mean(),
+                "ratio_0": jnp.around(
+                    loss_info[1][3].at[0, 0].get().mean(), decimals=6
+                ),
+                "approx_kl": loss_info[1][4].mean(),
+                "clip_frac": loss_info[1][5].mean(),
             }
             rng = update_state[-1]
 
@@ -418,9 +417,8 @@ def make_train(config):
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
-                        **metric["loss"],
-                    },
-                    step=metric["update_steps"],
+                        **metric["loss_info"],
+                    }
                 )
 
             metric["update_steps"] = update_steps

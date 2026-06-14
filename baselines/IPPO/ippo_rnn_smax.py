@@ -216,6 +216,7 @@ def make_train(config):
                 )(rng_step, env_state, env_act)
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
+
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
                     last_done,
@@ -230,7 +231,7 @@ def make_train(config):
                 runner_state = (train_state, env_state, obsv, done_batch, hstate, rng)
                 return runner_state, transition
 
-            initial_hstate = runner_state[-2]
+            init_hstate = runner_state[-2]
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
@@ -393,7 +394,7 @@ def make_train(config):
 
             update_state = (
                 train_state,
-                initial_hstate,
+                init_hstate,
                 traj_batch,
                 advantages,
                 targets,
@@ -403,6 +404,7 @@ def make_train(config):
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
             train_state = update_state[0]
+
             metric = traj_batch.info
             metric = jax.tree.map(
                 lambda x: x.reshape(
@@ -468,9 +470,12 @@ def make_train(config):
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_smax")
 def main(config):
+
     config = OmegaConf.to_container(config)
+    entity = config["ENTITY"]
+    print("entity:", entity)
     wandb.init(
-        entity=config["ENTITY"],
+        entity="amacrutherford",  # TODO fix
         project=config["PROJECT"],
         tags=["IPPO", "RNN"],
         config=config,

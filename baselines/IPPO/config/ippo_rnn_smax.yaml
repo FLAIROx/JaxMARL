@@ -15,15 +15,15 @@
 "MAX_GRAD_NORM": 0.25
 "ACTIVATION": "relu"
 "ENV_NAME": "HeuristicEnemySMAX"
-"MAP_NAME": "2s3z"
+"MAP_NAME": "27m_vs_30m"
 "SEED": 0
-"ENV_KWARGS": 
+"ENV_KWARGS":
   "see_enemy_actions": True
   "walls_cause_death": True
   "attack_mode": "closest"
 "ANNEAL_LR": True
 
 # WandB Params
-"ENTITY": ""
-"PROJECT": ""
-"WANDB_MODE" : "disabled"
+"ENTITY": ${oc.env:WANDB_ENTITY}
+"PROJECT": "jaxmarl-smax"
+"WANDB_MODE" : "online"
