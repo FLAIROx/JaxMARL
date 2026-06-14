@@ -1,10 +1,8 @@
-from PIL import Image
-import os
 import jax
 import jax.numpy as jnp
+from PIL import Image
 
 from jaxmarl import make
-from jaxmarl.environments.storm.storm_2p import Items
 
 action = 1
 render_agent_view = True
@@ -13,13 +11,15 @@ num_inner_steps = 152
 
 rng = jax.random.PRNGKey(0)
 
-env = make('storm_2p', 
-        num_inner_steps=num_inner_steps, 
-        num_outer_steps=num_outer_steps, 
-        fixed_coin_location=True,
-        num_agents=2,
-        payoff_matrix=jnp.array([[[3, 0], [5, 1]], [[3, 5], [0, 1]]]),
-        freeze_penalty=5,)
+env = make(
+    "storm_2p",
+    num_inner_steps=num_inner_steps,
+    num_outer_steps=num_outer_steps,
+    fixed_coin_location=True,
+    num_agents=2,
+    payoff_matrix=jnp.array([[[3, 0], [5, 1]], [[3, 5], [0, 1]]]),
+    freeze_penalty=5,
+)
 
 num_actions = env.action_space().n
 
@@ -48,27 +48,19 @@ for t in range(num_outer_steps * num_inner_steps):
     rng, rng1, rng2 = jax.random.split(rng, 3)
     # a1 = jnp.array(2)
     # a2 = jnp.array(4)
-    a1 = jax.random.choice(
-        rng1, a=num_actions, p=jnp.array([0.1, 0.1, 0.5, 0.1, 0.4])
-    )
-    a2 = jax.random.choice(
-        rng2, a=num_actions, p=jnp.array([0.1, 0.1, 0.5, 0.1, 0.4])
-    )
+    a1 = jax.random.choice(rng1, a=num_actions, p=jnp.array([0.1, 0.1, 0.5, 0.1, 0.4]))
+    a2 = jax.random.choice(rng2, a=num_actions, p=jnp.array([0.1, 0.1, 0.5, 0.1, 0.4]))
     obs, state, reward, done, info = env.step_env(
         rng, old_state, (a1 * action, a2 * action)
     )
 
-    print('outer t', state.outer_t)
-    print('inner t', state.inner_t)
-    print('done', done)
+    print("outer t", state.outer_t)
+    print("inner t", state.inner_t)
+    print("done", done)
     if (state.red_pos[:2] == state.blue_pos[:2]).all():
-        import pdb
-
         # pdb.set_trace()
         print("collision")
-        print(
-            f"timestep: {t}, A1: {int_action[a1.item()]} A2:{int_action[a2.item()]}"
-        )
+        print(f"timestep: {t}, A1: {int_action[a1.item()]} A2:{int_action[a2.item()]}")
         print(state.red_pos, state.blue_pos)
 
     img = env.render(state)
