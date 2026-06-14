@@ -7,7 +7,7 @@ import jax
 import pytest
 
 # Import the base environment class
-from jaxmarl.environments import MultiAgentEnv
+from jaxmarl.environments import SUBMODULE_ENVIRONMENTS, MultiAgentEnv
 from jaxmarl.environments.spaces import Space
 
 # Import the specific environment to test. Replace 'MyEnv' with your environment's class.
@@ -149,6 +149,7 @@ def test_envs(env_id):
     test_step_returns_correct_format(env)
 
 
+@pytest.mark.skipif(not SUBMODULE_ENVIRONMENTS, reason="jaxrobotarium not installed")
 @pytest.mark.parametrize("env_id", submodule_envs)
 def test_submodule_envs(env_id):
     env = make(env_id, **{"num_agents": 2})

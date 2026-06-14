@@ -131,8 +131,12 @@ def make(env_id: str, **env_kwargs) -> MultiAgentEnv:
     elif env_id == "jaxnav":
         env = JaxNav(**env_kwargs)
 
-    if SUBMODULE_ENVIRONMENTS:
-        # 10. JaxRobotarium Environments
+    # 10. JaxRobotarium Environments
+    if env_id.startswith("JaxRobotarium"):
+        if not SUBMODULE_ENVIRONMENTS:
+            raise ValueError(
+                f"{env_id} requires the jaxrobotarium package, which is not installed."
+            )
         if env_id == "JaxRobotarium_navigation":
             env = Navigation(**env_kwargs)
         elif env_id == "JaxRobotarium_discovery":
