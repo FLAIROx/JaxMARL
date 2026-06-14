@@ -2,7 +2,7 @@
 
 import os
 from functools import partial
-from typing import Any, Dict, List, Mapping, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -13,7 +13,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 # from gymnax.environments import environment, spaces
 from gymnax.environments.spaces import Box as BoxGymnax
 from gymnax.environments.spaces import Discrete as DiscreteGymnax
-from jaxtyping import Array, Float, Int, Num, PRNGKeyArray
+from jaxtyping import Array, Float, Int, Num, PRNGKeyArray  # type: ignore[attr-defined]
 from safetensors.flax import load_file, save_file
 
 from jaxmarl.environments.multi_agent_env import (
@@ -166,7 +166,7 @@ class OvercookedV2LogWrapper(JaxMARLWrapper):
 
         updated_recipe_returns = {
             id: jax.lax.select(
-                (state.env_state.recipe == self.recipe_dict[id]) & ep_done,
+                (state.env_state.recipe == self.recipe_dict[id]) & ep_done,  # type: ignore[attr-defined]
                 new_episode_return,
                 old_episode_return,
             )
@@ -322,7 +322,7 @@ class CTRolloutManager(JaxMARLWrapper):
         self,
         env: MultiAgentEnv,
         batch_size: int,
-        training_agents: List = None,
+        training_agents: Optional[List] = None,
         preprocess_obs: bool = True,
     ):
         super().__init__(env)
@@ -364,7 +364,19 @@ class CTRolloutManager(JaxMARLWrapper):
             for a, u in self.action_spaces.items()
         }
 
-        # custom global state and rewards for specific envs
+        # default global state, reward, and valid action functions
+        self.global_state = lambda obs, state: jnp.concatenate(
+            [obs[agent] for agent in self.agents], axis=-1
+        )
+        self.global_reward = lambda reward: jnp.stack(
+            [reward[agent] for agent in self.training_agents]
+        ).sum(axis=0)
+        self.get_valid_actions = lambda state: {
+            agent: jnp.tile(actions, self.batch_size).reshape(self.batch_size, -1)
+            for agent, actions in self.valid_actions_oh.items()
+        }
+
+        # env-specific overrides
         if "smax" in env.name.lower():
             self.global_state = lambda obs, state: obs["world_state"]
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
@@ -378,7 +390,9 @@ class CTRolloutManager(JaxMARLWrapper):
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
         elif "hanabi" in env.name.lower():
             self.global_reward = lambda rewards: rewards[self.training_agents[0]]
-            self.get_valid_actions = lambda state: jax.vmap(env.get_legal_moves)(state)
+            self.get_valid_actions = lambda state: jax.vmap(
+                getattr(env, "get_legal_moves")
+            )(state)
 
     @partial(jax.jit, static_argnums=0)
     def batch_reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
@@ -426,26 +440,10 @@ class CTRolloutManager(JaxMARLWrapper):
         reward["__all__"] = self.global_reward(reward)
         return obs, state, reward, done, infos
 
-    @partial(jax.jit, static_argnums=0)
-    def global_state(self, obs: Observations, state: State) -> Num[Array, "..."]:
-        return jnp.concatenate([obs[agent] for agent in self.agents], axis=-1)
-
-    @partial(jax.jit, static_argnums=0)
-    def global_reward(self, reward: Rewards) -> Num[Array, "..."]:
-        return jnp.stack([reward[agent] for agent in self.training_agents]).sum(axis=0)
-
     def batch_sample(self, key: PRNGKeyArray, agent: str) -> Int[Array, "..."]:
         return self.batch_samplers[agent](
             jax.random.split(key, self.batch_size)
         ).astype(int)
-
-    @partial(jax.jit, static_argnums=0)
-    def get_valid_actions(self, state: State) -> Dict[str, Int[Array, "..."]]:
-        # default is to return the same valid actions one hot encoded for each env
-        return {
-            agent: jnp.tile(actions, self.batch_size).reshape(self.batch_size, -1)
-            for agent, actions in self.valid_actions_oh.items()
-        }
 
     @partial(jax.jit, static_argnums=0)
     def _preprocess_obs(self, arr: Array, extra_features: Array) -> Array:
