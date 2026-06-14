@@ -1,4 +1,5 @@
 from typing import Dict, List, Tuple, Union
+
 import jax.numpy as jnp
 
 # TODO: programatically generate these mappings from the kinematic trees

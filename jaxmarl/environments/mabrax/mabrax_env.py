@@ -2,13 +2,20 @@ import warnings
 from functools import partial
 from typing import Dict, Literal, Optional, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from brax import envs
+from jaxtyping import PRNGKeyArray
 
 from jaxmarl.environments import spaces
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
+from jaxmarl.environments.multi_agent_env import (
+    Actions,
+    Dones,
+    Infos,
+    MultiAgentEnv,
+    Observations,
+    Rewards,
+)
 
 from .mappings import _agent_action_mapping, _agent_observation_mapping
 
@@ -125,7 +132,7 @@ class MABraxEnv(MultiAgentEnv):
             agent: spaces.Box(
                 -jnp.inf,
                 jnp.inf,
-                shape=(obs_sizes[agent],),
+                shape=(obs_sizes[agent],),  # type: ignore[arg-type]
             )
             for agent in self.agents
         }
@@ -139,19 +146,17 @@ class MABraxEnv(MultiAgentEnv):
         }
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], envs.State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, envs.State]:
         state = self.env.reset(key)
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=(0,))
     def step_env(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: envs.State,
-        actions: Dict[str, chex.Array],
-    ) -> Tuple[
-        Dict[str, chex.Array], envs.State, Dict[str, float], Dict[str, bool], Dict
-    ]:
+        actions: Actions,
+    ) -> Tuple[Observations, envs.State, Rewards, Dones, Infos]:
         global_action = self.map_agents_to_global_action(actions)
         next_state = self.env.step(state, global_action)  # type: ignore
         observations = self.get_obs(next_state)
@@ -167,7 +172,7 @@ class MABraxEnv(MultiAgentEnv):
             next_state.info,
         )
 
-    def get_obs(self, state: envs.State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: envs.State) -> Observations:
         """Extracts agent observations from the global state.
 
         Args:
