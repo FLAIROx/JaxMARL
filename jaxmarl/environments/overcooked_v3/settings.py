@@ -37,3 +37,7 @@ MAX_PRESSURE_PLATES = 16
 # Barriers
 MAX_BARRIERS = 16
 DEFAULT_BARRIER_DURATION = 5  # Default duration for timed barrier deactivation (steps)
+
+# Maximum targets a single button can control. Moving-wall buttons use moving wall
+# indexes, barrier buttons use barrier indexes.
+MAX_BUTTON_TARGETS = max(MAX_MOVING_WALLS, MAX_BARRIERS)

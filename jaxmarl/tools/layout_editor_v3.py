@@ -32,10 +32,6 @@ StaticObject = None
 Direction = None
 Layout = None
 overcooked_v3_layouts = None
-layout_to_string = None
-get_layout_info = None
-validate_layout = None
-annotate_layout_string = None
 OvercookedV3Visualizer = None
 
 # Fallback static object IDs (match Overcooked V3 StaticObject values)
@@ -51,18 +47,9 @@ FALLBACK_PLAYER_CONVEYOR = 21
 
 def _load_jaxmarl_deps():
     """Load JaxMARL dependencies on first use."""
-    global \
-        DEPENDENCIES_AVAILABLE, \
-        StaticObject, \
-        Direction, \
-        Layout, \
-        overcooked_v3_layouts
-    global \
-        layout_to_string, \
-        get_layout_info, \
-        validate_layout, \
-        annotate_layout_string, \
-        OvercookedV3Visualizer
+    global DEPENDENCIES_AVAILABLE, StaticObject, Direction, Layout, overcooked_v3_layouts
+    global OvercookedV3Visualizer
+
 
     if DEPENDENCIES_AVAILABLE:
         return
@@ -76,22 +63,12 @@ def _load_jaxmarl_deps():
             Layout as L,
             overcooked_v3_layouts as layouts,
         )
-        from jaxmarl.environments.overcooked_v3.layout_utils import (
-            layout_to_string as lts,
-            get_layout_info as gli,
-            validate_layout as vl,
-            annotate_layout_string as als,
-        )
         from jaxmarl.viz.overcooked_v3_visualizer import OvercookedV3Visualizer as Viz
 
         StaticObject = SO
         Direction = Dir
         Layout = L
         overcooked_v3_layouts = layouts
-        layout_to_string = lts
-        get_layout_info = gli
-        validate_layout = vl
-        annotate_layout_string = als
         OvercookedV3Visualizer = Viz
         DEPENDENCIES_AVAILABLE = True
     except ImportError as e:
@@ -910,7 +887,8 @@ overcooked_v3_layouts["{self.state.layout_name}"] = Layout.from_string(
         try:
             # First validate the layout
             layout = self.state.to_layout()
-            is_valid, messages = validate_layout(layout)
+            is_valid, messages = layout.validate()
+
 
             if not is_valid:
                 self.validation_messages = [
@@ -925,7 +903,7 @@ overcooked_v3_layouts["{self.state.layout_name}"] = Layout.from_string(
             import tempfile
             import subprocess
 
-            layout_str = layout_to_string(layout)
+            layout_str = layout.to_string()
             recipes_str = str(self.state.recipes)
 
             # Create a temporary test script
@@ -1056,7 +1034,7 @@ print("\\nReturning to editor...")
 
         try:
             layout = self.state.to_layout()
-            is_valid, messages = validate_layout(layout)
+            is_valid, messages = layout.validate()
             self.validation_messages = messages if messages else ["✓ Layout is valid!"]
 
             print("\n" + "=" * 60)

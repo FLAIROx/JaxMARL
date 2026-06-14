@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 from jaxmarl import make
+from jaxmarl.environments.overcooked_v3.common import Actions
 
 
 class TestBarriers:
@@ -26,16 +27,16 @@ class TestBarriers:
             barrier_active=jnp.zeros_like(state.barrier_active, dtype=jnp.bool_)
         )
 
-        # Move agent_0 left toward barrier
-        actions = {"agent_0": 2, "agent_1": 4}
+        # Move agent_0 right to the cell adjacent to the barrier, then through it.
+        actions_right = {"agent_0": int(Actions.right), "agent_1": int(Actions.stay)}
         key, step_key = jax.random.split(key)
-        obs, new_state, rewards, dones, info = env.step_env(step_key, state, actions)
+        _, state, _, _, _ = env.step_env(step_key, state, actions_right)
 
-        # Agent should have moved (position changed)
-        moved = (new_state.agents.pos.x[0] != state.agents.pos.x[0]) | (
-            new_state.agents.pos.y[0] != state.agents.pos.y[0]
-        )
-        assert moved, "Agent should move through inactive barrier"
+        key, step_key = jax.random.split(key)
+        _, new_state, _, _, _ = env.step_env(step_key, state, actions_right)
+
+        assert new_state.agents.pos.x[0] == 3
+        assert new_state.agents.pos.y[0] == 1
 
     def test_active_barrier_blocks_movement(self):
         """Agent cannot move through an active barrier."""
@@ -220,16 +221,16 @@ class TestTimedBarriers:
 
         assert state.barrier_active[0], "Barrier should have reactivated"
 
-        # Move agent away then try to re-enter
-        actions_left = {"agent_0": 2, "agent_1": 4}
-        key, step_key = jax.random.split(key)
-        _, state, _, _, _ = env.step_env(step_key, state, actions_left)
-
+        # Agent is adjacent to the reactivated barrier; trying to enter it is blocked.
         pos_before_x = state.agents.pos.x[0]
-        actions_right = {"agent_0": 0, "agent_1": 4}
+        pos_before_y = state.agents.pos.y[0]
+        actions_right = {"agent_0": int(Actions.right), "agent_1": int(Actions.stay)}
         key, step_key = jax.random.split(key)
         _, state, _, _, _ = env.step_env(step_key, state, actions_right)
 
         assert state.agents.pos.x[0] == pos_before_x, (
+            "Agent should be blocked by reactivated barrier"
+        )
+        assert state.agents.pos.y[0] == pos_before_y, (
             "Agent should be blocked by reactivated barrier"
         )

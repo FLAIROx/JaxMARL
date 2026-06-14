@@ -5,6 +5,20 @@ import jax.numpy as jnp
 import pytest
 from jaxmarl import make
 from jaxmarl.environments.overcooked_v3 import OvercookedV3, overcooked_v3_layouts
+from jaxmarl.environments.overcooked_v3.common import (
+    Actions,
+    ButtonAction,
+    Direction,
+    DynamicObject,
+    Position,
+    StaticObject,
+)
+from jaxmarl.environments.overcooked_v3.layouts import (
+    Layout,
+    coordinated_temporal_conveyor,
+    moving_wall_demo,
+    moving_wall_bounce_demo,
+)
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 
 
@@ -146,6 +160,44 @@ class TestOvercookedV3Layouts:
             assert state is not None
 
 
+class TestOvercookedV3Interactions:
+    """Test interaction edge cases."""
+
+    def test_interact_left_edge_does_not_wrap_to_right_edge(self):
+        layout = Layout.from_string(
+            """
+A BP 0
+W   XW
+WWWWWW
+""",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, random_agent_positions=False)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        right_col = env.width - 1
+        assert StaticObject.is_ingredient_pile(state.grid[0, right_col, 0])
+
+        state = state.replace(
+            agents=state.agents.replace(
+                pos=state.agents.pos.replace(
+                    x=state.agents.pos.x.at[0].set(0),
+                    y=state.agents.pos.y.at[0].set(0),
+                ),
+                dir=state.agents.dir.at[0].set(Direction.LEFT),
+                inventory=state.agents.inventory.at[0].set(0),
+            )
+        )
+
+        actions = {"agent_0": int(Actions.interact)}
+        obs, new_state, rewards, dones, info = env.step(
+            jax.random.PRNGKey(1), state, actions
+        )
+
+        assert new_state.agents.inventory[0] == 0
+
+
 class TestOvercookedV3PotMechanics:
     """Test pot cooking and burning mechanics."""
 
@@ -257,7 +309,7 @@ class TestOvercookedV3PotMechanics:
         pot_y, pot_x = state.pot_positions[0]
 
         # Step through cooking phase (timer 10 -> 6, not yet cooked)
-        for expected_timer in range(9, 6, -1):
+        for expected_timer in range(9, 5, -1):
             state, key = self._step_noop(env, state, key)
             assert state.pot_cooking_timer[0] == expected_timer
             pot_ingredients = state.grid[pot_y, pot_x, 1]
@@ -299,6 +351,70 @@ class TestOvercookedV3PotMechanics:
         assert new_state.pot_cooking_timer[0] == 0
 
 
+class TestOvercookedV3RewardShaping:
+    """Test shaped rewards for plate interactions."""
+
+    def _make_env_and_state(self):
+        layout = Layout.from_string(
+            """
+WWWWWW
+WAB XW
+W P0 W
+W    W
+WWWWWW
+""",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, pot_cook_time=10, pot_burn_time=5)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+        state = state.replace(
+            agents=state.agents.replace(
+                dir=jnp.array([Direction.RIGHT], dtype=jnp.int32),
+            )
+        )
+        return env, state
+
+    def _set_pot(self, state, contents, timer=0):
+        pot_y, pot_x = state.pot_positions[0]
+        grid = state.grid.at[pot_y, pot_x, 1].set(jnp.int32(contents))
+        timers = state.pot_cooking_timer.at[0].set(jnp.int32(timer))
+        return state.replace(grid=grid, pot_cooking_timer=timers)
+
+    def _pickup_plate_reward(self, env, state):
+        actions = {"agent_0": int(Actions.interact)}
+        _, _, _, _, info = env.step(jax.random.PRNGKey(1), state, actions)
+        return float(info["shaped_reward"]["agent_0"])
+
+    @pytest.mark.parametrize("ingredient_count", [1, 2])
+    def test_plate_pickup_not_rewarded_for_partial_pot(self, ingredient_count):
+        env, state = self._make_env_and_state()
+        pot_contents = DynamicObject.ingredient(0) * ingredient_count
+        state = self._set_pot(state, pot_contents)
+
+        shaped_reward = self._pickup_plate_reward(env, state)
+
+        assert shaped_reward == pytest.approx(0.0)
+
+    def test_plate_pickup_rewarded_for_full_unburned_pot(self):
+        env, state = self._make_env_and_state()
+        pot_contents = DynamicObject.ingredient(0) * 3
+        state = self._set_pot(state, pot_contents, timer=10)
+
+        shaped_reward = self._pickup_plate_reward(env, state)
+
+        assert shaped_reward == pytest.approx(0.1)
+
+    def test_plate_pickup_not_rewarded_for_burned_pot(self):
+        env, state = self._make_env_and_state()
+        pot_contents = (DynamicObject.ingredient(0) * 3) | DynamicObject.BURNED
+        state = self._set_pot(state, pot_contents)
+
+        shaped_reward = self._pickup_plate_reward(env, state)
+
+        assert shaped_reward == pytest.approx(0.0)
+
+
 class TestOvercookedV3OrderQueue:
     """Test order queue system."""
 
@@ -329,6 +445,32 @@ class TestOvercookedV3Conveyors:
         env = OvercookedV3()
         assert env.enable_player_conveyors == False
 
+    def test_layout_features_enabled_by_default(self):
+        """Mechanics are enabled by default when present in the layout."""
+        item_env = OvercookedV3(layout="conveyor_demo")
+        assert item_env.enable_item_conveyors == True
+
+        player_env = OvercookedV3(layout="player_conveyor_demo")
+        assert player_env.enable_player_conveyors == True
+
+        wall_env = OvercookedV3(layout="moving_wall_bounce_demo")
+        assert wall_env.enable_moving_walls == True
+        assert wall_env.enable_buttons == True
+
+    def test_explicit_layout_feature_disable_warns(self):
+        """Explicitly disabling a present layout mechanic still works but warns."""
+        with pytest.warns(UserWarning, match="Layout contains item conveyors"):
+            item_env = OvercookedV3(
+                layout="conveyor_demo", enable_item_conveyors=False
+            )
+        assert item_env.enable_item_conveyors == False
+
+        with pytest.warns(UserWarning, match="Layout contains buttons"):
+            button_env = OvercookedV3(
+                layout="moving_wall_bounce_demo", enable_buttons=False
+            )
+        assert button_env.enable_buttons == False
+
     def test_conveyor_demo_layout(self):
         """Test conveyor demo layout loads correctly."""
         env = OvercookedV3(layout="conveyor_demo", enable_item_conveyors=True)
@@ -337,6 +479,223 @@ class TestOvercookedV3Conveyors:
 
         # Should have some item conveyors
         assert jnp.any(state.item_conveyor_active_mask)
+
+    def test_item_conveyor_drops_items_pushed_past_map_border(self):
+        """Items pushed out of bounds by an item conveyor should disappear."""
+        layout = Layout.from_string(
+            """
+WWWWWW
+WA X W
+W0BP >
+WWWWWW
+""",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, enable_item_conveyors=True)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        item = jnp.int32(DynamicObject.PLATE)
+        state = state.replace(grid=state.grid.at[2, 5, 1].set(item))
+        assert state.grid[2, 5, 0] == StaticObject.ITEM_CONVEYOR
+
+        actions = {"agent_0": int(Actions.stay)}
+        obs, new_state, rewards, dones, info = env.step(
+            jax.random.PRNGKey(1), state, actions
+        )
+
+        assert new_state.grid[2, 5, 1] == 0
+
+    def test_item_conveyor_keeps_items_pushed_onto_normal_wall(self):
+        """In-bounds walls are counters, not border sinks."""
+        layout = Layout.from_string(
+            """
+WWWWWWW
+WA X  W
+W0BP >W
+WWWWWWW
+""",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, enable_item_conveyors=True)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        item = jnp.int32(DynamicObject.PLATE)
+        state = state.replace(grid=state.grid.at[2, 5, 1].set(item))
+        assert state.grid[2, 5, 0] == StaticObject.ITEM_CONVEYOR
+        assert state.grid[2, 6, 0] == StaticObject.WALL
+
+        actions = {"agent_0": int(Actions.stay)}
+        obs, new_state, rewards, dones, info = env.step(
+            jax.random.PRNGKey(1), state, actions
+        )
+
+        assert new_state.grid[2, 5, 1] == 0
+        assert new_state.grid[2, 6, 1] == item
+
+    def test_agents_cannot_move_onto_item_conveyors(self):
+        """Agents should not be able to occupy item conveyor cells."""
+        layout = Layout.from_string(
+            coordinated_temporal_conveyor,
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(
+            layout=layout,
+            enable_item_conveyors=True,
+            enable_player_conveyors=True,
+        )
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        # Put agent 0 immediately left of the vertical item conveyor at (6, 4).
+        state = state.replace(
+            agents=state.agents.replace(
+                pos=Position(
+                    x=jnp.array([5, 2], dtype=jnp.int32),
+                    y=jnp.array([4, 4], dtype=jnp.int32),
+                )
+            )
+        )
+        assert state.grid[4, 6, 0] == StaticObject.ITEM_CONVEYOR
+
+        actions = {"agent_0": int(Actions.right), "agent_1": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step(subkey, state, actions)
+
+        assert new_state.agents.pos.x[0] == 5
+        assert new_state.agents.pos.y[0] == 4
+
+    def test_agents_can_move_onto_player_conveyors(self):
+        """Agents should still be able to occupy player conveyor cells."""
+        layout = Layout.from_string(
+            "WWWWWW\n"
+            "WA]X W\n"
+            "W0BP W\n"
+            "WWWWWW",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        assert state.grid[1, 2, 0] == StaticObject.PLAYER_CONVEYOR
+
+        actions = {"agent_0": int(Actions.right)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step(subkey, state, actions)
+
+        assert new_state.agents.pos.x[0] == 2
+        assert new_state.agents.pos.y[0] == 1
+
+    def test_player_conveyors_do_not_push_agents_onto_item_conveyors(self):
+        """Player conveyors should not push agents onto item conveyors."""
+        layout = Layout.from_string(
+            "WWWWWW\n"
+            "WA]>XW\n"
+            "W0BP W\n"
+            "WWWWWW",
+            possible_recipes=[[0, 0, 0]],
+        )
+        env = OvercookedV3(layout=layout, enable_player_conveyors=True)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        state = state.replace(
+            agents=state.agents.replace(
+                pos=Position(
+                    x=jnp.array([2], dtype=jnp.int32),
+                    y=jnp.array([1], dtype=jnp.int32),
+                )
+            )
+        )
+        assert state.grid[1, 2, 0] == StaticObject.PLAYER_CONVEYOR
+        assert state.grid[1, 3, 0] == StaticObject.ITEM_CONVEYOR
+
+        actions = {"agent_0": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step(subkey, state, actions)
+
+        assert new_state.agents.pos.x[0] == 2
+        assert new_state.agents.pos.y[0] == 1
+
+
+class TestOvercookedV3Buttons:
+    """Test button mechanics."""
+
+    def test_trigger_move_wall_starts_paused_until_button_press(self):
+        """Trigger-move buttons should move linked walls only when pressed."""
+        layout = Layout.from_string(
+            moving_wall_demo,
+            possible_recipes=[[0, 0, 0]],
+            button_config=[(0, ButtonAction.TRIGGER_MOVE)],
+        )
+        env = OvercookedV3(layout=layout)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        assert bool(state.moving_wall_paused[0])
+
+        actions = {"agent_0": int(Actions.stay), "agent_1": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, idle_state, rewards, dones, info = env.step_env(subkey, state, actions)
+
+        assert bool(idle_state.moving_wall_paused[0])
+        assert bool(
+            jnp.array_equal(
+                idle_state.moving_wall_positions[0],
+                state.moving_wall_positions[0],
+            )
+        )
+
+        pos_x = idle_state.agents.pos.x.at[0].set(3)
+        pos_y = idle_state.agents.pos.y.at[0].set(1)
+        agent_dir = idle_state.agents.dir.at[0].set(Direction.DOWN)
+        trigger_state = idle_state.replace(
+            agents=idle_state.agents.replace(
+                pos=Position(x=pos_x, y=pos_y),
+                dir=agent_dir,
+            )
+        )
+
+        actions = {"agent_0": int(Actions.interact), "agent_1": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, triggered_state, rewards, dones, info = env.step_env(
+            subkey, trigger_state, actions
+        )
+
+        assert bool(triggered_state.moving_wall_paused[0])
+        assert tuple(map(int, triggered_state.moving_wall_positions[0])) == (2, 2)
+
+    def test_multi_target_button_pauses_multiple_moving_walls(self):
+        """A single button can control more than one moving wall."""
+        layout = Layout.from_string(
+            moving_wall_bounce_demo,
+            possible_recipes=[[0, 0, 0]],
+            moving_wall_bounce=[True, True],
+            button_config=[([0, 1], ButtonAction.TOGGLE_PAUSE)],
+        )
+        env = OvercookedV3(layout=layout)
+        key = jax.random.PRNGKey(0)
+        obs, state = env.reset(key)
+
+        # Put agent 0 directly above the button at (5, 3), facing down.
+        pos_x = state.agents.pos.x.at[0].set(5)
+        pos_y = state.agents.pos.y.at[0].set(2)
+        agent_dir = state.agents.dir.at[0].set(Direction.DOWN)
+        state = state.replace(
+            agents=state.agents.replace(
+                pos=Position(x=pos_x, y=pos_y),
+                dir=agent_dir,
+            )
+        )
+
+        actions = {"agent_0": int(Actions.interact), "agent_1": int(Actions.stay)}
+        key, subkey = jax.random.split(key)
+        obs, new_state, rewards, dones, info = env.step_env(subkey, state, actions)
+
+        assert bool(new_state.moving_wall_paused[0])
+        assert bool(new_state.moving_wall_paused[1])
 
 
 class TestOvercookedV3Registration:

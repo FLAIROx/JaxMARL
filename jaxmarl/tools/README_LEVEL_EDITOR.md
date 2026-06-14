@@ -258,11 +258,10 @@ JaxMARL/
 │   └── environments/
 │       └── overcooked_v3/
 │           ├── layouts.py                     # Add layouts here
-│           ├── layout_utils.py               # Conversion utilities
 │           └── ...
 └── tests/
     └── overcooked_v3/
-        └── test_layout_utils.py              # Utility tests
+        └── test_layout_utils.py              # Layout utility method tests
 ```
 
 ## Tips & Best Practices

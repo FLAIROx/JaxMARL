@@ -1,13 +1,15 @@
 # Add to jaxmarl/environments/overcooked_v3/layouts.py
 
 custom_layout = """
-WWWWWW
-0    W
-WWWW P
-1    X
-WWWW W
-2    W
-WWWWWW
+WWWWWWWWWWWW
+W0R  A     B
+WWWWWWW A
+W1R
+WWWWWWW
+W2R     >
+WWWWWWW <
+WPR
+WWWWWWW    X
 """
 
 # Add to overcooked_v3_layouts dictionary:

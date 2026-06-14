@@ -1,15 +1,21 @@
-name: Run tests on Docker Image
-on: [push, pull_request]
+name: Run tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
-
-  build:
-
+  test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build the Docker image
-      run: make build
-    - name: Run tests
-      run: make workflow-test
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: pip install -e ".[dev,algs]"
+    - name: Run Overcooked V3 tests
+      run: pytest tests/overcooked_v3

@@ -30,8 +30,7 @@ overcooked_v3/
 ├── __init__.py          # Package exports
 ├── common.py            # Core data structures and enums
 ├── settings.py          # Configuration constants
-├── layouts.py           # Layout definitions and parsing
-├── layout_utils.py      # Layout conversion utilities (NEW!)
+├── layouts.py           # Layout definitions, parsing, and utilities
 ├── overcooked.py        # Main environment implementation
 ├── utils.py             # Helper functions
 └── README.md            # This file

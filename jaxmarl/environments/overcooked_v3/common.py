@@ -56,7 +56,7 @@ class ButtonAction(IntEnum):
     TOGGLE_BOUNCE = 2      # Toggle bounce mode on/off
     TRIGGER_MOVE = 3       # Move the wall one step (wall is paused by default)
     
-    # Barrier actions (button_linked_wall refers to barrier index instead)
+    # Barrier actions (button target indexes refer to barriers instead of moving walls)
     TOGGLE_BARRIER = 4     # Toggle barrier active state
     TIMED_BARRIER = 5      # Deactivate barrier temporarily (auto-reactivates)
 
