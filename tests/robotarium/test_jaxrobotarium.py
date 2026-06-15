@@ -1,6 +1,9 @@
 import jax.numpy as jnp
 import pytest
-from jaxrobotarium.robotarium_env import RobotariumEnv, State
+
+_jaxrobotarium = pytest.importorskip("jaxrobotarium.robotarium_env")
+RobotariumEnv = _jaxrobotarium.RobotariumEnv
+State = _jaxrobotarium.State
 
 
 @pytest.fixture

@@ -32,7 +32,7 @@ from jaxmarl.environments.spaces import Box, Discrete, MultiDiscrete
 
 def save_params(params: Dict, filename: Union[str, os.PathLike]) -> None:
     flattened_dict = flatten_dict(params, sep=",")
-    save_file(flattened_dict, filename)
+    save_file(flattened_dict, filename)  # type: ignore[arg-type]
 
 
 def load_params(filename: Union[str, os.PathLike]) -> Dict:
@@ -233,8 +233,8 @@ class MPELogWrapper(LogWrapper):
 
 @struct.dataclass
 class SMAXLogEnvState(LogEnvState):
-    won_episode: int
-    returned_won_episode: int
+    won_episode: Array
+    returned_won_episode: Array
 
 
 class SMAXLogWrapper(JaxMARLWrapper):
