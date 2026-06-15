@@ -86,7 +86,7 @@ reportIndexIssue = false
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-exclude = ["build/", ".cache/"]
+exclude = ["build/", ".cache/", "jaxmarl/tutorials/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]   # pycodestyle errors, pyflakes, isort
@@ -94,7 +94,7 @@ ignore = ["E501", "F722"]   # E501: line length; F722: jaxtyping scalar annotati
 
 [tool.ruff.lint.per-file-ignores]
 # baselines: research/experiment scripts with relaxed style requirements
-"baselines/**" = ["E402", "E711", "E731", "E741", "F401", "F811", "F841"]
+"baselines/**" = ["E402", "E711", "E731", "E741", "F401", "F811", "F841", "I001"]
 # tests: use star imports from jaxmarl
 "tests/**" = ["F401", "F403", "F405", "F841"]
 # older environment implementations not yet updated to 2.0 style
