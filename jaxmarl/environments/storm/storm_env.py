@@ -716,8 +716,8 @@ class InTheGrid(MultiAgentEnv):
                 new_pos = jnp.where(move, new_pos + STEP[agent_pos[2]], new_pos)
                 new_agent_pos = jnp.clip(
                     new_pos,
-                    a_min=jnp.array([0, 0, 0], dtype=jnp.int8),
-                    a_max=jnp.array([GRID_SIZE - 1, GRID_SIZE - 1, 3], dtype=jnp.int8),
+                    min=jnp.array([0, 0, 0], dtype=jnp.int8),
+                    max=jnp.array([GRID_SIZE - 1, GRID_SIZE - 1, 3], dtype=jnp.int8),
                 )
 
                 # if you bounced back to ur original space, we change your move to stay (for collision logic)

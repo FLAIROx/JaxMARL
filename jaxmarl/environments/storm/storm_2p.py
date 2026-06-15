@@ -565,8 +565,8 @@ class InTheGrid_2p(MultiAgentEnv):
             )
             new_red_pos = jnp.clip(
                 new_red_pos,
-                a_min=jnp.array([0, 0, 0], dtype=jnp.int8),
-                a_max=jnp.array([GRID_SIZE - 1, GRID_SIZE - 1, 3], dtype=jnp.int8),
+                min=jnp.array([0, 0, 0], dtype=jnp.int8),
+                max=jnp.array([GRID_SIZE - 1, GRID_SIZE - 1, 3], dtype=jnp.int8),
             )
 
             # if you bounced back to ur original space, we change your move to stay (for collision logic)
@@ -585,8 +585,8 @@ class InTheGrid_2p(MultiAgentEnv):
             )
             new_blue_pos = jnp.clip(
                 new_blue_pos,
-                a_min=jnp.array([0, 0, 0], dtype=jnp.int8),
-                a_max=jnp.array([GRID_SIZE - 1, GRID_SIZE - 1, 3], dtype=jnp.int8),
+                min=jnp.array([0, 0, 0], dtype=jnp.int8),
+                max=jnp.array([GRID_SIZE - 1, GRID_SIZE - 1, 3], dtype=jnp.int8),
             )
             blue_move = (new_blue_pos[:2] != state.blue_pos[:2]).any()
 
