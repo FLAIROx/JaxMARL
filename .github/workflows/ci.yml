@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v3
-      - run: uv pip install pyright jaxtyping jax chex flax --system
+      - run: uv pip install -e .[dev] --system
       - run: pyright
 
   test:
