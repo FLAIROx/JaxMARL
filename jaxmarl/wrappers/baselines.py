@@ -451,7 +451,7 @@ class CTRolloutManager(JaxMARLWrapper):
         arr = arr.flatten()
         # pad the observation vectors to the maximum length
         pad_width = [(0, 0)] * (arr.ndim - 1) + [
-            (0, max(0, self.max_obs_length - arr.shape[-1]))
+            (0, int(max(0, self.max_obs_length - arr.shape[-1])))
         ]
         arr = jnp.pad(arr, pad_width, mode="constant", constant_values=0)
         # concatenate the extra features

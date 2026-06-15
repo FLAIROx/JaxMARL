@@ -136,9 +136,9 @@ class Dict(Space):
 
     def contains(self, x: Mapping[str, Any]) -> Bool[Array, ""]:
         """Check whether dimensions of object are within subspace."""
-        out_of_space = 0
+        out_of_space: Array = jnp.array(0)
         for k, space in self.spaces.items():
-            out_of_space += 1 - space.contains(x[k])
+            out_of_space = out_of_space + (1 - space.contains(x[k]))
         return out_of_space == 0
 
 
@@ -163,7 +163,7 @@ class Tuple(Space):
 
     def contains(self, x: tuple[Any, ...]) -> Bool[Array, ""]:
         """Check whether dimensions of object are within subspace."""
-        out_of_space = 0
-        for space in self.spaces:
-            out_of_space += 1 - space.contains(x)
+        out_of_space: Array = jnp.array(0)
+        for i, space in enumerate(self.spaces):
+            out_of_space = out_of_space + (1 - space.contains(x[i]))
         return out_of_space == 0
