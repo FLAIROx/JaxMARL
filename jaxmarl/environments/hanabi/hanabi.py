@@ -28,6 +28,7 @@ class HanabiEnv(HanabiGame):
         action_spaces=None,
         observation_spaces=None,
         num_moves=None,
+        shuffle_player_order=True,
     ):
         # default hand size is 5 for 2-3 players and 4 for 4-5 players
         if hand_size is None:
@@ -41,6 +42,7 @@ class HanabiEnv(HanabiGame):
             max_info_tokens=max_info_tokens,
             max_life_tokens=max_life_tokens,
             num_cards_of_rank=num_cards_of_rank,
+            shuffle_player_order=shuffle_player_order,
         )
 
         assert num_agents > 1 and num_agents <= 5, "Number of agents must be between 2 and 5"

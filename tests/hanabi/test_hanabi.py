@@ -111,6 +111,56 @@ def single_life_actions(env):
     }
 
 
+def legacy_reset_deck(env, key):
+    colors = jnp.arange(env.num_colors)
+    ranks = jnp.arange(env.num_ranks)
+    ranks = jnp.repeat(ranks, env.num_cards_of_rank)
+    color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
+    _, deck_key = jax.random.split(key)
+    shuffled_pairs = jax.random.permutation(deck_key, color_rank_pairs, axis=0)
+    deck = env._one_hot_encode_deck(shuffled_pairs)
+    return deck.at[:env.num_agents * env.hand_size].set(
+        jnp.zeros((env.num_colors, env.num_ranks))
+    )
+
+
+def test_fixed_player_order_preserves_legacy_deck_mapping():
+    env = HanabiEnv(shuffle_player_order=False)
+    key = jax.random.PRNGKey(42)
+
+    _, state = env.reset(key)
+
+    assert jnp.array_equal(state.seat_order, jnp.arange(env.num_agents))
+    assert jnp.array_equal(state.deck, legacy_reset_deck(env, key))
+
+
+def test_shuffled_player_order_is_deterministic_and_keeps_agent_keys_stable():
+    env = HanabiEnv(num_agents=4)
+    key = jax.random.PRNGKey(42)
+
+    obs, state = env.reset(key)
+    obs_again, state_again = env.reset(key)
+    legal_moves = env.get_legal_moves(state)
+
+    assert env.agents == ["agent_0", "agent_1", "agent_2", "agent_3"]
+    assert list(obs.keys()) == env.agents
+    assert list(obs_again.keys()) == env.agents
+    assert list(legal_moves.keys()) == env.agents
+    assert list(env.action_spaces.keys()) == env.agents
+    assert jnp.array_equal(state.seat_order, state_again.seat_order)
+    assert jnp.array_equal(jnp.sort(state.seat_order), jnp.arange(env.num_agents))
+
+
+def test_injected_deck_reset_keeps_fixed_seat_order_and_dealt_cards():
+    env = HanabiEnv()
+    deck = get_decks()[0]
+
+    _, state = env.reset_from_deck(deck)
+
+    assert jnp.array_equal(state.seat_order, jnp.arange(env.num_agents))
+    assert jnp.array_equal(state.player_hands[0], deck[: env.hand_size])
+
+
 def test_step_game_terminates_immediately_when_last_life_is_lost():
     env = make_single_life_env()
     state = env.reset_game_from_deck_of_pairs(single_life_loss_deck())
