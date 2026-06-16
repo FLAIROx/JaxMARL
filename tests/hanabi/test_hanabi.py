@@ -148,6 +148,7 @@ def test_shuffled_player_order_is_deterministic_and_keeps_agent_keys_stable():
     assert list(legal_moves.keys()) == env.agents
     assert list(env.action_spaces.keys()) == env.agents
     assert jnp.array_equal(state.seat_order, state_again.seat_order)
+    assert jnp.array_equal(state.seat_order, jnp.array([3, 1, 0, 2]))
     assert jnp.array_equal(jnp.sort(state.seat_order), jnp.arange(env.num_agents))
 
 
@@ -159,6 +160,53 @@ def test_injected_deck_reset_keeps_fixed_seat_order_and_dealt_cards():
 
     assert jnp.array_equal(state.seat_order, jnp.arange(env.num_agents))
     assert jnp.array_equal(state.player_hands[0], deck[: env.hand_size])
+
+
+def test_shuffled_player_order_routes_current_seat_action_to_assigned_agent_key():
+    env = HanabiEnv(num_agents=2)
+    _, state = env.reset(jax.random.PRNGKey(42))
+
+    assert jnp.array_equal(state.seat_order, jnp.array([1, 0]))
+    assert int(jnp.argmax(state.cur_player_idx)) == 0
+
+    _, next_state, _, _, _ = env.step_env(
+        jax.random.PRNGKey(0),
+        state,
+        {
+            "agent_0": 0,  # discard slot 0, wrong player for current seat
+            "agent_1": env.hand_size,  # play slot 0, assigned to current seat
+        },
+    )
+
+    assert int(jnp.sum(next_state.life_tokens)) == env.max_life_tokens - 1
+
+
+def test_shuffled_player_order_routes_legal_moves_to_assigned_agent_key():
+    env = HanabiEnv(num_agents=2)
+    _, state = env.reset(jax.random.PRNGKey(42))
+
+    legal_moves = env.get_legal_moves(state)
+
+    assert jnp.array_equal(state.seat_order, jnp.array([1, 0]))
+    assert bool(legal_moves["agent_1"][env.play_action_range].any())
+    assert not bool(legal_moves["agent_1"][-1])
+    assert not bool(legal_moves["agent_0"][env.play_action_range].any())
+    assert bool(legal_moves["agent_0"][-1])
+
+
+def test_shuffled_player_order_routes_observations_to_assigned_agent_key():
+    env = HanabiEnv(num_agents=2)
+    obs, state = env.reset(jax.random.PRNGKey(42))
+    physical_seat_state = state.replace(seat_order=jnp.arange(env.num_agents))
+    physical_seat_obs = env.get_obs(
+        physical_seat_state,
+        physical_seat_state,
+        action=env.num_moves - 1,
+    )
+
+    assert jnp.array_equal(state.seat_order, jnp.array([1, 0]))
+    assert jnp.array_equal(obs["agent_1"], physical_seat_obs["agent_0"])
+    assert jnp.array_equal(obs["agent_0"], physical_seat_obs["agent_1"])
 
 
 def test_step_game_terminates_immediately_when_last_life_is_lost():

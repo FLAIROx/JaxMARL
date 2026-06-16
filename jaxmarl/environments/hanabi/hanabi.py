@@ -170,7 +170,8 @@ class HanabiEnv(HanabiGame):
         # get actions as array
         actions = jnp.array([actions[i] for i in self.agents])
         aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
-        action = actions.at[aidx].get()
+        agent_idx = state.seat_order.at[aidx].get()
+        action = actions.at[agent_idx].get()
 
         # execute the current player's action and its consequences
         old_state = state
@@ -236,7 +237,8 @@ class HanabiEnv(HanabiGame):
 
         obs = jax.vmap(_observe)(self.agent_range)
 
-        return {a: obs[i] for i, a in enumerate(self.agents)}
+        agent_to_seat = jnp.argsort(new_state.seat_order)
+        return {a: obs[agent_to_seat[i]] for i, a in enumerate(self.agents)}
 
     def get_legal_moves(self, state: State) -> chex.Array:
         """Get all agents' legal moves"""
@@ -303,7 +305,8 @@ class HanabiEnv(HanabiGame):
 
         legal_moves = _legal_moves(self.agent_range, state)
 
-        return {a: legal_moves[i] for i, a in enumerate(self.agents)}
+        agent_to_seat = jnp.argsort(state.seat_order)
+        return {a: legal_moves[agent_to_seat[i]] for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
     def get_last_action_feats_(
