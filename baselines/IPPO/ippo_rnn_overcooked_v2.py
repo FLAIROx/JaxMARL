@@ -200,6 +200,7 @@ class ActorCritic(nn.Module):
 
 
 class Transition(NamedTuple):
+    global_done: jnp.ndarray
     done: jnp.ndarray
     action: jnp.ndarray
     value: jnp.ndarray
@@ -373,6 +374,7 @@ def make_train(config):
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
+                    last_done,
                     action.squeeze(),
                     value.squeeze(),
                     batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
@@ -414,7 +416,7 @@ def make_train(config):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
                     done, value, reward = (
-                        transition.done,
+                        transition.global_done,
                         transition.value,
                         transition.reward,
                     )
