@@ -46,6 +46,55 @@ if SUBMODULE_ENVIRONMENTS:
     )
 
 
+core_registered_envs = [
+    "MPE_simple_v3",
+    "MPE_simple_tag_v3",
+    "MPE_simple_world_comm_v3",
+    "MPE_simple_spread_v3",
+    "MPE_simple_crypto_v3",
+    "MPE_simple_speaker_listener_v4",
+    "MPE_simple_push_v3",
+    "MPE_simple_adversary_v3",
+    "MPE_simple_reference_v3",
+    "MPE_simple_facmac_v1",
+    "MPE_simple_facmac_3a_v1",
+    "MPE_simple_facmac_6a_v1",
+    "MPE_simple_facmac_9a_v1",
+    "switch_riddle",
+    "SMAX",
+    "HeuristicEnemySMAX",
+    "LearnedPolicyEnemySMAX",
+    "ant_4x2",
+    "halfcheetah_6x1",
+    "hopper_3x1",
+    "humanoid_9|8",
+    "walker2d_2x3",
+    "storm",
+    "storm_2p",
+    "storm_np",
+    "hanabi",
+    "overcooked",
+    "overcooked_v2",
+    "coin_game",
+    "jaxnav",
+]
+
+robotarium_registered_envs = [
+    "JaxRobotarium_navigation",
+    "JaxRobotarium_discovery",
+    "JaxRobotarium_material_transport",
+    "JaxRobotarium_warehouse",
+    "JaxRobotarium_arctic_transport",
+    "JaxRobotarium_foraging",
+    "JaxRobotarium_rware",
+    "JaxRobotarium_predator_prey",
+]
+
+registered_envs = core_registered_envs + (
+    robotarium_registered_envs if SUBMODULE_ENVIRONMENTS else []
+)
+
+
 def make(env_id: str, **env_kwargs):
     """A JAX-version of OpenAI's env.make(env_name), built off Gymnax"""
     if env_id not in registered_envs:
@@ -140,7 +189,7 @@ def make(env_id: str, **env_kwargs):
             env = MaterialTransport(**env_kwargs)
         elif env_id == "JaxRobotarium_warehouse":
             env = Warehouse(**env_kwargs)
-        elif env_id == "JaxRobotarium_ arctic_transport":
+        elif env_id == "JaxRobotarium_arctic_transport":
             env = ArcticTransport(**env_kwargs)
         elif env_id == "JaxRobotarium_foraging":
             env = Foraging(**env_kwargs)
@@ -150,44 +199,3 @@ def make(env_id: str, **env_kwargs):
             env = PredatorPrey(**env_kwargs)
 
     return env
-
-registered_envs = [
-    "MPE_simple_v3",
-    "MPE_simple_tag_v3",
-    "MPE_simple_world_comm_v3",
-    "MPE_simple_spread_v3",
-    "MPE_simple_crypto_v3",
-    "MPE_simple_speaker_listener_v4",
-    "MPE_simple_push_v3",
-    "MPE_simple_adversary_v3",
-    "MPE_simple_reference_v3",
-    "MPE_simple_facmac_v1",
-    "MPE_simple_facmac_3a_v1",
-    "MPE_simple_facmac_6a_v1",
-    "MPE_simple_facmac_9a_v1",
-    "switch_riddle",
-    "SMAX",
-    "HeuristicEnemySMAX",
-    "LearnedPolicyEnemySMAX",
-    "ant_4x2",
-    "halfcheetah_6x1",
-    "hopper_3x1",
-    "humanoid_9|8",
-    "walker2d_2x3",
-    "storm",
-    "storm_2p",
-    "storm_np",
-    "hanabi",
-    "overcooked",
-    "overcooked_v2",
-    "coin_game",
-    "jaxnav",
-    "JaxRobotarium_navigation",
-    "JaxRobotarium_discovery",
-    "JaxRobotarium_material_transport",
-    "JaxRobotarium_warehouse",
-    "JaxRobotarium_arctic_transport",
-    "JaxRobotarium_foraging",
-    "JaxRobotarium_rware",
-    "JaxRobotarium_predator_prey"
-]

@@ -37,6 +37,13 @@ def get_random_actions(key, env):
     }
 
 
+def get_discrete_actions(env, actions):
+    return {
+        agent: jnp.array(actions[i], dtype=jnp.int32)
+        for i, agent in enumerate(env.agents)
+    }
+
+
 @pytest.mark.parametrize(
     ("action", "vec_diff", "do_jit"),
     [
@@ -421,8 +428,8 @@ def test_episode_end(ally_health, enemy_health, done_unit, reward_unit, do_jit):
         unit_positions = state.unit_positions.at[unit_1_idx].set(jnp.array([1.0, 1.0]))
         unit_positions = unit_positions.at[unit_2_idx].set(jnp.array([1.0, 2.0]))
         unit_alive = jnp.zeros((env.num_agents,), dtype=jnp.bool_)
-        unit_alive = unit_alive.at[unit_1_idx].set(1)
-        unit_alive = unit_alive.at[unit_2_idx].set(1)
+        unit_alive = unit_alive.at[unit_1_idx].set(True)
+        unit_alive = unit_alive.at[unit_2_idx].set(True)
 
         unit_health = jnp.zeros((env.num_agents,))
         unit_health = unit_health.at[unit_1_idx].set(unit_1_health)
@@ -534,8 +541,24 @@ def test_obs_function(do_jit):
     with jax.disable_jit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
-        env, obs, state = create_env(key_reset)
+        env, _, state = create_env(key_reset)
         first_enemy_idx = (env.num_allies - 1) * len(env.unit_features)
+        unit_positions = jnp.array(
+            [
+                [8.0, 16.0],
+                [8.0 - 0.5755913 * 4.0, 16.0 + 0.43648314 * 4.0],
+                [8.0, 24.0],
+                [12.0, 24.0],
+                [16.0, 24.0],
+                [24.0, 16.0],
+                [24.0, 8.0],
+                [28.0, 8.0],
+                [28.0, 12.0],
+                [24.0 + 0.00752163 * 4.0, 16.0 + 0.5390887 * 4.0],
+            ]
+        )
+        state = state.replace(unit_positions=unit_positions)
+        obs = env.get_obs(state)
         assert jnp.allclose(
             obs["ally_0"][0 : len(env.unit_features)],
             jnp.array([1.0, -0.5755913, 0.43648314, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
@@ -553,7 +576,7 @@ def test_obs_function(do_jit):
             jnp.zeros((len(env.unit_features),)),
         )
         # test a dead agent sees nothing
-        unit_alive = state.unit_alive.at[0].set(0)
+        unit_alive = state.unit_alive.at[0].set(False)
         unit_health = state.unit_health.at[0].set(0)
         # test that the right unit corresponds to the right agent
         unit_positions = state.unit_positions.at[0].set(jnp.array([1.0, 1.0]))
@@ -566,10 +589,9 @@ def test_obs_function(do_jit):
             unit_health=unit_health,
             unit_positions=unit_positions,
         )
-        key, key_actions = jax.random.split(key)
-        actions = get_random_actions(key_actions, env)
-        actions["enemy_0"] = 0
-        actions["enemy_1"] = 0
+        actions = get_discrete_actions(env, [4] * env.num_agents)
+        actions["enemy_0"] = jnp.array(0, dtype=jnp.int32)
+        actions["enemy_1"] = jnp.array(0, dtype=jnp.int32)
 
         key, key_step = jax.random.split(key)
 
@@ -604,8 +626,8 @@ def test_world_state(do_jit):
         unit_2_idx = env.num_allies
 
         unit_alive = jnp.zeros((env.num_agents,), dtype=jnp.bool_)
-        unit_alive = unit_alive.at[unit_1_idx].set(1)
-        unit_alive = unit_alive.at[unit_2_idx].set(1)
+        unit_alive = unit_alive.at[unit_1_idx].set(True)
+        unit_alive = unit_alive.at[unit_2_idx].set(True)
 
         unit_health = jnp.zeros((env.num_agents,))
         unit_health = unit_health.at[unit_1_idx].set(0.5)
@@ -616,10 +638,11 @@ def test_world_state(do_jit):
         unit_1_action = 0
         unit_2_action = 2
 
-        key, key_actions = jax.random.split(key)
-        actions = get_random_actions(key_actions, env)
-        actions[f"ally_{unit_1_idx}"] = unit_1_action
-        actions[f"enemy_{unit_2_idx - env.num_allies}"] = unit_2_action
+        actions = get_discrete_actions(env, [0, 2, 2, 5, 3, 2, 3, 9, 7, 3])
+        actions[f"ally_{unit_1_idx}"] = jnp.array(unit_1_action, dtype=jnp.int32)
+        actions[f"enemy_{unit_2_idx - env.num_allies}"] = jnp.array(
+            unit_2_action, dtype=jnp.int32
+        )
 
         key, key_step = jax.random.split(key)
         obs, state, _, _, _ = env.step(key_step, state, actions)

@@ -104,8 +104,10 @@ def test_step_returns_correct_format(env):
     # Sample a valid action.
 
     rng, _rng = jax.random.split(rng)
+    action_keys = jax.random.split(_rng, len(env.agents))
     actions = {
-        a: env.action_space(a).sample(_rng) for a in env.agents
+        a: env.action_space(a).sample(action_keys[i])
+        for i, a in enumerate(env.agents)
     }
     
     # Take a step in the environment.
@@ -137,6 +139,10 @@ def test_envs(env_id):
     test_step_returns_correct_format(env)
 
 @pytest.mark.parametrize("env_id", submodule_envs)
+@pytest.mark.skipif(
+    not SUBMODULE_ENVIRONMENTS,
+    reason="JaxRobotarium submodule environments are not installed",
+)
 def test_submodule_envs(env_id):
     env = make(env_id, **{"num_agents": 2})
     test_observation_space_definition(env)

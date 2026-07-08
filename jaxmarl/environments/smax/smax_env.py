@@ -220,11 +220,13 @@ class SMAX(MultiAgentEnv):
         ]
         self.obs_size = self._get_obs_size()
         self.state_size = (len(self.own_features) + 2) * self.num_agents
-        self.observation_spaces = {
-            i: Box(low=-1.0, high=1.0, shape=(self.obs_size,)) for i in self.agents
-        }
         self.num_ally_actions = self.num_enemies + self.num_movement_actions
         self.num_enemy_actions = self.num_allies + self.num_movement_actions
+        self.obs_bound = float(max(self.num_ally_actions, self.num_enemy_actions))
+        self.observation_spaces = {
+            i: Box(low=-self.obs_bound, high=self.obs_bound, shape=(self.obs_size,))
+            for i in self.agents
+        }
         self.action_spaces = {
             agent: self._get_individual_action_space(i)
             for i, agent in enumerate(self.agents)
