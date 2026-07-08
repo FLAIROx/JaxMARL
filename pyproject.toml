@@ -38,8 +38,6 @@ dependencies = [
   "chex",
   "brax>=0.14.2",
   "mujoco>=3.10.0",
-  "mujoco-warp>=3.10.0.1",
-  "warp-lang>=1.15.0",
   "matplotlib",
   "pillow",
   "scipy>=1.14",
