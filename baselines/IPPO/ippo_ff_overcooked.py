@@ -2,6 +2,7 @@
 Based on PureJaxRL Implementation of PPO
 """
 
+import os
 from typing import NamedTuple, Sequence
 
 import distrax
@@ -75,7 +76,9 @@ def get_rollout(train_state, config):
     # env_params = env.default_params
     # env = LogWrapper(env)
 
-    network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+    network = ActorCritic(
+        env.action_space(env.agents[0]).n, activation=config["ACTIVATION"]
+    )
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
 
@@ -163,7 +166,9 @@ def make_train(config):
     def train(rng):
 
         # INIT NETWORK
-        network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+        network = ActorCritic(
+            env.action_space(env.agents[0]).n, activation=config["ACTIVATION"]
+        )
         rng, _rng = jax.random.split(rng)
         init_x = jnp.zeros(env.observation_space("agent_0").shape)
 
@@ -399,10 +404,11 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "FF"],
+        tags=[t for t in os.environ.get("WANDB_TAGS", "").split(",") if t],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or f"ippo_ff_overcooked_{layout_name}",
         config=config,
         mode=config["WANDB_MODE"],
-        name=f"ippo_ff_overcooked_{layout_name}",
     )
 
     rng = jax.random.PRNGKey(config["SEED"])
