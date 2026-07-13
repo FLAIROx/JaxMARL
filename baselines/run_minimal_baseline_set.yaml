@@ -1,0 +1,56 @@
+suites:
+  mpe:
+    seeds_per_gpu: 5
+    envs:
+      - env: MPE_simple_spread_v3
+        algos: [ippo_ff, mappo_rnn, qmix_rnn, vdn_rnn, vdn_ff]
+      - env: MPE_simple_reference_v3
+        algos: [ippo_ff, mappo_rnn, qmix_rnn, vdn_rnn, vdn_ff]
+      - env: MPE_simple_tag_v3
+        algos: [ippo_ff, mappo_rnn, qmix_rnn, vdn_rnn, vdn_ff]
+
+  smax:
+    seeds_per_gpu: 2
+    envs:
+      - env: 2s3z
+        algos: [ippo_rnn, mappo_rnn, qmix_rnn, vdn_rnn]
+      - env: 3s5z_vs_3s6z
+        algos: [ippo_rnn, mappo_rnn, qmix_rnn, vdn_rnn]
+      - env: smacv2_10_units
+        algos: [ippo_rnn, mappo_rnn, qmix_rnn, vdn_rnn]
+      - env: 6h_vs_8z
+        algos: [ippo_rnn, mappo_rnn, qmix_rnn, vdn_rnn]
+
+  overcooked:
+    seeds_per_gpu: 2
+    envs:
+      - env: overcooked_coord_ring
+        algos: [ippo_ff, vdn_cnn]
+
+  hanabi:
+    seeds_per_gpu: 1
+    envs:
+      - env: hanabi_2p
+        algos: [ippo_ff, mappo_ff]
+
+entity: "amacrutherford"
+project: "jaxmarl-baselines"
+seed: 42
+seeds: 10
+wandb_mode: online
+tag_jaxmarl_version: true
+
+# GPUs to distribute seeds across. Each GPU runs seeds_per_gpu seeds concurrently.
+# Example: 'gpus=[0,1]' to use both GPUs.
+gpus: [0, 1]
+
+# Filters to run a subset of combos; all three are ANDed, empty means no filter.
+# only: exact combos by {algo}_{env} — e.g. 'only=[ippo_ff_MPE_simple_spread_v3,qmix_rnn_2s3z]'
+# only_suites: limit to named suites — e.g. 'only_suites=[mpe,overcooked]'
+# only_algos: limit to named algos — e.g. 'only_algos=[ippo_ff,vdn_rnn]'
+only: []
+only_suites: []
+only_algos: []
+
+# Print what would run and verify all scripts/configs exist; do not train.
+dry_run: false
