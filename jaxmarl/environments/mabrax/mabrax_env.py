@@ -1,10 +1,19 @@
+import os
 import warnings
 from functools import partial
 from typing import Dict, Literal, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-from brax import envs
+
+with open(os.devnull, "w") as _devnull:
+    import sys as _sys
+
+    _sys.stdout, _sys.stderr = _devnull, _devnull
+    try:
+        from brax import envs
+    finally:
+        _sys.stdout, _sys.stderr = _sys.__stdout__, _sys.__stderr__
 from jaxtyping import PRNGKeyArray
 
 from jaxmarl.environments import spaces
