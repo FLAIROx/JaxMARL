@@ -1,7 +1,7 @@
-"TOTAL_TIMESTEPS": 2e6
+"TOTAL_TIMESTEPS": 1e7
 "NUM_ENVS": 256
 "NUM_STEPS": 16
-"MEMORY_WINDOW": 0 # extra steps in the rnn horizon from previous episodes 
+"MEMORY_WINDOW": 0 # extra steps in the rnn horizon from previous episodes
 "HIDDEN_SIZE": 256
 "NUM_LAYERS": 2
 "NORM_INPUTS": False
