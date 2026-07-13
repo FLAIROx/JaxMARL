@@ -2,6 +2,7 @@
 Based on PureJaxRL Implementation of IPPO, with changes to give a centralised critic.
 """
 
+import os
 from functools import partial
 from typing import Dict, NamedTuple, Sequence
 
@@ -505,6 +506,8 @@ def main(config):
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=["MAPPO", "FF", config["ENV_NAME"]],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
         mode=config["WANDB_MODE"],
     )

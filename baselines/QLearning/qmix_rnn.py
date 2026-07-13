@@ -703,7 +703,8 @@ def single_run(config):
             env_name.upper(),
             f"jax_{jax.__version__}",
         ],
-        name=f"{alg_name}_{env_name}",
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
         mode=config["WANDB_MODE"],
     )

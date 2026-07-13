@@ -2,6 +2,7 @@
 Based on PureJaxRL Implementation of PPO
 """
 
+import os
 from typing import Dict, NamedTuple, Sequence
 
 import distrax
@@ -352,6 +353,8 @@ def main(config):
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=["IPPO", "FF", config["ENV_NAME"]],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
         mode=config["WANDB_MODE"],
     )

@@ -3,7 +3,8 @@ Based on PureJaxRL Implementation of PPO
 """
 
 import functools
-from typing import Dict, NamedTuple, Sequence
+import os
+from typing import Any, Dict, NamedTuple, Sequence, cast
 
 import distrax
 import flax.linen as nn
@@ -471,19 +472,22 @@ def make_train(config):
 @hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_smax")
 def main(config):
 
-    config = OmegaConf.to_container(config)
+    config = cast(dict[str, Any], OmegaConf.to_container(config))
     entity = config["ENTITY"]
     print("entity:", entity)
     wandb.init(
-        entity="amacrutherford",  # TODO fix
+        entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "RNN"],
+        tags=[t for t in os.environ.get("WANDB_TAGS", "").split(",") if t],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
         mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, int(config["NUM_SEEDS"]))
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
-    train_jit(rng)
+    jax.vmap(train_jit)(rngs)
 
 
 if __name__ == "__main__":

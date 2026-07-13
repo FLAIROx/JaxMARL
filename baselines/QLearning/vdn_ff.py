@@ -358,7 +358,7 @@ def make_train(config, env):
                                 for k, v in metrics.items()
                             }
                         )
-                    wandb.log(metrics, step=metrics["update_step"])
+                    wandb.log(metrics, step=metrics["update_steps"])
 
                 jax.debug.callback(callback, metrics, original_seed)
 
@@ -472,7 +472,8 @@ def single_run(config):
             env_name.upper(),
             f"jax_{jax.__version__}",
         ],
-        name=f"{alg_name}_{env_name}",
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or f"{alg_name}_{env_name}",
         config=config,
         mode=config["WANDB_MODE"],
     )

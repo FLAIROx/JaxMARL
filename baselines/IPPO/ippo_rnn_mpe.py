@@ -6,6 +6,7 @@ Note, this file will only work for MPE environments with homogenous agents (e.g.
 """
 
 import functools
+import os
 from typing import Dict, NamedTuple, Sequence
 
 import distrax
@@ -458,6 +459,8 @@ def main(config):
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=["IPPO", "RNN"],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
         mode=config["WANDB_MODE"],
     )
