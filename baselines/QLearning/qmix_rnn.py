@@ -702,7 +702,8 @@ def single_run(config):
             alg_name.upper(),
             env_name.upper(),
             f"jax_{jax.__version__}",
-        ],
+        ]
+        + [t for t in os.environ.get("WANDB_TAGS", "").split(",") if t],
         group=os.environ.get("WANDB_RUN_GROUP") or None,
         name=os.environ.get("WANDB_NAME") or None,
         config=config,
