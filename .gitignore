@@ -15,3 +15,4 @@ tmp/
 wandb/
 outputs/
 models/
+build/
