@@ -1,7 +1,6 @@
 from .coin_game import CoinGame
 from .hanabi import Hanabi
 from .jaxnav import JaxNav
-from .mabrax import Ant, HalfCheetah, Hopper, Humanoid, Walker2d
 from .mpe import (
     SimpleAdversaryMPE,
     SimpleCryptoMPE,
@@ -23,6 +22,14 @@ from .overcooked_v2 import OvercookedV2, overcooked_v2_layouts
 from .smax import SMAX, HeuristicEnemySMAX, LearnedPolicyEnemySMAX
 from .storm import InTheGrid, InTheGrid_2p, InTheMatrix
 from .switch_riddle import SwitchRiddle
+
+# MABrax requires brax, an optional dependency due to the deprecation: `pip install jaxmarl[mabrax]`
+try:
+    from .mabrax import Ant, HalfCheetah, Hopper, Humanoid, Walker2d
+
+    MABRAX_AVAILABLE = True
+except ImportError:
+    MABRAX_AVAILABLE = False
 
 # Submoduled environments
 try:
@@ -48,6 +55,8 @@ __all__ = [
     "CoinGame",
     "Hanabi",
     "JaxNav",
+    "MABRAX_AVAILABLE",
+    # mabrax (conditionally available, requires brax)
     "Ant",
     "HalfCheetah",
     "Hopper",

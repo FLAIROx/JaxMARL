@@ -6,6 +6,10 @@ TODO: replace this with proper unit tests.
 import jax
 import pytest
 
+pytest.importorskip(
+    "brax", reason="mabrax is deprecated; brax is an optional dependency"
+)
+
 from jaxmarl.environments.mabrax import MABraxEnv
 
 
