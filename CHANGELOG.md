@@ -20,10 +20,14 @@ NOTE: We use effort-based-versioning
 **Storm** (`InTheGrid`, `InTheGrid_2p`, `InTheMatrix`):
  - `State` now inherits from `BaseState`; `inner_t` field renamed to `step`, `done` field added (true when the outer episode ends). Code accessing `state.inner_t` must be updated to `state.step`
 **CoinGame**:
- - `EnvState` now inherits from `BaseState`; class decorator changed from `@chex.dataclass` to `@struct.dataclass`; `inner_t` field renamed to `step`, `done` field added (true when the inner episode resets). Code accessing `state.inner_t` must be updated to `state.step`
+ - `EnvState` now inherits from `BaseState`; class decorator changed from `@chex.dataclass` to `@struct.dataclass`; `inner_t` field renamed to `step`, `done` field added. Code accessing `state.inner_t` must be updated to `state.step`
+ - **`dones` (and `state.done`) now mark the outer/meta episode boundary, not the inner one**, matching Storm and the rest of the base API. Previously `dones["__all__"]` fired every `num_inner_steps`; it now fires once per meta episode, after `num_outer_steps` inner episodes. The inner boundary is reported as `info["inner_episode_done"]` — algorithms that truncate GAE or reset recurrent state at inner resets must read that key instead of `dones`. `LogWrapper` consequently reports the full iterated-game return rather than per-inner-episode returns
+ - The `self.step = _step` bypass of the base class is removed: the transition is now `step_env` and the outer boundary is handled by the standard `MultiAgentEnv.step` auto-reset. `get_obs` is now implemented, so `step(..., reset_state=...)` works
 **MABrax**:
  - Deprecated due to Brax itself being deprecated; this environment needs migrating to MJX.
  - Type annotations added.
+**Wrappers**:
+ - `_batchify_floats` renamed to `stack_agent_values`
 
 **Repo wide**:
 JAX: `jax<=0.4.38` upper cap removed, floor set to `>=0.4.25` (`jax.tree` became a public API in 0.4.25); `jaxlib` removed (transitive dep of jax)
