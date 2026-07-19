@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
 """
-Runs a set of JaxMARL baselines distributed across GPU slots and logs to WandB.
-Seeds for each (algo, env) combo run concurrently across GPUs; combos themselves
-run sequentially.
+Runs a set of JaxMARL baselines distributed across GPU slots and logs to WandB, where
+seed gets its own WandB run. Seeds for each (algo, env) run concurrently across GPUs;
+combos themselves run sequentially.
 
-Usage:
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity>
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> 'gpus=[0,1]'
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> dry_run=true
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> 'only=[ippo_ff_MPE_simple_spread_v3,qmix_rnn_2s3z]'
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> 'only_suites=[mpe]'
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> 'only_algos=[ippo_ff,qmix_rnn]'
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> wandb_mode=disabled steps=1000
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> baseline_steps.qmix_rnn_2s3z=50000
-    python baselines/run_minimal_baseline_set.py entity=<wandb-entity> seeds_per_gpu.ippo_ff_MPE_simple_spread_v3=2
+Settings (GPUs, seeds, step counts, WandB project) are configured in `baselines/config/run_minimal_baseline_set.yaml`
+and can be overridden on the command line via Hydra.
+
+
+# Single GPU, all baselines
+`python baselines/run_minimal_baseline_set.py entity=<wandb-entity>`
+
+# Two GPUs, two concurrent seeds per GPU for lightweight envs
+`python baselines/run_minimal_baseline_set.py entity=<wandb-entity> 'gpus=[0,1]' seeds_per_gpu.ippo_ff_mpe=2`
+
+# Quick smoke test: one baseline, WandB disabled, minimal steps
+`python baselines/run_minimal_baseline_set.py entity=<wandb-entity> 'only=[ippo_ff_mpe]' wandb_mode=disabled steps=1000`
+
+
+Can also run in the Docker Container via Make:
+`make run-baseline-set ARGS="entity=<wandb-entity> 'gpus=[0,1]'"`
+
+
 """
 
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -28,9 +37,31 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-import jaxmarl
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
+RUN_LOG_DIR = REPO_ROOT / ".baseline_logs" / "runs"
+
+
+def jaxmarl_version() -> str:
+    """Read jaxmarl's __version__ WITHOUT importing it.
+
+    Importing jaxmarl pulls in JAX, which initialises CUDA and preallocates its
+    default 75% of a GPU in this (launcher) process -- ~18.4GB of a 24GB card.
+    That memory is then unavailable to the training subprocesses scheduled onto
+    that GPU, which die with RESOURCE_EXHAUSTED.
+
+    Hiding the GPUs from the parent instead does not work: jaxmarl evaluates
+    jnp.array() at import time and raises with no backend available. Setting
+    JAX_PLATFORMS=cpu would be inherited by the children and force them onto
+    CPU. So the only safe option is to never import jaxmarl here.
+    """
+    src = (REPO_ROOT / "jaxmarl" / "__init__.py").read_text()
+    m = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', src, re.M)
+    if not m:
+        raise RuntimeError("could not parse __version__ from jaxmarl/__init__.py")
+    return m.group(1)
+
+
+JAXMARL_VERSION = jaxmarl_version()
 
 # Maps (algo, suite) -> (script_relpath, alg_key, alg_prefix).
 #
@@ -200,27 +231,31 @@ def run_combo(
     algo_family, network = run["algo"].rsplit("_", 1)
     tags = [algo_family.upper(), network.upper(), run["env"], run["suite"].upper()]
     if tag_jaxmarl_version:
-        tags.append(f"jaxmarl-{jaxmarl.__version__}")
+        tags.append(f"jaxmarl-{JAXMARL_VERSION}")
     wandb_tags = ",".join(tags)
     # Use dashes in WandB names for readability; underscore in run["name"] for key use.
     wandb_group = f"{run['algo']}-{run['env']}"
+    if tag_jaxmarl_version:
+        wandb_group += f"-jaxmarl_{JAXMARL_VERSION}"
 
     gpu_pool: queue.Queue[int] = queue.Queue()
     for gpu in gpus:
         for _ in range(seeds_per_gpu):
             gpu_pool.put(gpu)
 
-    no_prealloc = seeds_per_gpu > 1
     t0 = time.monotonic()
     passed = True
+    RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     def run_seed(i: int) -> bool:
         gpu_id = gpu_pool.get()
         try:
             env = os.environ.copy()
             env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-            if no_prealloc:
-                env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+            # Always disable preallocation, not just when sharing a GPU. With it
+            # on, a lone run still grabs 75% of the card (~18.4GB of 24GB) which
+            # barely covers a full-scale SMAX run and OOMs on any spike.
+            env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
             env["WANDB_TAGS"] = wandb_tags
             env["WANDB_RUN_GROUP"] = wandb_group
             env["WANDB_NAME"] = f"{wandb_group}-{i + 1}"
@@ -232,11 +267,20 @@ def run_combo(
                 seed=seed + i,
             )
             tprint(f"  [{run['name']}] seed {i + 1}/{seeds} starting on GPU {gpu_id}")
-            result = subprocess.run(cmd, cwd=REPO_ROOT, env=env)
+            # Per-run log: interleaved stdout is unreadable across concurrent
+            # seeds, and a failure with no retained output is undiagnosable.
+            log_path = RUN_LOG_DIR / f"{wandb_group}-{i + 1}.log"
+            with open(log_path, "w") as fh:
+                result = subprocess.run(
+                    cmd, cwd=REPO_ROOT, env=env, stdout=fh, stderr=subprocess.STDOUT
+                )
             if result.returncode != 0:
                 tprint(
-                    f"  [{run['name']}] seed {i + 1} FAIL (exit {result.returncode})"
+                    f"  [{run['name']}] seed {i + 1} FAIL "
+                    f"(exit {result.returncode}) -> {log_path}"
                 )
+                for line in log_path.read_text().strip().splitlines()[-15:]:
+                    tprint(f"      | {line}")
                 return False
             return True
         except Exception as exc:

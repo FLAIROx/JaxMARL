@@ -10,7 +10,7 @@ suites:
         algos: [ippo_ff, mappo_rnn, qmix_rnn, vdn_rnn, vdn_ff]
 
   smax:
-    seeds_per_gpu: 2
+    seeds_per_gpu: 1
     envs:
       - env: 2s3z
         algos: [ippo_rnn, mappo_rnn, qmix_rnn, vdn_rnn]
@@ -33,8 +33,8 @@ suites:
       - env: hanabi_2p
         algos: [ippo_ff, mappo_ff]
 
-entity: "amacrutherford"
-project: "jaxmarl-baselines"
+entity: ""
+project: ""
 seed: 42
 seeds: 10
 wandb_mode: online
