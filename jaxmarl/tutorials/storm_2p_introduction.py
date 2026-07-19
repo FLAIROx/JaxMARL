@@ -55,7 +55,7 @@ for t in range(num_outer_steps * num_inner_steps):
     )
 
     print("outer t", state.outer_t)
-    print("inner t", state.inner_t)
+    print("inner t", state.step)
     print("done", done)
     if (state.red_pos[:2] == state.blue_pos[:2]).all():
         # pdb.set_trace()

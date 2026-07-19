@@ -100,7 +100,7 @@ for t in range(num_outer_steps * num_inner_steps):
         rng, old_state, [a * action for a in actions]
     )
     print("outer t", state.outer_t)
-    print("inner t", state.inner_t)
+    print("inner t", state.step)
     print("done", done)
 
     img = env.render(state)
