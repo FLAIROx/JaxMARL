@@ -22,7 +22,7 @@ from jaxmarl.environments.multi_agent_env import State as BaseState
 class EnvState(BaseState):
     # From BaseState:
     #   step: Int[Array, ""]  -- current step within the inner episode
-    #   done: Bool[Array, ""] -- True when the inner episode resets
+    #   done: Bool[Array, ""] -- True when the outer (meta) episode ends
     red_pos: chex.Array
     blue_pos: chex.Array
     red_coin_pos: chex.Array
@@ -82,6 +82,8 @@ class CoinGame(MultiAgentEnv):
         self.agents = [str(i) for i in list(range(2))]
         self.payoff_matrix = payoff_matrix
         self.cnn = cnn
+        self.num_inner_steps = num_inner_steps
+        self.num_outer_steps = num_outer_steps
 
         # helper functions
         def _update_stats(
@@ -320,6 +322,11 @@ class CoinGame(MultiAgentEnv):
             outer_t = next_state.outer_t
             reset_inner = inner_t == num_inner_steps
 
+            # the inner reset is an internal detail: it advances the outer clock
+            # but does not end the meta episode. Only the outer boundary is `done`.
+            next_outer_t = jnp.where(reset_inner, outer_t + 1, outer_t)
+            reset_outer = next_outer_t == num_outer_steps
+
             # if inner episode is done, return start state for next game
             reset_obs, reset_state = _reset(key)
             next_state = EnvState(
@@ -338,8 +345,8 @@ class CoinGame(MultiAgentEnv):
                     next_state.blue_coin_pos,
                 ),
                 step=jnp.where(reset_inner, jnp.zeros_like(inner_t), next_state.step),
-                outer_t=jnp.where(reset_inner, outer_t + 1, outer_t),
-                done=reset_inner,
+                outer_t=next_outer_t,
+                done=reset_outer,
                 red_coop=next_state.red_coop,
                 red_defect=next_state.red_defect,
                 blue_coop=next_state.blue_coop,
@@ -380,10 +387,12 @@ class CoinGame(MultiAgentEnv):
                     for agent, reward in zip(self.agents, (red_reward, blue_reward))
                 }
 
-            dones = {agent: reset_inner for agent in self.agents}
-            dones["__all__"] = reset_inner
+            dones = {agent: reset_outer for agent in self.agents}
+            dones["__all__"] = reset_outer
 
-            infos = {}
+            # the inner boundary is still useful to algorithms (e.g. truncating
+            # GAE or recurrent state), so surface it without overloading `done`.
+            infos = {"inner_episode_done": reset_inner}
             return (
                 obs,
                 next_state,
@@ -404,9 +413,11 @@ class CoinGame(MultiAgentEnv):
                 blue_pos=all_pos[1, :],
                 red_coin_pos=all_pos[2, :],
                 blue_coin_pos=all_pos[3, :],
-                step=0,
-                outer_t=0,
-                done=False,
+                # explicit arrays so they match the shapes/dtypes `step` produces,
+                # which the base class auto-reset `lax.select`s against
+                step=jnp.zeros((), dtype=jnp.int32),
+                outer_t=jnp.zeros((), dtype=jnp.int32),
+                done=jnp.zeros((), dtype=bool),
                 red_coop=empty_stats,
                 red_defect=empty_stats,
                 blue_coop=empty_stats,
@@ -419,12 +430,11 @@ class CoinGame(MultiAgentEnv):
             obs = _state_to_obs(state)
             return obs, state
 
-        # overwrite Gymnax as it makes single-agent assumptions
-        self.step = jax.jit(_step)
+        # `step_env` holds the transition; the base class `step` handles the
+        # auto-reset at the outer boundary.
+        self.step_env = _step
         self.reset = jax.jit(_reset)
-
-        self.step = _step
-        self.reset = _reset
+        self.get_obs = jax.jit(_state_to_obs)
 
     @property
     def name(self) -> str:
