@@ -77,7 +77,7 @@ We follow CleanRL's philosophy of providing single file implementations which ca
 
 **Environments** - Before installing, ensure you have JAX installed for your hardware:
 
-GPU (CUDA 13):
+GPU (we recommend CUDA 13):
 ```sh
 pip install "jax[cuda13]"
 ```
