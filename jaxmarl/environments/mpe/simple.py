@@ -43,7 +43,7 @@ class State(BaseState):
     """Basic MPE State
 
     From BaseState:
-        done: chex.Array  # bool [num_agents, ]
+        done: chex.Array  # bool
         step: int  # current step
 
     """
@@ -272,7 +272,7 @@ class SimpleMPE(MultiAgentEnv):
 
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
-        done = jnp.full((self.num_agents), state.step >= self.max_steps)
+        done = state.step >= self.max_steps
 
         state = state.replace(
             p_pos=p_pos,
@@ -288,8 +288,8 @@ class SimpleMPE(MultiAgentEnv):
 
         info = {}
 
-        dones = {a: done[i] for i, a in enumerate(self.agents)}
-        dones.update({"__all__": jnp.all(done)})
+        dones = {a: done for a in self.agents}
+        dones.update({"__all__": done})
 
         return obs, state, reward, dones, info
 
@@ -314,7 +314,7 @@ class SimpleMPE(MultiAgentEnv):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=jnp.full((self.num_agents), False),
+            done=False,
             step=0,
         )
 

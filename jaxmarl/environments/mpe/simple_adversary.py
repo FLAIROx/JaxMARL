@@ -89,7 +89,7 @@ class SimpleAdversaryMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=jnp.full((self.num_agents), False),
+            done=False,
             step=0,
             goal=g_idx,
         )

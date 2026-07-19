@@ -253,7 +253,7 @@ class SimpleFacmacMPE(SimpleMPE):
 
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
-        done = jnp.full((self.num_agents), state.step >= self.max_steps)
+        done = state.step >= self.max_steps
 
         state = state.replace(
             p_pos=p_pos,
@@ -268,8 +268,8 @@ class SimpleFacmacMPE(SimpleMPE):
 
         info = {}
 
-        dones = {a: done[i] for i, a in enumerate(self.agents)}
-        dones.update({"__all__": jnp.all(done)})
+        dones = {a: done for a in self.agents}
+        dones.update({"__all__": done})
 
         return obs, state, reward, dones, info
 
