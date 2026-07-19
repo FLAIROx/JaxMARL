@@ -26,6 +26,7 @@ NOTE: We use effort-based-versioning
 **MABrax**:
  - Deprecated due to Brax itself being deprecated; this environment needs migrating to MJX.
  - Type annotations added.
+ - brax install moved to optional extras: `pip install jaxmarl[mabrax]` due to deprecation; `jaxmarl.environments.mabrax` will raise an ImportError if brax is not installed.
 **Wrappers**:
  - `_batchify_floats` renamed to `stack_agent_values`
 
