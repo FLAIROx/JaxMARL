@@ -458,7 +458,7 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "RNN"],
+        tags=[t for t in os.environ.get("WANDB_TAGS", "").split(",") if t],
         group=os.environ.get("WANDB_RUN_GROUP") or None,
         name=os.environ.get("WANDB_NAME") or None,
         config=config,

@@ -42,7 +42,7 @@ def step(env, action, extras):
     extras["obs"] = obs
     extras["state"] = state
     print(
-        f"t={state.time}: reward={reward['agent_0']}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done['__all__']}"
+        f"t={state.step}: reward={reward['agent_0']}, agent_dir={state.agent_dir_idx}, agent_inv={state.agent_inv}, done = {done['__all__']}"
     )
 
     if extras["debug"]:
