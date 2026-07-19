@@ -1,21 +1,24 @@
 # Multi-Agent Brax Environments
+
+>  Deprecated due to Brax itself being deprecated; this environment needs migrating to MJX.
+
 This directory contains a subset of the multi-agent environments as described in the paper
 [FACMAC: Factored Multi-Agent Centralised Policy Gradients](https://arxiv.org/abs/2003.06709).
 The task descriptions are the same as in the implementation from [Gymnasium-Robotics](https://robotics.farama.org/envs/MaMuJoCo/).
 These are multi-agent factorisations of MuJoCo tasks such that each agent controls a subset of the joints
-and only observes the local state. 
+and only observes the local state.
 
 Specifically, we include the following environments:
 
 | Environment | Description |
-| ----------- | ------------ | 
+| ----------- | ------------ |
 | `ant_4x2` | 4 agents, 2 joints each. One agent controls each leg. |
 | `halfcheetah_6x1` | 6 agents, 1 joint each. One agent controls each joint. |
 | `hopper_3x1` | 3 agents, 1 joint each. One agent controls each joint. |
 | `humanoid_9\|8` | 2 agents, 9 and 8 joints. One agent controls the upper body, the other the lower body. |
 | `walker2d_2x3` | 2 agents, 3 joints each. Factored into right and left leg. |
 
-## Observation Space 
+## Observation Space
 Each agent's observation vector is composed of the local state of the joints it controls, as well as the state of joints at distance 1 away in the body graph, and the state of the root body. State here refers to the position and velocity of the joint or body. All observations are continuous numbers in the range [-inf, inf].
 
 ## Action Spaces
@@ -23,7 +26,7 @@ Each agent's action space is the input torques to the joints it controls. All en
 
 Note: the two agents in `humanoid_9|8` have different action space sizes. To pad the action spaces to be the same size pass `"homogenisation_method":"max"` to the envrionment. If using our config files, this would done as:
 ```yaml
-"ENV_NAME": "humanoid_9|8" 
+"ENV_NAME": "humanoid_9|8"
 "ENV_KWARGS": {"homogenisation_method":"max"}
 ```
 
