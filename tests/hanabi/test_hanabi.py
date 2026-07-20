@@ -1,13 +1,17 @@
-import os
 import json
-import numpy as np
+import os
+
 import jax
+import numpy as np
+import pytest
 from jax import numpy as jnp
+
 from jaxmarl import make
 from jaxmarl.environments.hanabi.hanabi import HanabiEnv
 
 env = make("hanabi")
 dir_path = os.path.dirname(os.path.realpath(__file__))
+
 
 def pad_array(arr, target_length):
     pad_size = target_length - len(arr)
@@ -119,7 +123,7 @@ def legacy_reset_deck(env, key):
     _, deck_key = jax.random.split(key)
     shuffled_pairs = jax.random.permutation(deck_key, color_rank_pairs, axis=0)
     deck = env._one_hot_encode_deck(shuffled_pairs)
-    return deck.at[:env.num_agents * env.hand_size].set(
+    return deck.at[: env.num_agents * env.hand_size].set(
         jnp.zeros((env.num_colors, env.num_ranks))
     )
 
@@ -255,19 +259,195 @@ def test_injected_decks():
     This tests consists in injecting in the Hanabi environment a set of decks and actions that are known to produce a certain score.
     The test checks if the scores produced by the environment are the same as the expected ones.
     """
-    print('Hanabi Test: test_injected_decks')
+    print("Hanabi Test: test_injected_decks")
     actions_seq = get_action_sequences()
     decks = get_decks()
     true_scores = get_scores()
     scores = jax.jit(jax.vmap(get_injected_score))(decks, actions_seq)
-    assert (
-        true_scores == scores
-    ).all(), "The injected decks-actions didn't produce the expeceted scores"
+    assert (true_scores == scores).all(), (
+        "The injected decks-actions didn't produce the expeceted scores"
+    )
     print("Test passed")
+
+
+# ---------------------------------------------------------------------------
+# New fixtures
+# ---------------------------------------------------------------------------
+
+
+def all_r1_deck():
+    """50-card deck where every card is R1 (color 0, rank 0)."""
+    return jnp.zeros((env.deck_size, 2), dtype=int)
+
+
+def deck_with_first_card(color: int, rank: int):
+    """50-card deck with (color, rank) as card 0; remainder are R1."""
+    deck = np.zeros((env.deck_size, 2), dtype=int)
+    deck[0] = [color, rank]
+    return jnp.array(deck)
+
+
+# ---------------------------------------------------------------------------
+# Observation shape
+# ---------------------------------------------------------------------------
+
+
+def test_obs_shape_after_reset():
+    """Each agent's observation has exactly obs_size features after reset."""
+    key = jax.random.PRNGKey(0)
+    obs, _ = env.reset(key)
+    for agent in env.agents:
+        assert obs[agent].shape == (env.obs_size,)
+
+
+# ---------------------------------------------------------------------------
+# Fireworks and scoring
+# ---------------------------------------------------------------------------
+
+
+def test_correct_play_advances_fireworks_and_score():
+    """Playing a valid card increments fireworks and score by 1."""
+    state = env.reset_game_from_deck_of_pairs(deck_with_first_card(0, 0))  # R1
+    next_state, reward = env.step_game(state, aidx=0, action=env.hand_size)
+    assert int(next_state.fireworks[0].sum()) == 1
+    assert int(next_state.score) == 1
+    assert int(reward) == 1
+
+
+def test_wrong_play_loses_a_life():
+    """Playing an invalid card spends a life token without advancing fireworks."""
+    state = env.reset_game_from_deck_of_pairs(
+        deck_with_first_card(0, 1)
+    )  # R2 on empty fireworks
+    next_state, reward = env.step_game(state, aidx=0, action=env.hand_size)
+    assert int(next_state.life_tokens.sum()) == env.max_life_tokens - 1
+    assert int(next_state.fireworks.sum()) == 0
+    assert int(reward) == 0
+
+
+def test_perfect_score_terminates_game():
+    """Playing the 25th card triggers terminal and fills all fireworks."""
+    state = env.reset_game_from_deck_of_pairs(deck_with_first_card(4, 4))  # B5
+    near_perfect = jnp.ones((env.num_colors, env.num_ranks)).at[4, 4].set(0)
+    state = state.replace(fireworks=near_perfect)
+    next_state, _ = env.step_game(state, aidx=0, action=env.hand_size)
+    assert bool(next_state.terminal)
+    assert int(next_state.fireworks.sum()) == env.num_colors * env.num_ranks
+
+
+# ---------------------------------------------------------------------------
+# Info token mechanics
+# ---------------------------------------------------------------------------
+
+
+def test_hint_spends_info_token():
+    """Giving a hint reduces the info token count by one."""
+    state = env.reset_game_from_deck_of_pairs(all_r1_deck())
+    initial_tokens = int(state.info_tokens.sum())
+    hint_action = 2 * env.hand_size  # first color-hint action (hint R to player 1)
+    next_state, _ = env.step_game(state, aidx=0, action=hint_action)
+    assert int(next_state.info_tokens.sum()) == initial_tokens - 1
+
+
+def test_discard_gains_info_token():
+    """Discarding when tokens are not full restores one token."""
+    state = env.reset_game_from_deck_of_pairs(all_r1_deck())
+    tokens = state.info_tokens.at[env.max_info_tokens - 1].set(0)
+    state = state.replace(info_tokens=tokens)
+    assert int(state.info_tokens.sum()) == env.max_info_tokens - 1
+    next_state, _ = env.step_game(state, aidx=0, action=0)  # discard card 0
+    assert int(next_state.info_tokens.sum()) == env.max_info_tokens
+
+
+# ---------------------------------------------------------------------------
+# Legal moves
+# ---------------------------------------------------------------------------
+
+
+def test_discard_is_illegal_when_info_tokens_full():
+    """No discard action is legal for the acting player at the start of a game."""
+    key = jax.random.PRNGKey(0)
+    _, state = env.reset(key)
+    legal = env.get_legal_moves(state)
+    acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_player = env.agents[int(state.seat_order[acting_seat])]
+    assert not bool(legal[acting_player][env.discard_action_range].any())
+
+
+def test_noop_is_legal_only_for_non_acting_player():
+    """Noop is legal exactly for agents who are not the current player."""
+    key = jax.random.PRNGKey(0)
+    _, state = env.reset(key)
+    legal = env.get_legal_moves(state)
+    noop = env.num_moves - 1
+    acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_idx = int(state.seat_order[acting_seat])
+    for i, agent in enumerate(env.agents):
+        if i == acting_idx:
+            assert not bool(legal[agent][noop])
+        else:
+            assert bool(legal[agent][noop])
+
+
+# ---------------------------------------------------------------------------
+# Last-round countdown
+# ---------------------------------------------------------------------------
+
+
+def test_last_round_count_increments_when_deck_empty():
+    """last_round_count increases by 1 per turn once the deck is exhausted."""
+    state = env.reset_game_from_deck_of_pairs(all_r1_deck())
+    state = state.replace(num_cards_dealt=env.deck_size)
+    hint_action = 2 * env.hand_size
+    next_state, _ = env.step_game(state, aidx=0, action=hint_action)
+    assert int(next_state.last_round_count) == 1
+    assert not bool(next_state.terminal)
+
+
+def test_last_round_terminates_game():
+    """Game ends when last_round_count reaches num_agents + 1."""
+    state = env.reset_game_from_deck_of_pairs(all_r1_deck())
+    state = state.replace(
+        num_cards_dealt=env.deck_size,
+        last_round_count=env.num_agents,  # one step below the terminal threshold
+    )
+    hint_action = 2 * env.hand_size
+    next_state, _ = env.step_game(state, aidx=0, action=hint_action)
+    assert bool(next_state.terminal)
+    assert int(next_state.last_round_count) == env.num_agents + 1
+
+
+# ---------------------------------------------------------------------------
+# Multi-player configurations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("num_agents", [2, 3, 4, 5])
+def test_multi_player_reset_and_step(num_agents):
+    """reset and step work for all valid player counts; obs shapes are correct."""
+    env_mp = HanabiEnv(num_agents=num_agents)
+    key = jax.random.PRNGKey(0)
+    obs, state = env_mp.reset(key)
+
+    assert len(obs) == num_agents
+    for agent in env_mp.agents:
+        assert obs[agent].shape == (env_mp.obs_size,)
+
+    acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_idx = int(state.seat_order[acting_seat])
+    actions = {agent: env_mp.num_moves - 1 for agent in env_mp.agents}
+    actions[env_mp.agents[acting_idx]] = 2 * env_mp.hand_size  # first color hint
+
+    obs2, _, rewards, dones, _ = env_mp.step(key, state, actions)
+
+    assert len(obs2) == num_agents
+    assert "__all__" in dones
+    assert "__all__" in rewards
 
 
 def main():
     test_injected_decks()
+
 
 if __name__ == "__main__":
     main()

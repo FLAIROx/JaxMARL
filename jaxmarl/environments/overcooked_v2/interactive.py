@@ -1,14 +1,15 @@
 import argparse
+
 import jax
 import jax.numpy as jnp
-from jaxmarl.environments.overcooked_v2.common import Actions
-from jaxmarl.environments.overcooked_v2.overcooked import OvercookedV2
+
+from jaxmarl.environments.overcooked_v2.common import OvercookedActionsEnum
 from jaxmarl.environments.overcooked_v2.layouts import overcooked_v2_layouts as layouts
+from jaxmarl.environments.overcooked_v2.overcooked import OvercookedV2
 from jaxmarl.viz.overcooked_v2_visualizer import OvercookedV2Visualizer
 
 
 class InteractiveOvercookedV2:
-
     def __init__(self, layout, agent_view_size=None, no_jit=False, debug=False):
         self.debug = debug
         self.no_jit = no_jit
@@ -24,7 +25,7 @@ class InteractiveOvercookedV2:
     def _run(self):
         self._reset()
 
-        self.viz.window.reg_key_handler(self._handle_input)
+        self.viz._lazy_init_window().reg_key_handler(self._handle_input)
         self.viz.show(block=True)
 
     def _handle_input(self, event):
@@ -32,17 +33,17 @@ class InteractiveOvercookedV2:
             print("Pressed", event.key)
 
         ACTION_MAPPING = {
-            "left": Actions.left,
-            "right": Actions.right,
-            "up": Actions.up,
-            "down": Actions.down,
-            " ": Actions.interact,
-            "tab": Actions.stay,
+            "left": OvercookedActionsEnum.left,
+            "right": OvercookedActionsEnum.right,
+            "up": OvercookedActionsEnum.up,
+            "down": OvercookedActionsEnum.down,
+            " ": OvercookedActionsEnum.interact,
+            "tab": OvercookedActionsEnum.stay,
         }
 
         match event.key:
             case "escape":
-                self.viz.window.close()
+                self.viz.close()
                 return
             case "backspace":
                 self._reset()
@@ -70,13 +71,13 @@ class InteractiveOvercookedV2:
 
         actions = {f"agent_{i}": jnp.array(action) for i in range(self.env.num_agents)}
         if self.debug:
-            print("Actions: ", actions)
+            print("OvercookedActionsEnum: ", actions)
 
         obs, state, reward, done, info = jax.jit(self.env.step_env)(
             subkey, self.state, actions
         )
         self.state = state
-        print(f"t={state.time}: reward={reward['agent_0']}, done = {done['__all__']}")
+        print(f"t={state.step}: reward={reward['agent_0']}, done = {done['__all__']}")
 
         if self.debug:
             a0_obs = obs["agent_0"]

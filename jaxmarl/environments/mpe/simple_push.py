@@ -1,15 +1,22 @@
+from functools import partial
+from typing import Tuple
+
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
-from functools import partial
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments.mpe.default_params import (
+    ADVERSARY_COLOUR,
+    AGENT_COLOUR,
+    DISCRETE_ACT,
+)
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
-from jaxmarl.environments.mpe.default_params import *
+from jaxmarl.environments.multi_agent_env import Observations, Rewards
 from jaxmarl.environments.spaces import Box
 
 # Obstacle Colours
 COLOUR_1 = jnp.array([0.1, 0.9, 0.1])
-COLOUR_2 = jnp.array([0.1, 0.1, 0.9])  
+COLOUR_2 = jnp.array([0.1, 0.1, 0.9])
 OBS_COLOUR = jnp.concatenate([COLOUR_1, COLOUR_2])
 
 
@@ -22,9 +29,9 @@ class SimplePushMPE(SimpleMPE):
         action_type=DISCRETE_ACT,
         **kwargs,
     ):
-        assert (
-            num_landmarks == 2
-        ), "SimplePushMPE only supports 2 landmarks (yes, this is a departure from the docs but follows the code)"
+        assert num_landmarks == 2, (
+            "SimplePushMPE only supports 2 landmarks (yes, this is a departure from the docs but follows the code)"
+        )
 
         dim_c = 2  # NOTE follows code rather than docs
 
@@ -75,7 +82,7 @@ class SimplePushMPE(SimpleMPE):
             **kwargs,
         )
 
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
         key_a, key_l, key_g = jax.random.split(key, 3)
 
         p_pos = jnp.concatenate(
@@ -93,16 +100,16 @@ class SimplePushMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=jnp.full((self.num_agents), False),
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
             goal=g_idx,
         )
 
         return self.get_obs(state), state
 
-    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Observations:
         @partial(jax.vmap, in_axes=(0))
-        def _common_stats(aidx: int):
+        def _common_stats(aidx: jax.Array):
             """Values needed in all observations"""
 
             landmark_pos = (
@@ -128,14 +135,17 @@ class SimplePushMPE(SimpleMPE):
 
         landmark_pos, other_pos, other_vel = _common_stats(self.agent_range)
 
+        goal = state.goal
+        assert goal is not None
+
         def _good(aidx: int):
-            goal_rel_pos = state.p_pos[state.goal + self.num_agents] - state.p_pos[aidx]
+            goal_rel_pos = state.p_pos[goal + self.num_agents] - state.p_pos[aidx]
 
             agent_colour = jnp.full((3,), 0.25)
-            agent_colour = agent_colour.at[state.goal + 1].set(0.75)
+            agent_colour = agent_colour.at[goal + 1].set(0.75)
 
             return jnp.concatenate(
-                [  
+                [
                     state.p_vel[aidx].flatten(),  # 2
                     goal_rel_pos.flatten(),  # 2
                     agent_colour,
@@ -163,20 +173,23 @@ class SimplePushMPE(SimpleMPE):
     def rewards(
         self,
         state: State,
-    ) -> Dict[str, float]:
+    ) -> Rewards:
+        goal = state.goal
+        assert goal is not None
+
         def _good(aidx):
             return -jnp.linalg.norm(
-                state.p_pos[state.goal + self.num_agents] - state.p_pos[aidx]
+                state.p_pos[goal + self.num_agents] - state.p_pos[aidx]
             )
 
         def _adversary(aidx):
             agent_dist = (
-                state.p_pos[state.goal + self.num_agents]
+                state.p_pos[goal + self.num_agents]
                 - state.p_pos[self.num_adversaries : self.num_agents]
             )
             pos_rew = jnp.min(jnp.linalg.norm(agent_dist, axis=1))
             neg_rew = jnp.linalg.norm(
-                state.p_pos[state.goal + self.num_agents] - state.p_pos[aidx]
+                state.p_pos[goal + self.num_agents] - state.p_pos[aidx]
             )
             return pos_rew - neg_rew
 

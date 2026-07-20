@@ -1,4 +1,4 @@
-""" Default parameters for MPE environments """
+"""Default parameters for MPE environments"""
 
 # Action types
 DISCRETE_ACT = "Discrete"

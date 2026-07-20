@@ -1,20 +1,36 @@
+from functools import partial
+from typing import Tuple
+
+import chex
 import jax
 import jax.numpy as jnp
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
-from jaxmarl.environments.spaces import Discrete, MultiDiscrete
-import chex
 from flax import struct
-from typing import Tuple, Dict
-from functools import partial
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments.multi_agent_env import (
+    Actions,
+    Dones,
+    Infos,
+    MultiAgentEnv,
+    Observations,
+    Rewards,
+)
+from jaxmarl.environments.multi_agent_env import State as BaseState
+from jaxmarl.environments.spaces import Discrete, MultiDiscrete
 
 
 @struct.dataclass
-class State:
+class State(BaseState):
+    """EnvState for the SwitchRiddle environment.
+
+    From BaseState:
+        done: bool  # done is the same for all the agents
+        step: int
+    """
+
     bulb_state: bool  # light on or off
     agent_in_room: int  # index of the agent in room
     has_been: chex.Array  # [bool]*n_agents
-    done: bool  # done is the same for all the agents
-    step: int
 
 
 class SwitchRiddle(MultiAgentEnv):
@@ -26,9 +42,8 @@ class SwitchRiddle(MultiAgentEnv):
         reward_all_live=1.0,
     ):
         assert num_agents >= 3, "The minimum number of agents for this environment is 3"
-        self.num_agents = num_agents
+        super().__init__(num_agents=num_agents)
         self.agent_range = jnp.arange(num_agents)
-        self.agents = [f"agent_{i}" for i in range(num_agents)]
         self.a_to_i = {a: i for i, a in enumerate(self.agents)}
 
         # action space
@@ -50,7 +65,7 @@ class SwitchRiddle(MultiAgentEnv):
         self.reward_all_live = reward_all_live
 
     @partial(jax.jit, static_argnums=[0])
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, State]:
         state = State(
             bulb_state=jnp.array(self.initial_bulb_state),
             agent_in_room=jax.random.randint(
@@ -64,7 +79,9 @@ class SwitchRiddle(MultiAgentEnv):
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
-    def step_env(self, key: chex.PRNGKey, state: State, actions: dict):
+    def step_env(
+        self, key: PRNGKeyArray, state: State, actions: Actions
+    ) -> Tuple[Observations, State, Rewards, Dones, Infos]:
         # get the actions as array
         actions = jnp.array([actions[i] for i in self.agents])
 
@@ -121,22 +138,22 @@ class SwitchRiddle(MultiAgentEnv):
         return obs, state, rewards, dones, info
 
     @partial(jax.jit, static_argnums=[0])
-    def get_obs(self, state: State) -> dict:
+    def get_obs(self, state: State) -> Observations:
         @partial(jax.vmap, in_axes=[0, None])
         def _observation(aidx: int, state: State) -> jnp.ndarray:
             """Return observation for agent i."""
-            #print('state agent in room', state.agent_in_room)
-            agent_in_room = (state.agent_in_room == aidx)
-            #print('agent in room', agent_in_room)
+            # print('state agent in room', state.agent_in_room)
+            agent_in_room = state.agent_in_room == aidx
+            # print('agent in room', agent_in_room)
             bulb_state = jnp.logical_and(
-                agent_in_room, # only the current agent in the room can see the bulb state
-                state.bulb_state
+                agent_in_room,  # only the current agent in the room can see the bulb state
+                state.bulb_state,
             ).squeeze()
-            #print('agent shape', agent_in_room.shape, 'bulb state', bulb_state.shape)
+            # print('agent shape', agent_in_room.shape, 'bulb state', bulb_state.shape)
             return jnp.array([agent_in_room, bulb_state]).astype(int)
 
         obs = _observation(self.agent_range, state)
-        #print('obs', obs.shape)
+        # print('obs', obs.shape)
         return {a: obs[i] for i, a in enumerate(self.agents)}
 
     def render(self, state: State):
@@ -157,7 +174,8 @@ def example():
     key = jax.random.PRNGKey(0)
 
     from jaxmarl import make
-    env = make('switch_riddle', num_agents=num_agents)
+
+    env = make("switch_riddle", num_agents=num_agents)
 
     obs, state = env.reset(key)
     env.render(state)

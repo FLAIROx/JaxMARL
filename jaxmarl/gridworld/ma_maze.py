@@ -1,21 +1,23 @@
 from collections import OrderedDict
 from enum import IntEnum
+from typing import Tuple
 
-import numpy as np
+import chex
 import jax
 import jax.numpy as jnp
-from jax import lax
-from jaxmarl.gridworld.env import Environment
-from jaxmarl.environments import spaces
-from typing import Tuple
-import chex
+import numpy as np
 from flax import struct
+from jax import lax
+from jaxtyping import PRNGKeyArray
 
+from jaxmarl.environments import spaces
 from jaxmarl.environments.overcooked.common import (
-    OBJECT_TO_INDEX,
     COLOR_TO_INDEX,
     DIR_TO_VEC,
-    make_maze_map)
+    OBJECT_TO_INDEX,
+    make_maze_map,
+)
+from jaxmarl.gridworld.env import Environment
 
 
 class Actions(IntEnum):
@@ -65,31 +67,35 @@ class EnvParams:
 
 class MAMaze(Environment):
     """Multi-agent Maze"""
+
     def __init__(
-            self,
-            height=13,
-            width=13,
-            n_walls=25,
-            agent_view_size=5,
-            replace_wall_pos=False,
-            see_agent=False,
-            max_episode_steps=250,
-            normalize_obs=False,
-            singleton_seed=-1,
-            n_agents=2
+        self,
+        height=13,
+        width=13,
+        n_walls=25,
+        agent_view_size=5,
+        replace_wall_pos=False,
+        see_agent=False,
+        max_episode_steps=250,
+        normalize_obs=False,
+        singleton_seed=-1,
+        n_agents=2,
+        sample_n_walls=False,
     ):
         super().__init__()
 
         self.obs_shape = (agent_view_size, agent_view_size, 3)
-        self.action_set = jnp.array([
-            Actions.left,
-            Actions.right,
-            Actions.forward,
-            Actions.pickup,
-            Actions.drop,
-            Actions.toggle,
-            Actions.done
-        ])
+        self.action_set = jnp.array(
+            [
+                Actions.left,
+                Actions.right,
+                Actions.forward,
+                Actions.pickup,
+                Actions.drop,
+                Actions.toggle,
+                Actions.done,
+            ]
+        )
 
         self.params = EnvParams(
             height=height,
@@ -101,7 +107,7 @@ class MAMaze(Environment):
             max_episode_steps=max_episode_steps,
             normalize_obs=normalize_obs,
             singleton_seed=-1,
-            n_agents=n_agents
+            n_agents=n_agents,
         )
 
     @property
@@ -110,10 +116,10 @@ class MAMaze(Environment):
         return EnvParams()
 
     def step_env(
-            self,
-            key: chex.PRNGKey,
-            state: EnvState,
-            actions: chex.Array,
+        self,
+        key: PRNGKeyArray,
+        state: EnvState,
+        actions: chex.Array,
     ) -> Tuple[chex.Array, EnvState, float, bool, dict]:
         """Perform single timestep state transition."""
 
@@ -125,7 +131,9 @@ class MAMaze(Environment):
         done = self.is_terminal(state)
         state = state.replace(terminal=done)
 
-        obs_array = jax.vmap(self.get_obs, in_axes=(None, 0))(state, jnp.arange(self.params.n_agents))
+        obs_array = jax.vmap(self.get_obs, in_axes=(None, 0))(
+            state, jnp.arange(self.params.n_agents)
+        )
 
         return (
             lax.stop_gradient(obs_array),
@@ -136,8 +144,8 @@ class MAMaze(Environment):
         )
 
     def reset_env(
-            self,
-            key: chex.PRNGKey,
+        self,
+        key: PRNGKeyArray,
     ) -> Tuple[chex.Array, EnvState]:
         """Reset environment state by resampling contents of maze_map
         - initial agent position
@@ -153,9 +161,8 @@ class MAMaze(Environment):
         # Reset wall map, with shape H x W, and value of 1 at (i,j) iff there is a wall at (i,j)
         key, subkey = jax.random.split(key)
         wall_idx = jax.random.choice(
-            subkey, all_pos,
-            shape=(params.n_walls,),
-            replace=params.replace_wall_pos)
+            subkey, all_pos, shape=(params.n_walls,), replace=params.replace_wall_pos
+        )
 
         occupied_mask = jnp.zeros_like(all_pos)
         occupied_mask = occupied_mask.at[wall_idx].set(1)
@@ -163,28 +170,37 @@ class MAMaze(Environment):
 
         # Reset agent position + dir
         key, subkey = jax.random.split(key)
-        agent_idx = jax.random.choice(subkey, all_pos, shape=(n_agents,),
-                                      p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32), replace=False)
+        agent_idx = jax.random.choice(
+            subkey,
+            all_pos,
+            shape=(n_agents,),
+            p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32),
+            replace=False,
+        )
         occupied_mask = occupied_mask.at[agent_idx].set(1)
-        agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32).transpose() # dim = n_agents x 2
+        agent_pos = jnp.array(
+            [agent_idx % w, agent_idx // w], dtype=jnp.uint32
+        ).transpose()  # dim = n_agents x 2
 
         key, subkey = jax.random.split(key)
-        agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8), shape=(n_agents,))
-        agent_dir = DIR_TO_VEC.at[agent_dir_idx].get() # dim = n_agents x 2
+        agent_dir_idx = jax.random.choice(
+            subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.uint8), shape=(n_agents,)
+        )
+        agent_dir = DIR_TO_VEC.at[agent_dir_idx].get()  # dim = n_agents x 2
 
         # Reset goal position
         key, subkey = jax.random.split(key)
-        goal_idx = jax.random.choice(subkey, all_pos, shape=(1,),
-                                     p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32))
+        goal_idx = jax.random.choice(
+            subkey,
+            all_pos,
+            shape=(1,),
+            p=(~occupied_mask.astype(jnp.bool_)).astype(jnp.float32),
+        )
         goal_pos = jnp.array([goal_idx % w, goal_idx // w], dtype=jnp.uint32).flatten()
 
         maze_map = make_maze_map(
-            params,
-            wall_map,
-            goal_pos,
-            agent_pos,
-            agent_dir_idx,
-            pad_obs=True)
+            params, wall_map, goal_pos, agent_pos, agent_dir_idx, pad_obs=True
+        )
 
         state = EnvState(
             agent_pos=agent_pos,
@@ -196,7 +212,9 @@ class MAMaze(Environment):
             time=0,
             terminal=False,
         )
-        obs_array = jax.vmap(self.get_obs, in_axes=(None, 0))(state, jnp.arange(n_agents))
+        obs_array = jax.vmap(self.get_obs, in_axes=(None, 0))(
+            state, jnp.arange(n_agents)
+        )
 
         return obs_array, state
 
@@ -216,7 +234,9 @@ class MAMaze(Environment):
         obs_side_bound1 = agent_pos + (agent_dir == 0) * side_offset
         obs_side_bound2 = agent_pos - (agent_dir == 0) * side_offset
 
-        all_bounds = jnp.stack([obs_fwd_bound1, obs_fwd_bound2, obs_side_bound1, obs_side_bound2])
+        all_bounds = jnp.stack(
+            [obs_fwd_bound1, obs_fwd_bound2, obs_side_bound1, obs_side_bound2]
+        )
 
         # Clip obs to grid bounds appropriately
         padding = obs.shape[0] - 1
@@ -228,52 +248,67 @@ class MAMaze(Environment):
         coord_y = meshgrid[1].flatten()
         coord_x = meshgrid[0].flatten()
 
-        obs = state.maze_map.at[
-              coord_y, coord_x, :].get().reshape(obs.shape[0], obs.shape[1], 3)
+        obs = (
+            state.maze_map.at[coord_y, coord_x, :]
+            .get()
+            .reshape(obs.shape[0], obs.shape[1], 3)
+        )
 
-        obs = (agent_dir_idx == 0) * jnp.rot90(obs, 1) + \
-              (agent_dir_idx == 1) * jnp.rot90(obs, 2) + \
-              (agent_dir_idx == 2) * jnp.rot90(obs, 3) + \
-              (agent_dir_idx == 3) * jnp.rot90(obs, 4)
+        obs = (
+            (agent_dir_idx == 0) * jnp.rot90(obs, 1)
+            + (agent_dir_idx == 1) * jnp.rot90(obs, 2)
+            + (agent_dir_idx == 2) * jnp.rot90(obs, 3)
+            + (agent_dir_idx == 3) * jnp.rot90(obs, 4)
+        )
 
         if not self.params.see_agent:
             obs = obs.at[-1, side_offset].set(
-                jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
+                jnp.array([OBJECT_TO_INDEX["empty"], 0, 0], dtype=jnp.uint8)
             )
 
         image = obs.astype(jnp.uint8)
         if self.params.normalize_obs:
             image = image / 10.0
 
-        obs_dict = dict(
-            image=image,
-            agent_dir=agent_dir_idx
-        )
+        obs_dict = dict(image=image, agent_dir=agent_dir_idx)
 
         return OrderedDict(obs_dict)
 
-    def step_agents(self, key: chex.PRNGKey, state: EnvState, action: chex.Array) -> Tuple[EnvState, float]:
+    def step_agents(
+        self, key: PRNGKeyArray, state: EnvState, action: chex.Array
+    ) -> Tuple[EnvState, float]:
         params = self.params
 
         # Update agent position (forward action)
         fwd_pos = jnp.minimum(
-            jnp.maximum(state.agent_pos + (action == Actions.forward) * state.agent_dir, 0),
-            jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32))
+            jnp.maximum(
+                state.agent_pos + (action == Actions.forward) * state.agent_dir, 0
+            ),
+            jnp.array((params.width - 1, params.height - 1), dtype=jnp.uint32),
+        )
 
         # Can't go past wall or goal
         def _wall_or_goal(fwd_position, wall_map, goal_pos):
             fwd_wall = wall_map.at[fwd_position[1], fwd_position[0]].get()
-            fwd_goal = jnp.logical_and(fwd_position[0] == goal_pos[0], fwd_position[1] == goal_pos[1])
+            fwd_goal = jnp.logical_and(
+                fwd_position[0] == goal_pos[0], fwd_position[1] == goal_pos[1]
+            )
             return fwd_wall, fwd_goal
 
-        fwd_pos_has_wall, fwd_pos_has_goal = jax.vmap(_wall_or_goal, in_axes=(0, None, None))(fwd_pos, state.wall_map, state.goal_pos)
+        fwd_pos_has_wall, fwd_pos_has_goal = jax.vmap(
+            _wall_or_goal, in_axes=(0, None, None)
+        )(fwd_pos, state.wall_map, state.goal_pos)
 
-        fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape((params.n_agents, 1))
+        fwd_pos_blocked = jnp.logical_or(fwd_pos_has_wall, fwd_pos_has_goal).reshape(
+            (params.n_agents, 1)
+        )
 
         # Agents can't overlap
         # Hardcoded for 2 agents
         agent_pos_prev = jnp.array(state.agent_pos)
-        fwd_pos = (fwd_pos_blocked * state.agent_pos + (~fwd_pos_blocked) * fwd_pos).astype(jnp.uint32)
+        fwd_pos = (
+            fwd_pos_blocked * state.agent_pos + (~fwd_pos_blocked) * fwd_pos
+        ).astype(jnp.uint32)
         collision = jnp.all(fwd_pos[0] == fwd_pos[1])
 
         # Cases (bounced == hit wall/goal and stayed in place)
@@ -283,12 +318,12 @@ class MAMaze(Environment):
 
         alice_pos = jnp.where(
             collision * only_bob_bounced,
-            state.agent_pos[0],                     # collision and Bob bounced
+            state.agent_pos[0],  # collision and Bob bounced
             fwd_pos[0],
         )
         bob_pos = jnp.where(
             collision * only_alice_bounced,
-            state.agent_pos[1],                     # collision and Alice bounced
+            state.agent_pos[1],  # collision and Alice bounced
             fwd_pos[1],
         )
 
@@ -296,14 +331,12 @@ class MAMaze(Environment):
         alice_wins = jax.random.choice(rng_coll, 2)
 
         alice_pos = jnp.where(
-            collision * neither_bounced * (1-alice_wins),
+            collision * neither_bounced * (1 - alice_wins),
             state.agent_pos[0],
-            alice_pos
+            alice_pos,
         )
         bob_pos = jnp.where(
-            collision * neither_bounced * alice_wins,
-            state.agent_pos[1],
-            bob_pos
+            collision * neither_bounced * alice_wins, state.agent_pos[1], bob_pos
         )
 
         # Prevent swapping places (i.e. passing through each other)
@@ -311,47 +344,52 @@ class MAMaze(Environment):
             jnp.all(fwd_pos[0] == state.agent_pos[1]),
             jnp.all(fwd_pos[1] == state.agent_pos[0]),
         )
-        alice_pos = jnp.where(
-            ~collision * swap_places,
-            state.agent_pos[0],
-            alice_pos
-        )
-        bob_pos = jnp.where(
-            ~collision * swap_places,
-            state.agent_pos[1],
-            bob_pos
-        )
+        alice_pos = jnp.where(~collision * swap_places, state.agent_pos[0], alice_pos)
+        bob_pos = jnp.where(~collision * swap_places, state.agent_pos[1], bob_pos)
 
         fwd_pos = fwd_pos.at[0].set(alice_pos)
         fwd_pos = fwd_pos.at[1].set(bob_pos)
         agent_pos = fwd_pos.astype(jnp.uint32)
 
         # Update agent direction (left_turn or right_turn action)
-        agent_dir_offset = \
-            0 \
-            + (action == Actions.left) * (-1) \
-            + (action == Actions.right) * 1
+        agent_dir_offset = (
+            0 + (action == Actions.left) * (-1) + (action == Actions.right) * 1
+        )
 
         agent_dir_idx = (state.agent_dir_idx + agent_dir_offset) % 4
         agent_dir = DIR_TO_VEC[agent_dir_idx]
 
         # # Update agent component in maze_map
         def _get_agent_updates(agent_dir_idx, agent_pos, agent_pos_prev, agent_idx):
-            agent = jnp.array([OBJECT_TO_INDEX['agent'], COLOR_TO_INDEX['red']+agent_idx*2, agent_dir_idx], dtype=jnp.uint8)
+            agent = jnp.array(
+                [
+                    OBJECT_TO_INDEX["agent"],
+                    COLOR_TO_INDEX["red"] + agent_idx * 2,
+                    agent_dir_idx,
+                ],
+                dtype=jnp.uint8,
+            )
             agent_x_prev, agent_y_prev = agent_pos_prev
             agent_x, agent_y = agent_pos
             return agent_x, agent_y, agent_x_prev, agent_y_prev, agent
 
         vec_update = jax.vmap(_get_agent_updates, in_axes=(0, 0, 0, 0))
-        agent_x, agent_y, agent_x_prev, agent_y_prev, agent_vec = vec_update(agent_dir_idx, agent_pos, agent_pos_prev, jnp.arange(params.n_agents))
-        empty = jnp.array([OBJECT_TO_INDEX['empty'], 0, 0], dtype=jnp.uint8)
+        agent_x, agent_y, agent_x_prev, agent_y_prev, agent_vec = vec_update(
+            agent_dir_idx, agent_pos, agent_pos_prev, jnp.arange(params.n_agents)
+        )
+        empty = jnp.array([OBJECT_TO_INDEX["empty"], 0, 0], dtype=jnp.uint8)
         padding = self.obs_shape[0] - 1
 
         maze_map = state.maze_map
-        maze_map = maze_map.at[padding + agent_y_prev, padding + agent_x_prev, :].set(empty)
+        maze_map = maze_map.at[padding + agent_y_prev, padding + agent_x_prev, :].set(
+            empty
+        )
         maze_map = maze_map.at[padding + agent_y, padding + agent_x, :].set(agent_vec)
 
-        reward = jnp.max((1.0 - 0.9 * ((state.time + 1) / params.max_episode_steps)) * fwd_pos_has_goal)
+        reward = jnp.max(
+            (1.0 - 0.9 * ((state.time + 1) / params.max_episode_steps))
+            * fwd_pos_has_goal
+        )
 
         return (
             state.replace(
@@ -359,8 +397,9 @@ class MAMaze(Environment):
                 agent_dir_idx=agent_dir_idx,
                 agent_dir=agent_dir,
                 maze_map=maze_map,
-                terminal=fwd_pos_has_goal.any()),
-            reward
+                terminal=fwd_pos_has_goal.any(),
+            ),
+            reward,
         )
 
     def is_terminal(self, state: EnvState) -> bool:
@@ -370,7 +409,7 @@ class MAMaze(Environment):
 
     def get_eval_solved_rate_fn(self):
         def _fn(ep_stats):
-            return ep_stats['return'] > 0
+            return ep_stats["return"] > 0
 
         return _fn
 
@@ -386,16 +425,13 @@ class MAMaze(Environment):
 
     def action_space(self) -> spaces.Discrete:
         """Action space of the environment."""
-        return spaces.Discrete(
-            len(self.action_set),
-            dtype=jnp.uint32
-        )
+        return spaces.Discrete(len(self.action_set), dtype=jnp.uint32)
 
     def observation_space(self) -> spaces.Dict:
         """Observation space of the environment."""
         spaces_dict = {
-            'image': spaces.Box(0, 255, self.obs_shape),
-            'agent_dir': spaces.Discrete(4)
+            "image": spaces.Box(0, 255, self.obs_shape),
+            "agent_dir": spaces.Discrete(4),
         }
 
         return spaces.Dict(spaces_dict)
@@ -406,14 +442,21 @@ class MAMaze(Environment):
         h = params.height
         w = params.width
         agent_view_size = params.agent_view_size
-        return spaces.Dict({
-            "agent_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
-            "agent_dir": spaces.Discrete(4),
-            "goal_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
-            "maze_map": spaces.Box(0, 255, (w + agent_view_size, h + agent_view_size, 3), dtype=jnp.uint32),
-            "time": spaces.Discrete(params.max_episode_steps),
-            "terminal": spaces.Discrete(2),
-        })
+        return spaces.Dict(
+            {
+                "agent_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
+                "agent_dir": spaces.Discrete(4),
+                "goal_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
+                "maze_map": spaces.Box(
+                    0,
+                    255,
+                    (w + agent_view_size, h + agent_view_size, 3),
+                    dtype=jnp.uint32,
+                ),
+                "time": spaces.Discrete(params.max_episode_steps),
+                "terminal": spaces.Discrete(2),
+            }
+        )
 
     def max_episode_steps(self) -> int:
         return self.params.max_episode_steps

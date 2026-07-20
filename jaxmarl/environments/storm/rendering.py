@@ -95,7 +95,7 @@ def point_in_rect(xmin, xmax, ymin, ymax):
     return fn
 
 
-def point_in_triangle(a, b, c, border=0):
+def point_in_triangle(a, b, c, border: float = 0):
     a = np.array(a, dtype=np.float32)
     b = np.array(b, dtype=np.float32)
     c = np.array(c, dtype=np.float32)

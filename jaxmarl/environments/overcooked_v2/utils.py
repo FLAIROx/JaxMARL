@@ -1,13 +1,14 @@
 from functools import partial
+from typing import Tuple
+
 import jax
 import jax.numpy as jnp
-from typing import List, Tuple
-import itertools
-from .common import ALL_DIRECTIONS, Position, Direction
+
+from .common import ALL_DIRECTIONS, Direction, Position
 
 
 def tree_select(predicate, a, b):
-    return jax.tree_util.tree_map(lambda x, y: jax.lax.select(predicate, x, y), a, b)
+    return jax.tree.map(lambda x, y: jax.lax.select(predicate, x, y), a, b)
 
 
 def compute_view_box(x, y, agent_view_size, height, width):
@@ -25,7 +26,7 @@ def compute_view_box(x, y, agent_view_size, height, width):
     return x_low, x_high, y_low, y_high
 
 
-def compute_enclosed_spaces(empty_mask: jnp.ndarray) -> jnp.ndarray:
+def compute_enclosed_spaces(empty_mask: jax.Array) -> jax.Array:
     """
     Compute the enclosed spaces in the environment.
     Each enclosed space is assigned a unique id.
@@ -84,7 +85,9 @@ def mark_adjacent_cells(mask):
     return expanded_mask
 
 
-def get_closest_true_pos_no_directions(arr: jnp.ndarray, pos: Position) -> Position:
+def get_closest_true_pos_no_directions(
+    arr: jax.Array, pos: Position
+) -> Tuple[Position, jax.Array]:
     height, width = arr.shape
 
     y, x = pos.y, pos.x
@@ -102,13 +105,13 @@ def get_closest_true_pos_no_directions(arr: jnp.ndarray, pos: Position) -> Posit
 
 
 class OvercookedPathPlanner:
-    def __init__(self, move_area: jnp.ndarray):
+    def __init__(self, move_area: jax.Array):
         self._precompute(move_area)
 
     @partial(jax.jit, static_argnums=(0,))
     def get_closest_target_pos(
-        self, targets: jnp.ndarray, pos: Position, dir: Direction
-    ) -> Tuple[Position, bool]:
+        self, targets: jax.Array, pos: Position, dir: Direction
+    ) -> Tuple[Position, jax.Array]:
         pos_lookup_idx = self.position_to_idx[pos.y, pos.x]
 
         def _compute_min_moves():
@@ -123,7 +126,7 @@ class OvercookedPathPlanner:
             _compute_min_moves,
         )
 
-    def _precompute(self, move_area: jnp.ndarray):
+    def _precompute(self, move_area: jax.Array):
         pos_idx = jnp.argwhere(move_area)
         num_pos = pos_idx.shape[0]
         positions = Position(y=pos_idx[:, 0], x=pos_idx[:, 1])
@@ -147,9 +150,8 @@ class OvercookedPathPlanner:
     @classmethod
     @partial(jax.jit, static_argnums=(0,))
     def get_closest_target_pos_static(
-        cls, move_area: jnp.ndarray, targets: jnp.ndarray, pos: Position, dir: Direction
-    ) -> Tuple[Position, bool]:
-
+        cls, move_area: jax.Array, targets: jax.Array, pos: Position, dir: Direction
+    ) -> Tuple[Position, jax.Array]:
         def _compute_min_moves(pos, dir):
             min_moves = cls._compute_min_moves(pos, dir, move_area)
             return cls._get_pos_from_min_moves_grid(min_moves, targets)
@@ -164,8 +166,8 @@ class OvercookedPathPlanner:
 
     @staticmethod
     def _get_pos_from_min_moves_grid(
-        min_moves: jnp.ndarray, targets: jnp.ndarray
-    ) -> Tuple[Position, bool]:
+        min_moves: jax.Array, targets: jax.Array
+    ) -> Tuple[Position, jax.Array]:
         min_moves_targets = jnp.where(targets, min_moves, jnp.inf)
 
         min_idx = jnp.argmin(min_moves_targets)
@@ -177,9 +179,7 @@ class OvercookedPathPlanner:
 
     @staticmethod
     @jax.jit
-    def _compute_min_moves(
-        pos: Position, dir: Direction, mask: jnp.ndarray
-    ) -> jnp.ndarray:
+    def _compute_min_moves(pos: Position, dir: Direction, mask: jax.Array) -> jax.Array:
         assert mask.ndim == 2 and mask.dtype == jnp.bool_
         H, W = mask.shape
 

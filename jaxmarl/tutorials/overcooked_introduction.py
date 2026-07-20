@@ -2,11 +2,15 @@
 Short introduction to running the Overcooked environment and visualising it using random actions.
 """
 
-import jax 
-from jaxmarl import make
-from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
-from jaxmarl.environments.overcooked import Overcooked, overcooked_layouts, layout_grid_to_dict
 import time
+
+import jax
+
+from jaxmarl import make
+from jaxmarl.environments.overcooked import (
+    overcooked_layouts,
+)
+from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 
 # Parameters + random keys
 max_steps = 100
@@ -27,15 +31,18 @@ layout = overcooked_layouts["cramped_room"]
 # layout = layout_grid_to_dict(custom_layout_grid)
 
 # Instantiate environment
-env = make('overcooked', layout=layout, max_steps=max_steps)
+env = make("overcooked", layout=layout, max_steps=max_steps)
 
 obs, state = env.reset(key_r)
-print('list of agents in environment', env.agents)
+print("list of agents in environment", env.agents)
 
 # Sample random actions
 key_a = jax.random.split(key_a, env.num_agents)
-actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
-print('example action dict', actions)
+actions = {
+    agent: env.action_space(agent).sample(key_a[i])
+    for i, agent in enumerate(env.agents)
+}
+print("example action dict", actions)
 
 state_seq = []
 for _ in range(max_steps):
@@ -44,7 +51,10 @@ for _ in range(max_steps):
     key, key_s, key_a = jax.random.split(key, 3)
     key_a = jax.random.split(key_a, env.num_agents)
 
-    actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
+    actions = {
+        agent: env.action_space(agent).sample(key_a[i])
+        for i, agent in enumerate(env.agents)
+    }
 
     # Step environment
     obs, state, rewards, dones, infos = env.step(key_s, state, actions)

@@ -1,11 +1,19 @@
+from functools import partial
+from typing import Optional, Tuple
+
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
 from flax import struct
-from functools import partial
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments.mpe.default_params import (
+    ADVERSARY_COLOUR,
+    AGENT_COLOUR,
+    CONTINUOUS_ACT,
+    DISCRETE_ACT,
+)
 from jaxmarl.environments.mpe.simple import SimpleMPE, State
-from jaxmarl.environments.mpe.default_params import *
+from jaxmarl.environments.multi_agent_env import Observations, Rewards
 from jaxmarl.environments.spaces import Box, Discrete
 
 SPEAKER = "alice_0"
@@ -20,8 +28,8 @@ OBS_COLOUR = jnp.array([[255, 0, 0, 0], [0, 255, 0, 0]])
 class CryptoState(State):
     """State for the simple crypto environment."""
 
-    goal_colour: chex.Array = None
-    private_key: chex.Array = None
+    goal_colour: Optional[jax.Array] = None
+    private_key: Optional[jax.Array] = None
 
 
 class SimpleCryptoMPE(SimpleMPE):
@@ -31,7 +39,13 @@ class SimpleCryptoMPE(SimpleMPE):
     Note, currently only have continuous actions implemented.
     """
 
-    def __init__(self, num_agents=3, num_landmarks=2, action_type=DISCRETE_ACT, **kwargs,):
+    def __init__(
+        self,
+        num_agents=3,
+        num_landmarks=2,
+        action_type=DISCRETE_ACT,
+        **kwargs,
+    ):
         assert num_agents == 3, "Simple Crypto only supports 3 agents"
         assert num_landmarks == 2, "Simple Crypto only supports 2 landmarks"
 
@@ -102,7 +116,7 @@ class SimpleCryptoMPE(SimpleMPE):
             **kwargs,
         )
 
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, CryptoState]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, CryptoState]:
         key_a, key_l, key_g, key_k = jax.random.split(key, 4)
 
         p_pos = jnp.concatenate(
@@ -121,8 +135,8 @@ class SimpleCryptoMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=jnp.full((self.num_agents), False),
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
             goal_colour=jnp.array(
                 OBS_COLOUR[g_idx], dtype=jnp.float32
             ).flatten(),  # set to float to be same as zoo env
@@ -133,8 +147,8 @@ class SimpleCryptoMPE(SimpleMPE):
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_continuous_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         """Communication action"""
         u = jnp.zeros((self.dim_p,))
         c = action
@@ -142,30 +156,33 @@ class SimpleCryptoMPE(SimpleMPE):
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_discrete_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         """Communication action"""
         u = jnp.zeros((self.dim_p,))
         c = jnp.zeros((self.dim_c,))
         c = c.at[action].set(1.0)
         return u, c
 
-    def get_obs(self, state: CryptoState) -> Dict[str, chex.Array]:
+    def get_obs(self, state: CryptoState) -> Observations:
         goal_colour = state.goal_colour
+        private_key = state.private_key
+        assert goal_colour is not None
+        assert private_key is not None
         comm = state.c[SPEAKER_IDX]
 
         def _speaker():
             return jnp.concatenate(
                 [
                     goal_colour,
-                    state.private_key,
+                    private_key,
                 ]
             )
 
         def _listener():
             return jnp.concatenate(
                 [
-                    state.private_key.flatten(),
+                    private_key.flatten(),
                     comm,
                 ]
             )
@@ -176,9 +193,10 @@ class SimpleCryptoMPE(SimpleMPE):
         obs = {SPEAKER: _speaker(), LISTENER: _listener(), ADVERSARY: _adversary()}
         return obs
 
-    def rewards(self, state: CryptoState) -> Dict[str, float]:
+    def rewards(self, state: CryptoState) -> Rewards:
+        assert state.goal_colour is not None
         comm_diff = jnp.sum(
-            jnp.square(state.c - state.goal_colour), axis=1
+            jnp.square(jnp.subtract(state.c, state.goal_colour)), axis=1
         )  # check axis
 
         comm_zeros = ~jnp.all(state.c == 0)  # Ensure communication has happend

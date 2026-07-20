@@ -1,28 +1,27 @@
-import os
 import copy
-import jax
-import jax.numpy as jnp
-import numpy as np
-from functools import partial
+import os
 from typing import Any
 
 import chex
-import optax
 import flax.linen as nn
-from flax.training.train_state import TrainState
 import hydra
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from flax.training.train_state import TrainState
 from omegaconf import OmegaConf
-import wandb
 
+import wandb
 from jaxmarl import make
+from jaxmarl.environments.overcooked import overcooked_layouts
 from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.wrappers.baselines import (
-    SMAXLogWrapper,
-    MPELogWrapper,
-    LogWrapper,
     CTRolloutManager,
+    LogWrapper,
+    MPELogWrapper,
+    SMAXLogWrapper,
 )
-from jaxmarl.environments.overcooked import overcooked_layouts
 
 
 class QNetwork(nn.Module):
@@ -40,16 +39,22 @@ class QNetwork(nn.Module):
             x = nn.BatchNorm(use_running_average=not train)(x)
         else:
             # dummy normalize input for global compatibility
-            x_dummy = nn.BatchNorm(use_running_average=not train)(x)
+            _ = nn.BatchNorm(use_running_average=not train)(x)
 
         if self.norm_type == "layer_norm":
-            normalize = lambda x: nn.LayerNorm()(x)
-        elif self.norm_type == "batch_norm":
-            normalize = lambda x: nn.BatchNorm(use_running_average=not train)(x)
-        else:
-            normalize = lambda x: x
 
-        for l in range(self.num_layers):
+            def normalize(x):
+                return nn.LayerNorm()(x)
+        elif self.norm_type == "batch_norm":
+
+            def normalize(x):
+                return nn.BatchNorm(use_running_average=not train)(x)
+        else:
+
+            def normalize(x):
+                return x
+
+        for _ in range(self.num_layers):
             x = nn.Dense(self.hidden_size)(x)
             x = normalize(x)
             x = nn.relu(x)
@@ -306,9 +311,7 @@ def make_train(config, env):
                     q_vals,  # vdn sum,
                     transitions.reward[:, 0],  # _all_
                     transitions.done[:, 0],  # _all_
-                ).reshape(
-                    -1
-                )  # (num_steps*num_envs)
+                ).reshape(-1)  # (num_steps*num_envs)
             else:  # standard 1 step qlearning
                 lambda_targets = (
                     transitions.reward[-1, 0]
@@ -346,9 +349,7 @@ def make_train(config, env):
                             q_vals,
                             jnp.expand_dims(minibatch.action, axis=-1),
                             axis=-1,
-                        ).squeeze(
-                            axis=-1
-                        )  # (num_agents, batch_size,)
+                        ).squeeze(axis=-1)  # (num_agents, batch_size,)
                         vdn_chosen_action_qvals = jnp.sum(
                             chosen_action_qvals, axis=0
                         )  # (batch_size)
@@ -583,7 +584,7 @@ def single_run(config):
         OmegaConf.save(
             config,
             os.path.join(
-                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+                save_dir, f"{alg_name}_{env_name}_seed{config['SEED']}_config.yaml"
             ),
         )
 
@@ -591,7 +592,7 @@ def single_run(config):
             params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+                f"{alg_name}_{env_name}_seed{config['SEED']}_vmap{i}.safetensors",
             )
             save_params(params, save_path)
 
@@ -620,7 +621,7 @@ def tune(default_config):
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, config["NUM_SEEDS"])
         train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-        outs = jax.block_until_ready(train_vjit(rngs))
+        jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {
         "name": f"{alg_name}_{env_name}",

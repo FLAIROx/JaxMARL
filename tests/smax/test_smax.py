@@ -1,8 +1,8 @@
-import jax.numpy as jnp
 import jax
-from jaxmarl import make
-from jaxmarl.environments.smax.smax_env import State
+import jax.numpy as jnp
 import pytest
+
+from jaxmarl import make
 
 
 def create_env(key, continuous_action=False, conic_observation=False):
@@ -457,7 +457,7 @@ def test_episode_time_limit(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
         env, _, state = create_env(key_reset)
-        state = state.replace(time=env.max_steps)
+        state = state.replace(step=env.max_steps)
 
         key, key_actions = jax.random.split(key)
         actions = get_random_actions(key_actions, env)
@@ -482,9 +482,7 @@ def test_continuous_obs_function(do_jit):
         state = state.replace(unit_positions=unit_positions)
         obs = env.get_obs(state)
         real_obs = obs["ally_0"][
-            expected_obs_idx
-            * 2
-            * len(env.unit_features) : (expected_obs_idx * 2 + 1)
+            expected_obs_idx * 2 * len(env.unit_features) : (expected_obs_idx * 2 + 1)
             * len(env.unit_features)
         ]
         assert jnp.allclose(
@@ -506,28 +504,33 @@ def test_continuous_obs_max_two_observed(do_jit):
         state = state.replace(unit_positions=unit_positions)
         obs = env.get_obs(state)
         real_obs = obs["ally_0"][
-            expected_obs_idx
-            * 2
-            * len(env.unit_features) : (expected_obs_idx * 2 + 1)
+            expected_obs_idx * 2 * len(env.unit_features) : (expected_obs_idx * 2 + 1)
             * len(env.unit_features)
         ]
-        expected_obs = jnp.array([1.0, 0.1374999999, 0.125, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0])
+        expected_obs = jnp.array(
+            [1.0, 0.1374999999, 0.125, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]
+        )
         assert jnp.allclose(
             real_obs,
             expected_obs,
         )
 
         real_obs = obs["ally_0"][
-            (expected_obs_idx * 2 + 1) * len(env.unit_features):
-            (2 * expected_obs_idx + 2) * len(env.unit_features)
+            (expected_obs_idx * 2 + 1) * len(env.unit_features) : (
+                2 * expected_obs_idx + 2
+            )
+            * len(env.unit_features)
         ]
         assert jnp.allclose(real_obs, expected_obs)
 
         real_obs = obs["ally_0"][
-            (expected_obs_idx * 2 + 2) * len(env.unit_features):
-            (expected_obs_idx * 2 + 3) * len(env.unit_features)
+            (expected_obs_idx * 2 + 2) * len(env.unit_features) : (
+                expected_obs_idx * 2 + 3
+            )
+            * len(env.unit_features)
         ]
         assert jnp.allclose(real_obs, jnp.zeros_like(real_obs))
+
 
 @pytest.mark.parametrize(("do_jit"), [False, True])
 def test_obs_function(do_jit):
@@ -535,18 +538,36 @@ def test_obs_function(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
         env, obs, state = create_env(key_reset)
+        # Pin the unit positions rather than relying on the ones drawn at reset.
+        # The reset draw differs between JAX PRNG implementations (the
+        # jax_threefry_partitionable default flipped in newer JAX), which made
+        # the expected observations below depend on the installed JAX version.
+        # Allies are clustered around (8, 16) and enemies 16 units to their
+        # right, so the two teams stay outside each other's sight range (4.0).
+        ally_positions = jnp.array(
+            [[8.0, 16.0], [9.0, 17.0], [8.0, 18.0], [7.0, 17.0], [9.0, 15.0]]
+        )
+        start_positions = jnp.concatenate(
+            [ally_positions, ally_positions + jnp.array([16.0, 0.0])]
+        )
+        state = state.replace(unit_positions=start_positions)
+        obs = env.get_obs(state)
+
         first_enemy_idx = (env.num_allies - 1) * len(env.unit_features)
+        # ally_0's first observed unit is ally_1, one unit up and right of it,
+        # scaled by the sight range of 4.0
         assert jnp.allclose(
             obs["ally_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, -0.5755913, 0.43648314, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.25, 0.25, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
             jnp.zeros((len(env.unit_features),)),
         )
+        # enemies count in reverse, so enemy_0's first observed unit is enemy_4
         assert jnp.allclose(
             obs["enemy_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, 0.00752163, 0.5390887, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.25, -0.25, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
@@ -582,7 +603,7 @@ def test_obs_function(do_jit):
         last_ally_idx = first_enemy_idx - len(env.unit_features)
         assert jnp.allclose(
             obs["enemy_0"][last_ally_idx : last_ally_idx + len(env.unit_features)],
-            jnp.array([1.0, 0.125, 0.25, 0, 1, 0, -0.5, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.125, 0.25, 0, 1, 0, 0.0, 1, 0, 0, 0, 0, 0]),
             atol=1e-07,
         )
 
@@ -626,12 +647,12 @@ def test_world_state(do_jit):
 
         world_state = jnp.zeros((env.state_size,))
         world_state = world_state.at[0 : len(env.own_features)].set(
-            jnp.array([0.5, 8.108914, 18.952662, -0.5, 1, 0, 0, 0, 0, 0])
+            jnp.array([0.5, 8.0, 18.5, -0.5, 1, 0, 0, 0, 0, 0])
         )
         idx = env.num_allies * len(env.own_features)
         end_idx = idx + len(env.own_features)
         world_state = world_state.at[idx:end_idx].set(
-            jnp.array([0.5, 24.217829, 12.844673, -0.5, 1, 0, 0, 0, 0, 0])
+            jnp.array([0.5, 24.0, 13.5, -0.5, 1, 0, 0, 0, 0, 0])
         )
         idx = env.num_agents * len(env.own_features) + env.num_allies
         end_idx = idx + env.num_enemies

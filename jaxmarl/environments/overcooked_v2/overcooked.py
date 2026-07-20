@@ -1,28 +1,37 @@
-from collections import OrderedDict
 from enum import Enum
 from functools import partial
-from typing import List, Optional, Union
-import numpy as np
+from typing import List, Optional, Tuple, Union
+
+import chex
 import jax
 import jax.numpy as jnp
-from jax import lax
-from jaxmarl.environments import MultiAgentEnv
-from jaxmarl.environments import spaces
-from typing import Tuple, Dict
-import chex
 from flax import struct
-from flax.core.frozen_dict import FrozenDict
+from jax import lax
+from jaxtyping import Array, Float, PRNGKeyArray
+
+from jaxmarl.environments import spaces
+from jaxmarl.environments.multi_agent_env import (
+    Actions,
+    BatchedObservations,
+    Dones,
+    Infos,
+    MultiAgentEnv,
+    Observations,
+    Rewards,
+)
+from jaxmarl.environments.multi_agent_env import (
+    State as BaseState,
+)
 from jaxmarl.environments.overcooked_v2.common import (
     ACTION_TO_DIRECTION,
-    MAX_INGREDIENTS,
-    Actions,
-    StaticObject,
-    DynamicObject,
-    Direction,
-    Position,
     Agent,
+    Direction,
+    DynamicObject,
+    OvercookedActionsEnum,
+    Position,
+    StaticObject,
 )
-from jaxmarl.environments.overcooked_v2.layouts import overcooked_v2_layouts, Layout
+from jaxmarl.environments.overcooked_v2.layouts import Layout, overcooked_v2_layouts
 from jaxmarl.environments.overcooked_v2.settings import (
     DELIVERY_REWARD,
     INDICATOR_ACTIVATION_COST,
@@ -32,11 +41,9 @@ from jaxmarl.environments.overcooked_v2.settings import (
 )
 from jaxmarl.environments.overcooked_v2.utils import (
     OvercookedPathPlanner,
-    compute_view_box,
-    get_closest_true_pos_no_directions,
+    compute_enclosed_spaces,
     mark_adjacent_cells,
     tree_select,
-    compute_enclosed_spaces,
 )
 
 
@@ -45,24 +52,31 @@ class ObservationType(str, Enum):
     FEATURIZED = "featurized"
 
 
-@chex.dataclass
-class State:
+@struct.dataclass
+class State(BaseState):
+    """OvercookedV2 environment state.
+
+    From BaseState:
+        done: Bool[Array, ""]  # episode is terminal (time limit or explicit done)
+        step: Int[Array, ""]   # current timestep within the episode
+
+    """
+
     agents: Agent
 
     # width x height x 3
     # First channel: static items
     # Second channel: dynamic items (plates and ingredients)
     # Third channel: extra info
-    grid: chex.Array
+    grid: jax.Array
 
-    time: chex.Array
-    terminal: bool
+    recipe: jax.Array
 
-    recipe: int
+    new_correct_delivery: jax.Array = struct.field(
+        default_factory=lambda: jnp.array(False)
+    )
 
-    new_correct_delivery: bool = False
-
-    ingredient_permutations: Optional[chex.Array] = None
+    ingredient_permutations: Optional[jax.Array] = None
 
 
 class OvercookedV2(MultiAgentEnv):
@@ -82,7 +96,7 @@ class OvercookedV2(MultiAgentEnv):
         negative_rewards: bool = False,
         sample_recipe_on_delivery: bool = False,
         indicate_successful_delivery: bool = False,
-        op_ingredient_permutations: List[int] = None,
+        op_ingredient_permutations: Optional[List[int]] = None,
         initial_state_buffer: Optional[State] = None,
         force_path_planning: bool = False,
     ):
@@ -126,7 +140,7 @@ class OvercookedV2(MultiAgentEnv):
         self.initial_state_buffer = initial_state_buffer
 
         self.agents = [f"agent_{i}" for i in range(num_agents)]
-        self.action_set = jnp.array(list(Actions))
+        self.action_set = jnp.array(list(OvercookedActionsEnum))
 
         if isinstance(observation_type, list):
             if len(observation_type) != num_agents:
@@ -174,10 +188,10 @@ class OvercookedV2(MultiAgentEnv):
 
     def step_env(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: State,
-        actions: Dict[str, chex.Array],
-    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+        actions: Actions,
+    ) -> Tuple[Observations, State, Rewards, Dones, Infos]:
         """Perform single timestep state transition."""
 
         acts = self.action_set.take(
@@ -186,10 +200,10 @@ class OvercookedV2(MultiAgentEnv):
 
         state, reward, shaped_rewards = self.step_agents(key, state, acts)
 
-        state = state.replace(time=state.time + 1)
+        state = state.replace(step=state.step + 1)
 
         done = self.is_terminal(state)
-        state = state.replace(terminal=done)
+        state = state.replace(done=done)
 
         obs = self.get_obs(state)
 
@@ -211,7 +225,7 @@ class OvercookedV2(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=(0,))
-    def _sample_op_ingredient_permutations(self, key: chex.PRNGKey) -> chex.Array:
+    def _sample_op_ingredient_permutations(self, key: PRNGKeyArray) -> jax.Array:
         perm_indices = jnp.array(self.op_ingredient_permutations)
 
         def _ingredient_permutation(key):
@@ -228,16 +242,14 @@ class OvercookedV2(MultiAgentEnv):
 
     def reset(
         self,
-        key: chex.PRNGKey,
-    ) -> Tuple[Dict[str, chex.Array], State]:
+        key: PRNGKeyArray,
+    ) -> Tuple[Observations, State]:
         if self.initial_state_buffer is not None:
-            num_states = jax.tree_util.tree_flatten(self.initial_state_buffer)[0][
-                0
-            ].shape[0]
+            num_states = jax.tree.flatten(self.initial_state_buffer)[0][0].shape[0]
             # jax.debug.print("num_states: {i}", i=num_states)
             print("num_states in buffer: ", num_states)
             sampled_state_idx = jax.random.randint(key, (), 0, num_states)
-            sampled_state = jax.tree_util.tree_map(
+            sampled_state = jax.tree.map(
                 lambda x: x[sampled_state_idx], self.initial_state_buffer
             )
             return self.reset_from_state(sampled_state, key)
@@ -273,10 +285,10 @@ class OvercookedV2(MultiAgentEnv):
         state = State(
             agents=agents,
             grid=grid,
-            time=0,
-            terminal=False,
+            step=jnp.array(0),
+            done=jnp.array(False),
             recipe=recipe,
-            new_correct_delivery=False,
+            new_correct_delivery=jnp.array(False),
             ingredient_permutations=ingredient_permutations,
         )
 
@@ -294,8 +306,8 @@ class OvercookedV2(MultiAgentEnv):
     def reset_from_state(
         self,
         state: State,
-        key: chex.PRNGKey,
-    ) -> Tuple[Dict[str, chex.Array], State]:
+        key: PRNGKeyArray,
+    ) -> Tuple[Observations, State]:
         """
         Reset the environment from a given state. Grid and agents are copied from the state, other parameters are reset.
         """
@@ -307,8 +319,8 @@ class OvercookedV2(MultiAgentEnv):
             ingredient_permutations = self._sample_op_ingredient_permutations(key)
 
         state = state.replace(
-            time=0,
-            terminal=False,
+            step=0,
+            done=False,
             new_correct_delivery=False,
             ingredient_permutations=ingredient_permutations,
         )
@@ -317,7 +329,7 @@ class OvercookedV2(MultiAgentEnv):
 
         return lax.stop_gradient(obs), lax.stop_gradient(state)
 
-    def _sample_recipe(self, key: chex.PRNGKey) -> int:
+    def _sample_recipe(self, key: PRNGKeyArray) -> jax.Array:
         fixed_recipe_idx = jax.random.randint(
             key, (), 0, self.possible_recipes.shape[0]
         )
@@ -326,7 +338,7 @@ class OvercookedV2(MultiAgentEnv):
 
         return DynamicObject.get_recipe_encoding(fixed_recipe)
 
-    def _randomize_agent_positions(self, state: State, key: chex.PRNGKey) -> State:
+    def _randomize_agent_positions(self, state: State, key: PRNGKeyArray) -> State:
         """Randomize agent positions."""
         num_agents = self.num_agents
         agents = state.agents
@@ -362,7 +374,7 @@ class OvercookedV2(MultiAgentEnv):
 
         return state.replace(agents=agents.replace(pos=agent_positions, dir=directions))
 
-    def _randomize_state(self, state: State, key: chex.PRNGKey) -> State:
+    def _randomize_state(self, state: State, key: PRNGKeyArray) -> State:
         """Randomize the state of the environment."""
 
         key, subkey = jax.random.split(key)
@@ -410,7 +422,6 @@ class OvercookedV2(MultiAgentEnv):
         )
 
         def _sample_grid_states_wrapper(cell, key):
-
             def _sample_pot_states(key):
                 key, key_ing, key_num, key_timer = jax.random.split(key, 4)
                 raw_ingridients = jax.random.randint(
@@ -497,7 +508,7 @@ class OvercookedV2(MultiAgentEnv):
             grid=new_grid,
         )
 
-    def _get_obs_shape(self) -> Tuple[int]:
+    def _get_obs_shape(self) -> Union[Tuple[int, ...], List[Tuple[int, ...]]]:
         if self.agent_view_size:
             view_size = self.agent_view_size * 2 + 1
             view_width = view_size
@@ -510,7 +521,7 @@ class OvercookedV2(MultiAgentEnv):
             match obs_type:
                 case ObservationType.DEFAULT:
                     num_ingredients = self.layout.num_ingredients
-                    #17(Invariable objects[5 position and directions for each agents, wall, goal, pot, plate pile, recipe indicator, button, pot timer] + 4*(num_ingredients+2) objects[Inventory for each agents, recipe, grid] + N(ingredient pile))
+                    # 17(Invariable objects[5 position and directions for each agents, wall, goal, pot, plate pile, recipe indicator, button, pot timer] + 4*(num_ingredients+2) objects[Inventory for each agents, recipe, grid] + N(ingredient pile))
                     num_layers = 17 + num_ingredients + 4 * (num_ingredients + 2)
 
                     if self.indicate_successful_delivery:
@@ -539,7 +550,7 @@ class OvercookedV2(MultiAgentEnv):
 
         return _get_obs_shape_single(self.observation_type)
 
-    def get_obs(self, state: State) -> chex.Array:
+    def get_obs(self, state: State) -> Observations:
         if not isinstance(self.observation_type, list):
             return self.get_obs_for_type(state, self.observation_type)
 
@@ -550,9 +561,7 @@ class OvercookedV2(MultiAgentEnv):
             all_obs[key] = obs[key]
         return all_obs
 
-    def get_obs_for_type(
-        self, state: State, obs_type: ObservationType
-    ) -> Dict[str, chex.Array]:
+    def get_obs_for_type(self, state: State, obs_type: ObservationType) -> Observations:
         match obs_type:
             case ObservationType.DEFAULT:
                 all_obs = self.get_obs_default(state)
@@ -562,7 +571,9 @@ class OvercookedV2(MultiAgentEnv):
                 raise ValueError(f"Invalid observation type: {self.observation_type}")
 
         def _mask_obs(obs, agent):
+            # only called under the `is not None` guard below
             view_size = self.agent_view_size
+            assert view_size is not None
             pos = agent.pos
 
             padded_obs = jnp.pad(
@@ -583,10 +594,9 @@ class OvercookedV2(MultiAgentEnv):
         if self.agent_view_size is not None:
             all_obs = jax.vmap(_mask_obs)(all_obs, state.agents)
 
-        return {f"agent_{i}": obs for i, obs in enumerate(all_obs)}
+        return {f"agent_{i}": all_obs[i] for i in range(self.num_agents)}
 
-    def get_obs_default(self, state: State) -> Dict[str, chex.Array]:
-
+    def get_obs_default(self, state: State) -> BatchedObservations:
         width = self.width
         height = self.height
         num_ingredients = self.layout.num_ingredients
@@ -680,12 +690,10 @@ class OvercookedV2(MultiAgentEnv):
                 axis=-1,
             )
 
-
-
         def _agent_obs(agent_id):
             ingredient_mapping = None
             if self.op_ingredient_permutations:
-                ingredient_mapping = state.ingredient_permutations[agent_id]
+                ingredient_mapping = state.ingredient_permutations[agent_id]  # pyright: ignore[reportOptionalSubscript]
 
             agent_layers = jax.vmap(
                 partial(_agent_layers, ingredient_mapping=ingredient_mapping)
@@ -731,7 +739,7 @@ class OvercookedV2(MultiAgentEnv):
 
         return jax.vmap(_agent_obs)(jnp.arange(self.num_agents))
 
-    def get_obs_featurized(self, state: State) -> chex.Array:
+    def get_obs_featurized(self, state: State) -> BatchedObservations:
         """
         Observation to match featurized observation from OvercookedAI, this method is used to featurize the state of the environment.
         Encode state with some manually designed features. Works for arbitrary number of players
@@ -830,7 +838,6 @@ class OvercookedV2(MultiAgentEnv):
                     mask = mask.at[pos.y, pos.x].set(inv == dynamic_locator)
 
                 mask &= reachable_area
-
 
                 obj_pos, is_valid = self.path_planer.get_closest_target_pos(
                     mask, pos, direction
@@ -1003,10 +1010,10 @@ class OvercookedV2(MultiAgentEnv):
 
     def step_agents(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: State,
-        actions: chex.Array,
-    ) -> Tuple[State, float]:
+        actions: jax.Array,
+    ) -> Tuple[State, Float[Array, ""], Float[Array, " num_agents"]]:
         grid = state.grid
 
         # print("actions: ", actions)
@@ -1087,7 +1094,7 @@ class OvercookedV2(MultiAgentEnv):
         # Interact action:
         def _interact_wrapper(carry, x):
             agent, action = x
-            is_interact = action == Actions.interact
+            is_interact = action == OvercookedActionsEnum.interact
 
             def _interact(carry, agent):
                 grid, correct_delivery, reward = carry
@@ -1113,7 +1120,7 @@ class OvercookedV2(MultiAgentEnv):
                 is_interact, _interact, lambda c, a: (c, (a, 0.0)), carry, agent
             )
 
-        carry = (grid, False, 0.0)
+        carry = (grid, jnp.array(False), jnp.array(0.0))
         xs = (new_agents, actions)
         (new_grid, new_correct_delivery, reward), (new_agents, shaped_rewards) = (
             jax.lax.scan(_interact_wrapper, carry, xs)
@@ -1187,11 +1194,11 @@ class OvercookedV2(MultiAgentEnv):
 
     def process_interact(
         self,
-        grid: chex.Array,
+        grid: jax.Array,
         agent: Agent,
-        all_inventories: jnp.ndarray,
-        recipe: int,
-    ):
+        all_inventories: jax.Array,
+        recipe: jax.Array,
+    ) -> Tuple[jax.Array, Agent, jax.Array, jax.Array, jax.Array]:
         """Assume agent took interact actions. Result depends on what agent is facing and what it is holding."""
 
         inventory = agent.inventory
@@ -1367,10 +1374,10 @@ class OvercookedV2(MultiAgentEnv):
         correct_delivery = successful_delivery & is_correct_recipe
         return new_grid, new_agent, correct_delivery, reward, shaped_reward
 
-    def is_terminal(self, state: State) -> bool:
+    def is_terminal(self, state: State) -> jax.Array:
         """Check whether state is terminal."""
-        done_steps = state.time >= self.max_steps
-        return done_steps | state.terminal
+        done_steps = state.step >= self.max_steps
+        return done_steps | state.done
 
     def get_eval_solved_rate_fn(self):
         def _fn(ep_stats):
@@ -1392,15 +1399,18 @@ class OvercookedV2(MultiAgentEnv):
         """Action space of the environment. Agent_id not used since action_space is uniform for all agents"""
         return spaces.Discrete(len(self.action_set), dtype=jnp.uint32)
 
-    def observation_space(self) -> spaces.Box:
-        """Observation space of the environment."""
+    def observation_space(self, agent_id="") -> spaces.Box:
+        """Observation space of the environment. Agent_id not used since action_space is uniform for all agents"""
+        if isinstance(self.obs_shape, list):
+            return spaces.Box(0, 255, self.obs_shape[0])
         return spaces.Box(0, 255, self.obs_shape)
 
     def state_space(self) -> spaces.Dict:
         """State space of the environment."""
         h = self.height
         w = self.width
-        agent_view_size = self.agent_view_size
+        # agent_view_size is None for full-grid observations
+        agent_view_size = self.agent_view_size or 0
         return spaces.Dict(
             {
                 "agent_pos": spaces.Box(0, max(w, h), (2,), dtype=jnp.uint32),
@@ -1412,7 +1422,7 @@ class OvercookedV2(MultiAgentEnv):
                     (w + agent_view_size, h + agent_view_size, 3),
                     dtype=jnp.uint32,
                 ),
-                "time": spaces.Discrete(self.max_steps),
-                "terminal": spaces.Discrete(2),
+                "step": spaces.Discrete(self.max_steps),
+                "done": spaces.Discrete(2),
             }
         )

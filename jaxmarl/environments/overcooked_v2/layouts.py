@@ -1,8 +1,10 @@
-from jaxmarl.environments.overcooked_v2.common import StaticObject
-import numpy as np
-from typing import List, Tuple, Optional
-from dataclasses import dataclass
 import itertools
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+
+from jaxmarl.environments.overcooked_v2.common import StaticObject
 
 # Layouts from Overcooked-AI
 cramped_room = """
@@ -273,7 +275,7 @@ class Layout:
         row_lens = [len(row) for row in rows]
         static_objects = np.zeros((len(rows), max(row_lens)), dtype=int)
 
-        char_to_static_item = {
+        char_to_static_item: Dict[str, int] = {
             " ": StaticObject.EMPTY,
             "W": StaticObject.WALL,
             "X": StaticObject.GOAL,

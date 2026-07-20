@@ -1,8 +1,8 @@
-import numpy as np
-import jax.numpy as jnp
+from enum import IntEnum
+
 import chex
 import jax
-from enum import IntEnum
+import jax.numpy as jnp
 from jax.typing import ArrayLike
 
 MAX_INGREDIENTS = 3
@@ -159,8 +159,8 @@ DIR_TO_VEC = jnp.array(
 
 @chex.dataclass
 class Position:
-    x: jnp.ndarray
-    y: jnp.ndarray
+    x: jax.Array
+    y: jax.Array
 
     @staticmethod
     def from_tuple(t):
@@ -195,8 +195,8 @@ class Position:
 @chex.dataclass
 class Agent:
     pos: Position
-    dir: jnp.ndarray
-    inventory: jnp.ndarray
+    dir: jax.Array
+    inventory: jax.Array
 
     def get_fwd_pos(self):
         return self.pos.move(self.dir)
@@ -206,7 +206,7 @@ class Agent:
         return Agent(pos, jnp.array([Direction.UP]), jnp.zeros((1,)))
 
 
-class Actions(IntEnum):
+class OvercookedActionsEnum(IntEnum):
     # Turn left, turn right, move forward
     right = 0
     down = 1
@@ -217,13 +217,13 @@ class Actions(IntEnum):
 
 
 ACTION_TO_DIRECTION = (
-    jnp.full((len(Actions),), -1)
-    .at[Actions.right]
+    jnp.full((len(OvercookedActionsEnum),), -1)
+    .at[OvercookedActionsEnum.right]
     .set(Direction.RIGHT)
-    .at[Actions.down]
+    .at[OvercookedActionsEnum.down]
     .set(Direction.DOWN)
-    .at[Actions.left]
+    .at[OvercookedActionsEnum.left]
     .set(Direction.LEFT)
-    .at[Actions.up]
+    .at[OvercookedActionsEnum.up]
     .set(Direction.UP)
 )

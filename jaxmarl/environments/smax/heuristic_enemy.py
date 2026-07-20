@@ -1,14 +1,17 @@
-import jax.numpy as jnp
+from typing import Union
+
 import jax
+import jax.numpy as jnp
 from flax.struct import dataclass
-import chex
-from functools import partial
+from jaxtyping import PRNGKeyArray
 
 
 @dataclass
 class HeuristicPolicyState:
-    default_target: chex.Array  # the place we are headed for
-    last_attacked_enemy: int  # needed to remember where we attacked last
+    default_target: jax.Array  # the place we are headed for
+    last_attacked_enemy: Union[
+        int, jax.Array
+    ]  # needed to remember where we attacked last
 
     def __eq__(self, other):
         return jnp.all(other.default_target == self.default_target) & (
@@ -33,7 +36,7 @@ def create_heuristic_policy(
     num_move_actions = env.num_movement_actions
 
     def get_heuristic_action(
-        key: jax.random.PRNGKey, state: HeuristicPolicyState, obs: chex.Array
+        key: PRNGKeyArray, state: HeuristicPolicyState, obs: jax.Array
     ):
         """Generate a heuristic action based on an observation.
         Follows the following scheme:

@@ -23,8 +23,8 @@ _**MARL but really really fast!**_
 JaxMARL combines ease-of-use with GPU-enabled efficiency, and supports a wide range of commonly used MARL environments as well as popular baseline algorithms. Our aim is for one library that enables thorough evaluation of MARL methods across a wide range of tasks and against relevant baselines. We also introduce SMAX, a vectorised, simplified version of the popular StarCraft Multi-Agent Challenge, which removes the need to run the StarCraft II game engine. 
 
 ## What we provide:
-* **9 MARL environments** fully implemented in JAX - these span cooperative, competitive, and mixed games; discrete and continuous state and action spaces; and zero-shot and CTDE settings.
-* **8 MARL algorithms**, also fully implemented in JAX - these include both Q-Learning and PPO based appraoches.
+* **11 MARL environments** fully implemented in JAX - these span cooperative, competitive, and mixed games; discrete and continuous state and action spaces; and zero-shot and CTDE settings.
+* **8 MARL algorithms**, also fully implemented in JAX - these include both Q-Learning and PPO based approaches.
 
 ## Who is JaxMARL for?
 Anyone doing research on or looking to use multi-agent reinforcment learning!

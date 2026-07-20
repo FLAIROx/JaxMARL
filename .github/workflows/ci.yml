@@ -1,0 +1,57 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install ruff --system
+      - run: ruff check .
+      - run: ruff format --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install -e .[dev] --system
+      - run: |
+          pyright --outputjson > /tmp/pyright.json 2>&1 || true
+          python - <<'EOF'
+          import json, sys, os
+          d = json.load(open('/tmp/pyright.json'))
+          diags = d.get('generalDiagnostics', [])
+          errors = [e for e in diags if e['severity'] == 'error']
+          cwd = os.getcwd()
+          for e in diags:
+              f = e['file'].replace(cwd + '/', '')
+              l = e['range']['start']['line'] + 1
+              sev = e['severity']
+              msg = e['message'].replace('\n', ' ')
+              print(f"::{sev} file={f},line={l}::{msg}")
+          s = d.get('summary', {})
+          print(f"pyright: {s.get('errorCount',0)} errors, {s.get('warningCount',0)} warnings ({s.get('filesAnalyzed',0)} files)")
+          sys.exit(1 if errors else 0)
+          EOF
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]   # 3.10 dropped: requires-python = ">=3.11"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install -e .[dev,algs] --system
+      - run: pytest ./tests/ -v -x

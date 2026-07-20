@@ -1,16 +1,18 @@
+from functools import partial
+from typing import Optional, Tuple
+
 import jax
 import jax.numpy as jnp
-import chex
-from typing import Tuple, Dict
-from functools import partial
-from jaxmarl.environments.mpe.simple import (
-    SimpleMPE,
-    State,
-    AGENT_COLOUR,
+
+from jaxmarl.environments.mpe.default_params import (
     ADVERSARY_COLOUR,
+    AGENT_COLOUR,
+    CONTINUOUS_ACT,
+    DISCRETE_ACT,
     OBS_COLOUR,
 )
-from jaxmarl.environments.mpe.default_params import *
+from jaxmarl.environments.mpe.simple import SimpleMPE, State
+from jaxmarl.environments.multi_agent_env import Actions, Observations, Rewards
 from jaxmarl.environments.spaces import Box, Discrete
 
 # NOTE food and forests are part of world.landmarks
@@ -136,13 +138,13 @@ class SimpleWorldCommMPE(SimpleMPE):
             **kwargs,
         )
 
-    def set_actions(self, actions: dict):
+    def set_actions(self, actions: Actions):
         """Extract actions for each agent from their action array."""
-        return self.action_decoder(None, actions)
+        return self.action_decoder(None, actions)  # type: ignore[arg-type]
 
     def _decode_discrete_action(
-        self, a_idx: int, actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: Optional[int], actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def u_decoder(a_idx, a):
             u = jnp.zeros((self.dim_p))
@@ -170,8 +172,8 @@ class SimpleWorldCommMPE(SimpleMPE):
         return u, c
 
     def _decode_continuous_action(
-        self, a_idx: int, actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: Optional[int], actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def _set_u(a_idx, action):
             u = jnp.array([action[2] - action[1], action[4] - action[3]])
@@ -188,11 +190,11 @@ class SimpleWorldCommMPE(SimpleMPE):
         c = c.at[self.leader_idx].set(lact[5:])
         return u, c
 
-    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: State) -> Observations:
         """Returns observations of all agents"""
 
         @partial(jax.vmap, in_axes=(0, None))
-        def _in_forest(idx: int, state: State) -> chex.Array:
+        def _in_forest(idx: jax.Array, state: State) -> jax.Array:
             """Collision check for all forests with agent `idx`"""
             dist = jnp.linalg.norm(
                 state.p_pos[self.num_agents + self.num_obs + self.num_food :]
@@ -203,7 +205,7 @@ class SimpleWorldCommMPE(SimpleMPE):
             return dist < dist_min
 
         @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx: int, forest: chex.Array, state: State):
+        def _common_stats(aidx: jax.Array, forest: jax.Array, state: State):
             """Values needed in all observations"""
 
             landmark_pos = (
@@ -214,8 +216,8 @@ class SimpleWorldCommMPE(SimpleMPE):
             same_forest = jnp.any(
                 forest[aidx] * forest, axis=1
             )  # True if other and ego agent in same forest
-            no_forest = (
-                jnp.all(~forest, axis=1) & ~in_forest
+            no_forest = jnp.all(jnp.logical_not(forest), axis=1) & jnp.logical_not(
+                in_forest
             )  # True if other not in a forest and ego agent also not in a forest
 
             leader = aidx == self.leader_idx
@@ -294,22 +296,22 @@ class SimpleWorldCommMPE(SimpleMPE):
         )
         return obs
 
-    def rewards(self, state: State) -> Dict[str, float]:
+    def rewards(self, state: State) -> Rewards:
         """Computes rewards for all agents"""
 
         @partial(jax.vmap, in_axes=[0, None])
-        def _reward(aidx: int, state: State):
+        def _reward(aidx: jax.Array, state: State):
             return jax.lax.cond(
                 aidx < self.num_adversaries,
                 self.adversary_reward,
                 self.agent_reward,
-                *(aidx, state)
+                *(aidx, state),
             )
 
         r = _reward(self.agent_range, state)
         return {agent: r[i] for i, agent in enumerate(self.agents)}
 
-    def agent_reward(self, aidx: int, state: State):
+    def agent_reward(self, aidx: jax.Array, state: State):
         """Reward for good agents."""
 
         @partial(jax.vmap, in_axes=(0,))
@@ -353,7 +355,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         )
         return rew
 
-    def adversary_reward(self, aidx: int, state: State):
+    def adversary_reward(self, aidx: jax.Array, state: State):
         """Reward for adversary agents."""
 
         @partial(jax.vmap, in_axes=[0, 0, None, None])
@@ -402,48 +404,3 @@ def test_policy(key, state: State):
     r = jax.random.uniform(key, (2, 9))
     act = act.at[3:].set(r)
     return act
-
-
-if __name__ == "__main__":
-    from pettingzoo.mpe import simple_world_comm_v3
-
-    ### Petting zoo env
-    zoo_env = simple_world_comm_v3.parallel_env(max_cycles=25, continuous_actions=True)
-    zoo_obs = zoo_env.reset()
-    actions = {agent: zoo_env.action_space(agent).sample() for agent in zoo_env.agents}
-
-    obs_space = {agent: zoo_env.observation_space(agent) for agent in zoo_env.agents}
-    act_space = {agent: zoo_env.action_space(agent) for agent in zoo_env.agents}
-    print("obs space", obs_space, "\n act space", act_space)
-    # print('zoo obs', zoo_obs)
-    key = jax.random.PRNGKey(0)
-
-    env = SimpleWorldCommMPE()
-
-    key, key_r = jax.random.split(key)
-    obs, state = env.reset(key_r)
-
-    # obs = env.observation(0, state)
-    # print('obs', obs.shape, obs)
-
-    mock_action = jnp.array([[0.0, 0.0, 1.0, 0.1, 0.1, 0.0, 0.0, 0.0, 0.0]])
-    #
-    # actions = jnp.repeat(mock_action[None], repeats=env.num_agents, axis=0).squeeze()
-    # actions = {agent: mock_action for agent in env.agents}
-    # env.enable_render()
-
-    print("state", state)
-    for _ in range(50):
-        key, key_a, key_s = jax.random.split(key, 3)
-        # actions = test_policy(key_a, state)
-        # actions = {agent: actions[i] for i, agent in enumerate(env.agents)}
-        # print('actions', actions)
-        # print('state', state)
-        obs, state, rew, dones, _ = env.step_env(key_s, state, actions)
-        actions = {
-            agent: zoo_env.action_space(agent).sample() for agent in zoo_env.agents
-        }
-        # env.render(state)
-        print("obs", [o.shape for o in obs.values()])
-        # raise
-        # print('rew', rew)

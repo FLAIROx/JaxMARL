@@ -1,23 +1,20 @@
+import functools
+from typing import Any, Callable, Dict, NamedTuple, Sequence
+
+import distrax
+import flax.linen as nn
+import hydra
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
 import numpy as np
 import optax
 from flax.linen.initializers import constant, orthogonal
-from typing import Callable, Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
-import distrax
-from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
-import jaxmarl
-from jaxmarl.wrappers.baselines import LogWrapper, OvercookedV2LogWrapper
-from jaxmarl.environments import overcooked_v2_layouts
-from jaxmarl.viz.overcooked_v2_visualizer import OvercookedV2Visualizer
-import hydra
 from omegaconf import OmegaConf
-from datetime import datetime
-import os
+
+import jaxmarl
 import wandb
-import functools
+from jaxmarl.wrappers.baselines import OvercookedV2LogWrapper
 
 
 class ScannedRNN(nn.Module):
@@ -208,6 +205,7 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
+
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
     return x.reshape((num_actors, -1))
@@ -238,9 +236,7 @@ def make_train(config):
         update_steps = config["NUM_UPDATES"]
         warmup_steps = int(lr_warmup * update_steps)
 
-        steps_per_epoch = (
-            config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"]
-        )
+        steps_per_epoch = config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"]
 
         warmup_fn = optax.linear_schedule(
             init_value=0.0,
@@ -267,7 +263,6 @@ def make_train(config):
     )
 
     def train(rng):
-
         # INIT NETWORK
         network = ActorCriticRNN(env.action_space(env.agents[0]).n, config=config)
 
@@ -353,7 +348,7 @@ def make_train(config):
                     update_step * config["NUM_STEPS"] * config["NUM_ENVS"]
                 )
                 anneal_factor = rew_shaping_anneal(current_timestep)
-                reward = jax.tree_util.tree_map(
+                reward = jax.tree.map(
                     lambda x, y: x + y * anneal_factor, reward, info["shaped_reward"]
                 )
 
@@ -367,9 +362,7 @@ def make_train(config):
                 info["anneal_factor"] = jnp.full_like(shaped_reward, anneal_factor)
                 info["combined_reward"] = combined_reward
 
-                info = jax.tree_util.tree_map(
-                    lambda x: x.reshape((config["NUM_ACTORS"])), info
-                )
+                info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
@@ -505,11 +498,11 @@ def make_train(config):
                 )
                 permutation = jax.random.permutation(_rng, config["NUM_ACTORS"])
 
-                shuffled_batch = jax.tree_util.tree_map(
+                shuffled_batch = jax.tree.map(
                     lambda x: jnp.take(x, permutation, axis=1), batch
                 )
 
-                minibatches = jax.tree_util.tree_map(
+                minibatches = jax.tree.map(
                     lambda x: jnp.swapaxes(
                         jnp.reshape(
                             x,
@@ -554,7 +547,7 @@ def make_train(config):
                 wandb.log(metric)
 
             update_step = update_step + 1
-            metric = jax.tree_util.tree_map(lambda x: x.mean(), metric)
+            metric = jax.tree.map(lambda x: x.mean(), metric)
             metric["update_step"] = update_step
             metric["env_step"] = update_step * config["NUM_STEPS"] * config["NUM_ENVS"]
             jax.debug.callback(callback, metric)
@@ -610,7 +603,7 @@ def main(config):
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, num_seeds)
         train_jit = jax.jit(make_train(config))
-        out = jax.vmap(train_jit)(rngs)
+        jax.vmap(train_jit)(rngs)
 
 
 if __name__ == "__main__":
