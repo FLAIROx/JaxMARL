@@ -17,13 +17,14 @@
 "ENV_NAME": "HeuristicEnemySMAX"
 "MAP_NAME": "2s3z"
 "SEED": 0
-"ENV_KWARGS": 
+"NUM_SEEDS": 1
+"ENV_KWARGS":
   "see_enemy_actions": True
   "walls_cause_death": True
   "attack_mode": "closest"
 "ANNEAL_LR": True
 
 # WandB Params
-"ENTITY": ""
-"PROJECT": ""
+"ENTITY": ${oc.env:WANDB_ENTITY}
+"PROJECT": "jaxmarl-smax"
 "WANDB_MODE" : "disabled"

@@ -1,11 +1,30 @@
+import os
+import warnings
+from functools import partial
 from typing import Dict, Literal, Optional, Tuple
-import chex
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
-from jaxmarl.environments import spaces
-from brax import envs
+
 import jax
 import jax.numpy as jnp
-from functools import partial
+
+with open(os.devnull, "w") as _devnull:
+    import sys as _sys
+
+    _sys.stdout, _sys.stderr = _devnull, _devnull
+    try:
+        from brax import envs
+    finally:
+        _sys.stdout, _sys.stderr = _sys.__stdout__, _sys.__stderr__
+from jaxtyping import PRNGKeyArray
+
+from jaxmarl.environments import spaces
+from jaxmarl.environments.multi_agent_env import (
+    Actions,
+    Dones,
+    Infos,
+    MultiAgentEnv,
+    Observations,
+    Rewards,
+)
 
 from .mappings import _agent_action_mapping, _agent_observation_mapping
 
@@ -23,18 +42,18 @@ class MABraxEnv(MultiAgentEnv):
         backend: str = "positional",
         agent_obs_mapping: Dict | None = None,
         agent_action_mapping: Dict | None = None,
-        **kwargs
+        **kwargs,
     ):
         """Multi-Agent Brax environment.
 
         Args:
-            env_name: Name of the environment to be used. Expected to be of the format 
+            env_name: Name of the environment to be used. Expected to be of the format
                 `<NAME>_<ID>`, where name corresponds to the underlying brax envirornment
-                name (e.g. `ant`) and the id corresponds to a specific multi-agent mapping 
-                (i.e. 4x2). See `mappings.py` for supported env names. 
-                
-                ID can be omitted if agent_obs_mapping and agent_action_mapping 
-                are provided, allowing for custom multi-agent configurations. 
+                name (e.g. `ant`) and the id corresponds to a specific multi-agent mapping
+                (i.e. 4x2). See `mappings.py` for supported env names.
+
+                ID can be omitted if agent_obs_mapping and agent_action_mapping
+                are provided, allowing for custom multi-agent configurations.
             episode_length: Length of an episode. Defaults to 1000.
             action_repeat: How many repeated actions to take per environment
                 step. Defaults to 1.
@@ -49,17 +68,28 @@ class MABraxEnv(MultiAgentEnv):
                 observations and actions are homogenised by masking the dimensions of
                 the other agents with zeros in the full observation and action vectors.
                 Defaults to None.
-            agent_obs_mapping: Mapping from agent name to a list of indices 
-                specifying which elements of the global Brax observation vector 
+            agent_obs_mapping: Mapping from agent name to a list of indices
+                specifying which elements of the global Brax observation vector
                 are visible to that agent.
-            agent_action_mapping: Mapping from agent name to a list of indices 
-                specifying which joints (action dimensions) of the global Brax 
+            agent_action_mapping: Mapping from agent name to a list of indices
+                specifying which joints (action dimensions) of the global Brax
                 environment are controlled by that agent.
 
         """
+        warnings.warn(
+            "MABrax is deprecated currently due to Brax being deprecated. It needs updating to use MJX. "
+            "If you need these environments, please do consider submitting a PR to update them! If you want to use multi-agent Brax environments in the meantime, you can install an older version of JaxMARL (pre-0.2.0).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         base_env_name = env_name.split("_")[0]
         env = envs.create(
-            base_env_name, episode_length, action_repeat, auto_reset, backend=backend, **kwargs
+            base_env_name,
+            episode_length,
+            action_repeat,
+            auto_reset,
+            backend=backend,
+            **kwargs,
         )
         self.env = env
         self.episode_length = episode_length
@@ -69,15 +99,19 @@ class MABraxEnv(MultiAgentEnv):
 
         if agent_action_mapping is None:
             if env_name not in _agent_action_mapping:
-                raise ValueError(f"No action mapping defined for {env_name}. "
-                                    "Provide agent_action_mapping instead.")
+                raise ValueError(
+                    f"No action mapping defined for {env_name}. "
+                    "Provide agent_action_mapping instead."
+                )
             agent_action_mapping = _agent_action_mapping[env_name]
-        
+
         if agent_obs_mapping is None:
             if env_name not in _agent_observation_mapping:
-                raise ValueError(f"No observation mapping defined for {env_name}. "
-                                    "Provide agent_obs_mapping instead.")
-            agent_obs_mapping =  _agent_observation_mapping[env_name]
+                raise ValueError(
+                    f"No observation mapping defined for {env_name}. "
+                    "Provide agent_obs_mapping instead."
+                )
+            agent_obs_mapping = _agent_observation_mapping[env_name]
 
         self.agent_obs_mapping = agent_obs_mapping
         self.agent_action_mapping = agent_action_mapping
@@ -107,7 +141,7 @@ class MABraxEnv(MultiAgentEnv):
             agent: spaces.Box(
                 -jnp.inf,
                 jnp.inf,
-                shape=(obs_sizes[agent],),
+                shape=(obs_sizes[agent],),  # type: ignore[arg-type]
             )
             for agent in self.agents
         }
@@ -121,19 +155,17 @@ class MABraxEnv(MultiAgentEnv):
         }
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], envs.State]:
+    def reset(self, key: PRNGKeyArray) -> Tuple[Observations, envs.State]:
         state = self.env.reset(key)
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=(0,))
     def step_env(
         self,
-        key: chex.PRNGKey,
+        key: PRNGKeyArray,
         state: envs.State,
-        actions: Dict[str, chex.Array],
-    ) -> Tuple[
-        Dict[str, chex.Array], envs.State, Dict[str, float], Dict[str, bool], Dict
-    ]:
+        actions: Actions,
+    ) -> Tuple[Observations, envs.State, Rewards, Dones, Infos]:
         global_action = self.map_agents_to_global_action(actions)
         next_state = self.env.step(state, global_action)  # type: ignore
         observations = self.get_obs(next_state)
@@ -149,7 +181,7 @@ class MABraxEnv(MultiAgentEnv):
             next_state.info,
         )
 
-    def get_obs(self, state: envs.State) -> Dict[str, chex.Array]:
+    def get_obs(self, state: envs.State) -> Observations:
         """Extracts agent observations from the global state.
 
         Args:

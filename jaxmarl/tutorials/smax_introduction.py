@@ -2,11 +2,11 @@
 Short introduction to the package.
 
 ## Abstract base class
-Uses the PettingZoo Parallel API. All agents act synchronously, with actions, 
-observations, returns and dones passed as dictionaries keyed by agent names. 
+Uses the PettingZoo Parallel API. All agents act synchronously, with actions,
+observations, returns and dones passed as dictionaries keyed by agent names.
 The code can be found in `multiagentgymnax/multi_agent_env.py`
 
-The class follows an identical structure to that of `gymnax` with one execption. 
+The class follows an identical structure to that of `gymnax` with one execption.
 The class is instatiated with `num_agents`, defining the number of agents within the environment.
 
 ## Environment loop
@@ -14,19 +14,21 @@ Below is an example of a simple environment loop, using random actions.
 
 """
 
+import os
+from typing import Sequence
+
+import distrax
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
-import distrax
+
 from jaxmarl import make
 from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.environments.smax.heuristic_enemy import (
     create_heuristic_policy,
     get_heuristic_policy_initial_state,
 )
-from jaxmarl.viz.visualizer import Visualizer, SMAXVisualizer
-import os
-from typing import Sequence
+from jaxmarl.viz.visualizer import SMAXVisualizer
 
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 # Parameters + random keys
@@ -78,7 +80,7 @@ with jax.disable_jit(False):
         # smacv2_position_generation=True,
         # smacv2_unit_type_generation=True,
         action_type="continuous",
-        observation_type="conic"
+        observation_type="conic",
     )
     # env = make("SMAX")
     # params = init_policy(env, key_p)
@@ -114,7 +116,10 @@ with jax.disable_jit(False):
         #     actions[agent] = action
 
         # actions = {agent: jnp.array(1) for agent in env.agents}
-        actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
+        actions = {
+            agent: env.action_space(agent).sample(key_a[i])
+            for i, agent in enumerate(env.agents)
+        }
         state_seq.append((key_s, state, actions))
         # Step environment
         avail_actions = env.get_avail_actions(state)

@@ -1,46 +1,39 @@
-FROM nvcr.io/nvidia/jax:24.10-py3
+FROM nvcr.io/nvidia/jax:26.04-py3
 
 # Create user
-ARG UID
-ARG MYUSER
-RUN useradd -u $UID --create-home ${MYUSER}
+ARG UID=1000
+ARG MYUSER=myuser
+RUN useradd -u $UID -o --create-home ${MYUSER}
+
+# Install system deps before COPY so this layer is cached across source changes
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tmux && \
+    rm -rf /var/lib/apt/lists/*
+
 USER ${MYUSER}
 
 # default workdir
 WORKDIR /home/${MYUSER}/
-COPY --chown=${MYUSER} --chmod=765 . .
+COPY --chown=${MYUSER} . .
 
 USER root
 
-# install tmux
-RUN apt-get update && \
-    apt-get install -y tmux
-
-#jaxmarl from source if needed, all the requirements
-RUN pip install -e .[algs,dev]
-
-# install submodules (currently each submodule needs to be added to safe.directory)
-RUN git config --global --add safe.directory /home/${MYUSER}
-
-# install jaxrobatrium env and robotarium sim submodules
-RUN git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium
-RUN git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator
-RUN git submodule update --init --recursive
-RUN cd jaxmarl/environments/robotarium && pip install -e .
-RUN cd jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && pip install -e .
+# Install jaxmarl and dependencies, pinning jax/jaxlib to the base image versions
+RUN pip freeze | grep -iE '^(jax|jaxlib|jax-cuda13)' > /tmp/jax-pins.txt && \
+    pip install --no-cache-dir --constraint /tmp/jax-pins.txt -e .[algs,dev] && \
+    git config --global --add safe.directory /home/${MYUSER} && \
+    git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium && \
+    git config --global --add safe.directory /home/${MYUSER}/jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && \
+    git submodule update --init --recursive --depth 1 && \
+    pip install --no-cache-dir --constraint /tmp/jax-pins.txt -e jaxmarl/environments/robotarium && \
+    pip install --no-cache-dir --constraint /tmp/jax-pins.txt -e jaxmarl/environments/robotarium/jaxrobotarium/robotarium_python_simulator && \
+    rm /tmp/jax-pins.txt
 
 USER ${MYUSER}
 
-#disabling preallocation
-RUN export XLA_PYTHON_CLIENT_PREALLOCATE=false
-#safety measures
-RUN export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25 
-RUN export TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=false TF_FORCE_GPU_ALLOW_GROWTH=true
 
-# Uncomment below if you want jupyter 
+# Uncomment below if you want jupyter
 # RUN pip install jupyterlab
 
-#for secrets and debug
-ENV WANDB_API_KEY=""
-ENV WANDB_ENTITY=""
-RUN git config --global --add safe.directory /home/${MYUSER}
+ENV WANDB_API_KEY="" WANDB_ENTITY=""

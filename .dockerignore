@@ -1,5 +1,36 @@
+# experiment outputs
 wandb/
 tmp/
 outputs/
 results/
 models/
+
+# python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# build artifacts
+build/
+dist/
+
+# IDE and local tooling
+.vscode/
+.cache/
+.config/
+.nv/
+
+# large non-essential files
+docs/
+*.png
+*.gif
+*.ipynb
+Claude.md
+jaxmarl-2-0-plan.md
+brax-to-mjx.md
+
+# secrets
+.env
+*.env

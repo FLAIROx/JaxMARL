@@ -1,21 +1,24 @@
 import jax
 import jax.numpy as jnp
-from jaxmarl import make
 import pytest
+
+from jaxmarl import make
+
 
 def get_nothing_actions(env):
     actions = {agent: jnp.array(env.game_actions["NOTHING"]) for agent in env.agents}
     return actions
+
 
 def action_for_agent_in_room(env, state, action_name):
     actions = get_nothing_actions(env)
     actions[f"agent_{state.agent_in_room}"] = jnp.array(env.game_actions[action_name])
     return actions
 
+
 @pytest.mark.parametrize("seed", [0, 999])
 @pytest.mark.parametrize("num_agents", [3, 5, 10])
 class TestHeuristic:
-
     def test_light_switch(self, seed, num_agents):
         """Check that the light is correctly switched"""
         env = make("switch_riddle", num_agents=num_agents)
@@ -40,7 +43,6 @@ class TestHeuristic:
                 num_agents, seed
             )
         )
-
 
     def test_has_been(self, seed, num_agents):
         """Check that the has been parameter is correctly updated"""
@@ -68,8 +70,11 @@ class TestHeuristic:
                 raise ValueError(
                     "ALl agents visited the room but the has_been parameter doesn't say so."
                 )
-        print('Test "has been" passed with {} agents and seed {}.'.format(num_agents, seed))
-
+        print(
+            'Test "has been" passed with {} agents and seed {}.'.format(
+                num_agents, seed
+            )
+        )
 
     def test_positive_reward(self, seed, num_agents):
         """Check positive reward is correctly assigned"""
@@ -102,7 +107,6 @@ class TestHeuristic:
             )
         )
 
-
     def test_negative_reward(self, seed, num_agents):
         """Check negagtive reward is correctly assigned"""
         env = make("switch_riddle", num_agents=num_agents)
@@ -126,7 +130,6 @@ class TestHeuristic:
             )
         )
 
-
     def test_neutral_reward(self, seed, num_agents):
         """Check neutral reward is correctly assigned"""
         env = make("switch_riddle", num_agents=num_agents)
@@ -140,14 +143,13 @@ class TestHeuristic:
             _, state, rewards, _, _ = env.step(key_step, state, actions)
 
             if not all(rewards[a] == 0 for a in env.agents):
-                raise ValueError(f"Agents did nothing but the reward is not 0")
+                raise ValueError("Agents did nothing but the reward is not 0")
 
         print(
             'Test "neutral reward" passed with {} agents and seed {}.'.format(
                 num_agents, seed
             )
         )
-
 
     def test_environment_termination(self, seed, num_agents):
         """Check environment is terminated correctly"""
@@ -162,9 +164,9 @@ class TestHeuristic:
             actions = action_for_agent_in_room(env, state, "TELL")
             obs, state, reward, done, infos = env.step_env(key_step, state, actions)
 
-            assert done[
-                "__all__"
-            ], "The environment did not terminate correctly when an agent speaks."
+            assert done["__all__"], (
+                "The environment did not terminate correctly when an agent speaks."
+            )
 
         # Case where maximum time steps is reached
         for _ in range(100):
@@ -176,16 +178,15 @@ class TestHeuristic:
                 actions = get_nothing_actions(env)
                 obs, state, reward, done, infos = env.step_env(key_step, state, actions)
 
-            assert done[
-                "__all__"
-            ], "The environment did not terminate correctly when the maximum time steps is reached."
+            assert done["__all__"], (
+                "The environment did not terminate correctly when the maximum time steps is reached."
+            )
 
         print(
             'Test "environment termination" passed with {} agents and seed {}.'.format(
                 num_agents, seed
             )
         )
-
 
     def test_consistency(self, seed, num_agents):
         """Check randomness of the environment is deterministic."""
@@ -194,7 +195,9 @@ class TestHeuristic:
         env2 = make("switch_riddle", num_agents=num_agents)
 
         def check_equal(d1, d2):
-            assert d1.keys() == d2.keys(), "The dictionaries to compare have different keys"
+            assert d1.keys() == d2.keys(), (
+                "The dictionaries to compare have different keys"
+            )
             return all(jnp.all(d1[a] == d2[a]) for a in d1.keys())
 
         # Reset both environments with the same key
@@ -202,12 +205,12 @@ class TestHeuristic:
         obs2, state2 = env2.reset(key)
 
         # Ensure that the initial state and observations are the same
-        assert check_equal(
-            state1.__dict__, state2.__dict__
-        ), "The initial states of the two environments do not match."
-        assert check_equal(
-            obs1, obs2
-        ), "The initial observations of the two environments do not match."
+        assert check_equal(state1.__dict__, state2.__dict__), (
+            "The initial states of the two environments do not match."
+        )
+        assert check_equal(obs1, obs2), (
+            "The initial observations of the two environments do not match."
+        )
 
         # Play out the sequence of actions in both environments
         for i in range(100):
@@ -223,33 +226,35 @@ class TestHeuristic:
                 for i, agent in enumerate(env2.agents)
             }
 
-            assert check_equal(
-                actions1, actions2
-            ), f"The random actions of the two environments do not match at step {i}."
+            assert check_equal(actions1, actions2), (
+                f"The random actions of the two environments do not match at step {i}."
+            )
 
             obs1, state1, reward1, done1, _ = env1.step(key_step, state1, actions1)
             obs2, state2, reward2, done2, _ = env2.step(key_step, state2, actions2)
 
             # Ensure that the state and observations are the same at each step
-            assert check_equal(
-                state1.__dict__, state2.__dict__
-            ), f"The states of the two environments do not match at step {i}."
-            assert check_equal(
-                obs1, obs2
-            ), f"The observations of the two environments do not match at step {i}."
-            assert check_equal(
-                reward1, reward2
-            ), f"The rewards of the two environments do not match at step {i}."
-            assert check_equal(
-                done1, done1
-            ), f"The dones of the two environments do not match at step {i}."
+            assert check_equal(state1.__dict__, state2.__dict__), (
+                f"The states of the two environments do not match at step {i}."
+            )
+            assert check_equal(obs1, obs2), (
+                f"The observations of the two environments do not match at step {i}."
+            )
+            assert check_equal(reward1, reward2), (
+                f"The rewards of the two environments do not match at step {i}."
+            )
+            assert check_equal(done1, done1), (
+                f"The dones of the two environments do not match at step {i}."
+            )
 
         print(
-            'Test "consistency" passed with {} agents and seed {}.'.format(num_agents, seed)
+            'Test "consistency" passed with {} agents and seed {}.'.format(
+                num_agents, seed
+            )
         )
 
 
-'''def main():
+"""def main():
     for num_agents in [3, 5, 10, 50, 100]:
         for key in [0, 999]:
             test_light_switch(key, num_agents)
@@ -259,8 +264,8 @@ class TestHeuristic:
             test_neutral_reward(key, num_agents)
             test_environment_termination(key, num_agents)
             test_consistency(key, num_agents)
-    print("All tests passed")'''
+    print("All tests passed")"""
 
-'''
+"""
 if __name__ == "__main__":
-    main()'''
+    main()"""

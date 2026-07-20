@@ -5,23 +5,24 @@ Note, this file will only work for MPE environments with homogenous agents (e.g.
 
 """
 
+import functools
+import os
+from typing import Dict, NamedTuple, Sequence
+
+import distrax
+import flax.linen as nn
+import hydra
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
 import numpy as np
 import optax
 from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
-import distrax
-import hydra
 from omegaconf import OmegaConf
 
 import jaxmarl
-from jaxmarl.wrappers.baselines import MPELogWrapper
-
 import wandb
-import functools
+from jaxmarl.wrappers.baselines import MPELogWrapper
 
 
 class ScannedRNN(nn.Module):
@@ -60,26 +61,32 @@ class ActorCriticRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones = x
         embedding = nn.Dense(
-            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"],
+            kernel_init=orthogonal(np.sqrt(2)),
+            bias_init=constant(0.0),
         )(obs)
         embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
-        actor_mean = nn.Dense(self.config["GRU_HIDDEN_DIM"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
-            embedding
-        )
+        actor_mean = nn.Dense(
+            self.config["GRU_HIDDEN_DIM"],
+            kernel_init=orthogonal(2),
+            bias_init=constant(0.0),
+        )(embedding)
         actor_mean = nn.relu(actor_mean)
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
-        )(actor_mean)        
+        )(actor_mean)
 
         pi = distrax.Categorical(logits=actor_mean)
 
-        critic = nn.Dense(self.config["FC_DIM_SIZE"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
-            embedding
-        )
+        critic = nn.Dense(
+            self.config["FC_DIM_SIZE"],
+            kernel_init=orthogonal(2),
+            bias_init=constant(0.0),
+        )(embedding)
         critic = nn.relu(critic)
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
             critic
@@ -111,7 +118,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 def make_train(config):
     env = jaxmarl.make(config["ENV_NAME"])
-    
+
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -145,7 +152,9 @@ def make_train(config):
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
+        init_hstate = ScannedRNN.initialize_carry(
+            config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
+        )
         network_params = network.init(_rng, init_hstate, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -167,7 +176,9 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"])
+        init_hstate = ScannedRNN.initialize_carry(
+            config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"]
+        )
 
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
@@ -200,6 +211,7 @@ def make_train(config):
                 )(rng_step, env_state, env_act)
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
+
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
                     last_done,
@@ -274,9 +286,9 @@ def make_train(config):
                         ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
-                        value_loss = 0.5 * jnp.maximum(
-                            value_losses, value_losses_clipped
-                        ).mean()
+                        value_loss = (
+                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+                        )
 
                         # CALCULATE ACTOR LOSS
                         logratio = log_prob - traj_batch.log_prob
@@ -304,7 +316,14 @@ def make_train(config):
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy, ratio, approx_kl, clip_frac)
+                        return total_loss, (
+                            value_loss,
+                            loss_actor,
+                            entropy,
+                            ratio,
+                            approx_kl,
+                            clip_frac,
+                        )
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
@@ -323,9 +342,7 @@ def make_train(config):
                 ) = update_state
                 rng, _rng = jax.random.split(rng)
 
-                init_hstate = jnp.reshape(
-                    init_hstate, (1, config["NUM_ACTORS"], -1)
-                )
+                init_hstate = jnp.reshape(init_hstate, (1, config["NUM_ACTORS"], -1))
                 batch = (
                     init_hstate,
                     traj_batch,
@@ -383,7 +400,7 @@ def make_train(config):
                 ),
                 traj_batch.info,
             )
-            ratio_0 = loss_info[1][3].at[0,0].get().mean()
+            ratio_0 = loss_info[1][3].at[0, 0].get().mean()
             loss_info = jax.tree.map(lambda x: x.mean(), loss_info)
             metric["loss"] = {
                 "total_loss": loss_info[0],
@@ -441,34 +458,37 @@ def main(config):
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "RNN"],
+        tags=[t for t in os.environ.get("WANDB_TAGS", "").split(",") if t],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
-        mode=config["WANDB_MODE"]
+        mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
-    out = train_jit(rng)
-    
-    '''updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
-    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)    
-    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])'''
-    '''print('shape', out["metrics"]["returned_episode_returns"][0].shape)
+    train_jit(rng)
+
+    """updates_x = jnp.arange(out["metrics"]["total_loss"][0].shape[0])
+    loss_table = jnp.stack([updates_x, out["metrics"]["total_loss"].mean(axis=0), out["metrics"]["actor_loss"].mean(axis=0), out["metrics"]["critic_loss"].mean(axis=0), out["metrics"]["entropy"].mean(axis=0), out["metrics"]["ratio"].mean(axis=0)], axis=1)
+    loss_table = wandb.Table(data=loss_table.tolist(), columns=["updates", "total_loss", "actor_loss", "critic_loss", "entropy", "ratio"])"""
+    """print('shape', out["metrics"]["returned_episode_returns"][0].shape)
     updates_x = jnp.arange(out["metrics"]["returned_episode_returns"][0].shape[0])
     returns_table = jnp.stack([updates_x, out["metrics"]["returned_episode_returns"].mean(axis=0)], axis=1)
     returns_table = wandb.Table(data=returns_table.tolist(), columns=["updates", "returns"])
     wandb.log({
         "returns_plot": wandb.plot.line(returns_table, "updates", "returns", title="returns_vs_updates"),
         "returns": out["metrics"]["returned_episode_returns"][:,-1].mean(),
-        
-    })'''
 
-'''
+    })"""
+
+
+"""
 "total_loss_plot": wandb.plot.line(loss_table, "updates", "total_loss", title="total_loss_vs_updates"),
         "actor_loss_plot": wandb.plot.line(loss_table, "updates", "actor_loss", title="actor_loss_vs_updates"),
         "critic_loss_plot": wandb.plot.line(loss_table, "updates", "critic_loss", title="critic_loss_vs_updates"),
         "entropy_plot": wandb.plot.line(loss_table, "updates", "entropy", title="entropy_vs_updates"),
         "ratio_plot": wandb.plot.line(loss_table, "updates", "ratio", title="ratio_vs_updates"),
-'''
+"""
 
 if __name__ == "__main__":
     main()

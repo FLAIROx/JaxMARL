@@ -1,9 +1,9 @@
-""" Built off gymnax vizualizer.py"""
-import jax.numpy as jnp
-import jax
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+"""Built off gymnax vizualizer.py"""
+
 from typing import Optional
+
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 
 from jaxmarl.environments.multi_agent_env import MultiAgentEnv
 from jaxmarl.environments.smax.heuristic_enemy_smax_env import (
@@ -52,9 +52,7 @@ class Visualizer(object):
         self.im = self.env.init_render(self.ax, self.state_seq[0])
 
     def update(self, frame):
-        self.im = self.env.update_render(
-            self.im, self.state_seq[frame]
-        )
+        self.im = self.env.update_render(self.im, self.state_seq[frame])
 
 
 class SMAXVisualizer(Visualizer):
@@ -84,9 +82,7 @@ class SMAXVisualizer(Visualizer):
         return super().animate(save_fname, view)
 
     def init(self):
-        self.im = self.env.init_render(
-            self.ax, self.state_seq[0], 0, 0
-        )
+        self.im = self.env.init_render(self.ax, self.state_seq[0], 0, 0)
 
     def update(self, frame):
         self.im = self.env.update_render(

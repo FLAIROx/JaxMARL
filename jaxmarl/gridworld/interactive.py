@@ -5,68 +5,76 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jaxmarl.gridworld.maze import Maze #, Actions
-from jaxmarl.gridworld.ma_maze import MAMaze
-from jaxmarl.environments.overcooked.overcooked import Overcooked
 from jaxmarl.environments.overcooked.layouts import layouts
+from jaxmarl.environments.overcooked.overcooked import Overcooked
+from jaxmarl.gridworld.ma_maze import MAMaze
+from jaxmarl.gridworld.maze import Maze  # , Actions
 
 
 def redraw(state, obs, extras):
-    extras['viz'].render(extras['params'], state, highlight=False)
+    extras["viz"].render(extras["params"], state, highlight=False)
 
-    if extras['obs_viz'] is not None:
-        if extras['env'] == "MAMaze" or "Overcooked":
-            obs_viz.render_grid(np.asarray(obs['image'][0]), k_rot90=3, agent_dir_idx=[3])
-            obs_viz2.render_grid(np.asarray(obs['image'][1]), k_rot90=3, agent_dir_idx=[3])
+    if extras["obs_viz"] is not None:
+        if extras["env"] == "MAMaze" or "Overcooked":
+            obs_viz.render_grid(
+                np.asarray(obs["image"][0]), k_rot90=3, agent_dir_idx=[3]
+            )
+            obs_viz2.render_grid(
+                np.asarray(obs["image"][1]), k_rot90=3, agent_dir_idx=[3]
+            )
         else:
-            obs_viz.render_grid(np.asarray(obs['image']), k_rot90=3, agent_dir_idx=3)
+            obs_viz.render_grid(np.asarray(obs["image"]), k_rot90=3, agent_dir_idx=3)
 
 
 def reset(key, env, extras):
-    key, subkey = jax.random.split(extras['rng'])
-    obs, state = extras['jit_reset'](subkey)
+    key, subkey = jax.random.split(extras["rng"])
+    obs, state = extras["jit_reset"](subkey)
 
-    extras['rng'] = key
-    extras['obs'] = obs
-    extras['state'] = state
+    extras["rng"] = key
+    extras["obs"] = obs
+    extras["state"] = state
 
     redraw(state, obs, extras)
 
 
 def step(env, action, extras):
     # TODO: Handle actions better (e.g. choose which agent to control)
-    key, subkey = jax.random.split(extras['rng'])
+    key, subkey = jax.random.split(extras["rng"])
 
     print("action:", jnp.array([action, action.left]))
-    obs, state, reward, done, info = jax.jit(env.step_env)(subkey, extras['state'], jnp.array([action, action]))
-    extras['obs'] = obs
-    extras['state'] = state
+    obs, state, reward, done, info = jax.jit(env.step_env)(
+        subkey, extras["state"], jnp.array([action, action])
+    )
+    extras["obs"] = obs
+    extras["state"] = state
     print(f"reward={reward}, agent_dir={obs['agent_dir']}, agent_inv={state.agent_inv}")
-    
+
     if extras["debug"]:
         layers = [f"player_{i}_loc" for i in range(2)]
         layers.extend([f"player_{i // 4}_orientation_{i % 4}" for i in range(8)])
-        layers.extend([
-            "pot_loc",
-            "counter_loc",
-            "onion_disp_loc",
-            "tomato_disp_loc",
-            "plate_disp_loc",
-            "serve_loc",
-            "onions_in_pot",
-            "tomatoes_in_pot",
-            "onions_in_soup",
-            "tomatoes_in_soup",
-            "soup_cook_time_remaining",
-            "soup_done",
-            "plates",
-            "onions",
-            "tomatoes",
-            "urgency"
-        ])
+        layers.extend(
+            [
+                "pot_loc",
+                "counter_loc",
+                "onion_disp_loc",
+                "tomato_disp_loc",
+                "plate_disp_loc",
+                "serve_loc",
+                "onions_in_pot",
+                "tomatoes_in_pot",
+                "onions_in_soup",
+                "tomatoes_in_soup",
+                "soup_cook_time_remaining",
+                "soup_done",
+                "plates",
+                "onions",
+                "tomatoes",
+                "urgency",
+            ]
+        )
         print("obs_shape: ", obs["image"].shape)
         print("OBS: \n", obs["image"][1])
-        debug_obs = jnp.transpose(obs["image"][1], (2,0,1))
+        debug_obs = jnp.transpose(obs["image"][1], (2, 0, 1))
         for i, layer in enumerate(layers):
             print(layer)
             print(debug_obs[i])
@@ -78,136 +86,126 @@ def step(env, action, extras):
     else:
         redraw(state, obs, extras)
 
-    extras['rng'] = key
+    extras["rng"] = key
 
 
 def key_handler(env, extras, event):
-    print('pressed', event.key)
+    print("pressed", event.key)
 
-    if event.key == 'escape':
-        window.close()
+    if event.key == "escape":
+        extras["viz"].window.close()
         return
 
-    if event.key == 'backspace':
-        extras['jit_reset']((env, extras))
+    if event.key == "backspace":
+        extras["jit_reset"]((env, extras))
         return
 
-    if event.key == 'left':
+    if event.key == "left":
         step(env, Actions.left, extras)
         return
-    if event.key == 'right':
+    if event.key == "right":
         step(env, Actions.right, extras)
         return
-    if event.key == 'up':
+    if event.key == "up":
         step(env, Actions.forward, extras)
         return
 
     # Spacebar
-    if event.key == ' ':
+    if event.key == " ":
         step(env, Actions.toggle, extras)
         return
-    if event.key == '[':
+    if event.key == "[":
         step(env, Actions.pickup, extras)
         return
-    if event.key == ']':
+    if event.key == "]":
         step(env, Actions.drop, extras)
         return
 
-    if event.key == 'enter':
+    if event.key == "enter":
         step(env, Actions.done, extras)
         return
 
+
 def key_handler_overcooked(env, extras, event):
-    print('pressed', event.key)
+    print("pressed", event.key)
 
-    if event.key == 'escape':
-        window.close()
+    if event.key == "escape":
+        extras["viz"].window.close()
         return
-    if event.key == 'backspace':
-        extras['jit_reset']((env, extras))
+    if event.key == "backspace":
+        extras["jit_reset"]((env, extras))
         return
 
-    if event.key == 'left':
+    if event.key == "left":
         step(env, Actions.left, extras)
         return
-    if event.key == 'right':
+    if event.key == "right":
         step(env, Actions.right, extras)
         return
-    if event.key == 'up':
+    if event.key == "up":
         # step(env, Actions.forward, extras)
         step(env, Actions.up, extras)
         return
-    if event.key == 'down':
+    if event.key == "down":
         step(env, Actions.down, extras)
         return
 
     # Spacebar
-    if event.key == ' ':
+    if event.key == " ":
         step(env, Actions.interact, extras)
         return
-    if event.key == 'tab':
+    if event.key == "tab":
         step(env, Actions.stay, extras)
         return
-    if event.key == 'enter':
+    if event.key == "enter":
         step(env, Actions.done, extras)
         return
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--env",
-        type=str,
-        help="Environment name",
-        default="Overcooked"
+        "--env", type=str, help="Environment name", default="Overcooked"
     )
-    parser.add_argument(
-        "--layout",
-        type=str,
-        help="Overcooked layout",
-        default=""
-    )
+    parser.add_argument("--layout", type=str, help="Overcooked layout", default="")
     parser.add_argument(
         "--seed",
         type=int,
         help="random seed to generate the environment with",
-        default=0
+        default=0,
     )
     parser.add_argument(
-        '--render_agent_view',
+        "--render_agent_view",
         default=False,
         help="draw the agent sees (partially observable view)",
-        action='store_true'
+        action="store_true",
     )
     parser.add_argument(
-        '--height',
+        "--height",
         default=13,
         type=int,
         help="height",
     )
     parser.add_argument(
-        '--width',
+        "--width",
         default=13,
         type=int,
         help="width",
     )
     parser.add_argument(
-        '--n_walls',
+        "--n_walls",
         default=50,
         type=int,
         help="Number of walls",
     )
     parser.add_argument(
-        '--agent_view_size',
+        "--agent_view_size",
         default=5,
         type=int,
         help="Number of walls",
     )
     parser.add_argument(
-        '--debug',
-        default=False,
-        help="Debug mode",
-        action='store_true'
+        "--debug", default=False, help="Debug mode", action="store_true"
     )
     args = parser.parse_args()
 
@@ -222,13 +220,7 @@ if __name__ == '__main__':
         from jaxmarl.gridworld.maze import Actions
 
     elif args.env == "MAMaze":
-        env = MAMaze(
-            height=13,
-            width=13,
-            n_walls=25,
-            see_agent=True,
-            n_agents=2
-        )
+        env = MAMaze(height=13, width=13, n_walls=25, see_agent=True, n_agents=2)
         from jaxmarl.gridworld.grid_viz import GridVisualizer as Visualizer
         from jaxmarl.gridworld.maze import Actions
 
@@ -242,18 +234,14 @@ if __name__ == '__main__':
                 see_agent=True,
                 n_agents=2,
                 fixed_layout=True,
-                layout=layout
+                layout=layout,
             )
         else:
             env = Overcooked(
-                height=13,
-                width=13,
-                n_walls=25,
-                see_agent=True,
-                n_agents=2
+                height=13, width=13, n_walls=25, see_agent=True, n_agents=2
             )
-        from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
         from jaxmarl.environments.overcooked.overcooked import Actions
+        from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer as Visualizer
 
     params = env.params
 
@@ -274,23 +262,27 @@ if __name__ == '__main__':
         viz.render(params, s0, highlight=False)
         if obs_viz is not None:
             if args.env == "MAMaze" or args.env == "Overcooked":
-                obs_viz.render_grid(np.asarray(o0['image'][0]), k_rot90=3, agent_dir_idx=[3])
-                obs_viz2.render_grid(np.asarray(o0['image'][1]), k_rot90=3, agent_dir_idx=[3])
+                obs_viz.render_grid(
+                    np.asarray(o0["image"][0]), k_rot90=3, agent_dir_idx=[3]
+                )
+                obs_viz2.render_grid(
+                    np.asarray(o0["image"][1]), k_rot90=3, agent_dir_idx=[3]
+                )
             else:
-                obs_viz.render_grid(np.asarray(o0['image']), k_rot90=3, agent_dir_idx=3)
+                obs_viz.render_grid(np.asarray(o0["image"]), k_rot90=3, agent_dir_idx=3)
 
         key, subkey = jax.random.split(key)
         extras = {
-            'rng': subkey,
-            'state': s0,
-            'obs': o0,
-            'params': params,
-            'viz': viz,
-            'obs_viz': obs_viz,
-            'obs_viz2': obs_viz2,
-            'jit_reset': jit_reset,
-            'env': args.env,
-            'debug': args.debug
+            "rng": subkey,
+            "state": s0,
+            "obs": o0,
+            "params": params,
+            "viz": viz,
+            "obs_viz": obs_viz,
+            "obs_viz2": obs_viz2,
+            "jit_reset": jit_reset,
+            "env": args.env,
+            "debug": args.debug,
         }
 
         if args.env == "Overcooked":

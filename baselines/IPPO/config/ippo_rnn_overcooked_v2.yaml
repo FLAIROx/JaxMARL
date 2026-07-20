@@ -1,5 +1,5 @@
 "ENV_NAME": "overcooked_v2"
-"ENV_KWARGS": 
+"ENV_KWARGS":
   "layout" : "grounded_coord_simple"
   "agent_view_size": 2
   "negative_rewards": True
@@ -34,4 +34,4 @@
 
 "ENTITY": ""
 "PROJECT": ""
-"WANDB_MODE" : "online"
+"WANDB_MODE" : "disabled"

@@ -1,0 +1,32 @@
+{
+  "name": "JaxMARL",
+  "build": {
+    "dockerfile": "../Dockerfile",
+  },
+  "runArgs": [
+    "--gpus",
+    "all",
+    "--shm-size",
+    "20g"
+  ],
+  "privileged": true,
+  "postCreateCommand": "pip install -e /workspaces/JaxMARL",
+  "remoteUser": "myuser",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.condaPath": ""
+      }
+    }
+  }
+}

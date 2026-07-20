@@ -1,28 +1,42 @@
-import jax
-from jax import numpy as jnp
-from jaxmarl import make
-import random
-import pprint
-import sys
-import numpy as np
 import argparse
-from jaxmarl.wrappers.baselines import load_params
+import pprint
+import random
+import sys
+
+import jax
+import numpy as np
+from jax import numpy as jnp
+
+from jaxmarl import make
 from jaxmarl.environments.hanabi.pretrained.obl_r2d2_agent import OBLAgentR2D2
+from jaxmarl.wrappers.baselines import load_params
 
 env = make("hanabi")
-batchify = lambda x: jnp.stack([x[agent] for agent in env.agents])
-unbatchify = lambda x: {agent: x[i] for i, agent in enumerate(env.agents)}
+
+
+def batchify(x):
+    return jnp.stack([x[agent] for agent in env.agents])
+
+
+def unbatchify(x):
+    return {agent: x[i] for i, agent in enumerate(env.agents)}
 
 
 class ManualPlayer:
     def __init__(self, player_idx):
         self._player_idx = player_idx
 
-    def act(self, obs, legal_moves, curr_player) -> int:
+    def act(self, obs, legal_moves, curr_player) -> np.ndarray:
         legal_moves = batchify(legal_moves)
         actions = np.array([20, 20])
 
-        print("valid actions:", [(a, env.action_encoding[a]) for a in np.where(legal_moves[curr_player] == 1)[0]])
+        print(
+            "valid actions:",
+            [
+                (a, env.action_encoding[a])
+                for a in np.where(legal_moves[curr_player] == 1)[0]
+            ],
+        )
 
         if curr_player != self._player_idx:
             return actions
@@ -44,7 +58,7 @@ class ManualPlayer:
                     print("Invalid action.")
             except KeyboardInterrupt:
                 sys.exit(0)
-            except:
+            except Exception:
                 action = 0
                 print("Invalid action.")
 
@@ -77,9 +91,9 @@ def get_agents(args):
         if player_type == "manual":
             agents.append(ManualPlayer(player_idx))
         elif player_type == "obl":
-            assert (
-                weight_file is not None
-            ), "Weight file must be provided for all the OBL agents."
+            assert weight_file is not None, (
+                "Weight file must be provided for all the OBL agents."
+            )
             agents.append(ManualGameOBLAgentR2D2(weight_file, player_idx))
     return agents
 
@@ -89,13 +103,12 @@ def play_game(args):
         seed = args.seed
     else:
         seed = random.randint(0, 10000)
-    print(f"{'-'*10}\nStarting new game with random seed: {seed}\n")
+    print(f"{'-' * 10}\nStarting new game with random seed: {seed}\n")
 
     agents = get_agents(args)
 
     use_jit = args.use_jit if args.use_jit is not None else True
     with jax.disable_jit(not use_jit):
-
         rng = jax.random.PRNGKey(seed)
         rng, _rng = jax.random.split(rng)
 

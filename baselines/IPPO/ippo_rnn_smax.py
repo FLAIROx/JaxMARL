@@ -2,24 +2,24 @@
 Based on PureJaxRL Implementation of PPO
 """
 
+import functools
+import os
+from typing import Any, Dict, NamedTuple, Sequence, cast
+
+import distrax
+import flax.linen as nn
+import hydra
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
 import numpy as np
 import optax
 from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
-import distrax
-import hydra
-from omegaconf import DictConfig, OmegaConf
-
-from jaxmarl.wrappers.baselines import SMAXLogWrapper
-from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
+from omegaconf import OmegaConf
 
 import wandb
-import functools
-import matplotlib.pyplot as plt
+from jaxmarl.environments.smax import HeuristicEnemySMAX, map_name_to_scenario
+from jaxmarl.wrappers.baselines import SMAXLogWrapper
 
 
 class ScannedRNN(nn.Module):
@@ -58,16 +58,20 @@ class ActorCriticRNN(nn.Module):
     def __call__(self, hidden, x):
         obs, dones, avail_actions = x
         embedding = nn.Dense(
-            self.config["FC_DIM_SIZE"], kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            self.config["FC_DIM_SIZE"],
+            kernel_init=orthogonal(np.sqrt(2)),
+            bias_init=constant(0.0),
         )(obs)
         embedding = nn.relu(embedding)
 
         rnn_in = (embedding, dones)
         hidden, embedding = ScannedRNN()(hidden, rnn_in)
 
-        actor_mean = nn.Dense(self.config["GRU_HIDDEN_DIM"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
-            embedding
-        )
+        actor_mean = nn.Dense(
+            self.config["GRU_HIDDEN_DIM"],
+            kernel_init=orthogonal(2),
+            bias_init=constant(0.0),
+        )(embedding)
         actor_mean = nn.relu(actor_mean)
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
@@ -77,9 +81,11 @@ class ActorCriticRNN(nn.Module):
 
         pi = distrax.Categorical(logits=action_logits)
 
-        critic = nn.Dense(self.config["FC_DIM_SIZE"], kernel_init=orthogonal(2), bias_init=constant(0.0))(
-            embedding
-        )
+        critic = nn.Dense(
+            self.config["FC_DIM_SIZE"],
+            kernel_init=orthogonal(2),
+            bias_init=constant(0.0),
+        )(embedding)
         critic = nn.relu(critic)
         critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
             critic
@@ -147,7 +153,9 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),
         )
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], config["GRU_HIDDEN_DIM"])
+        init_hstate = ScannedRNN.initialize_carry(
+            config["NUM_ENVS"], config["GRU_HIDDEN_DIM"]
+        )
         network_params = network.init(_rng, init_hstate, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -169,7 +177,10 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"])
+        init_hstate = ScannedRNN.initialize_carry(
+            config["NUM_ACTORS"], config["GRU_HIDDEN_DIM"]
+        )
+
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
@@ -206,6 +217,7 @@ def make_train(config):
                 )(rng_step, env_state, env_act)
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
+
                 transition = Transition(
                     jnp.tile(done["__all__"], env.num_agents),
                     last_done,
@@ -220,7 +232,7 @@ def make_train(config):
                 runner_state = (train_state, env_state, obsv, done_batch, hstate, rng)
                 return runner_state, transition
 
-            initial_hstate = runner_state[-2]
+            init_hstate = runner_state[-2]
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
@@ -285,9 +297,9 @@ def make_train(config):
                         ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
-                        value_loss = 0.5 * jnp.maximum(
-                            value_losses, value_losses_clipped
-                        ).mean()
+                        value_loss = (
+                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+                        )
 
                         # CALCULATE ACTOR LOSS
                         logratio = log_prob - traj_batch.log_prob
@@ -315,7 +327,14 @@ def make_train(config):
                             + config["VF_COEF"] * value_loss
                             - config["ENT_COEF"] * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy, ratio, approx_kl, clip_frac)
+                        return total_loss, (
+                            value_loss,
+                            loss_actor,
+                            entropy,
+                            ratio,
+                            approx_kl,
+                            clip_frac,
+                        )
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
@@ -335,9 +354,7 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
                 # adding an additional "fake" dimensionality to perform minibatching correctly
-                init_hstate = jnp.reshape(
-                    init_hstate, (1, config["NUM_ACTORS"], -1)
-                )
+                init_hstate = jnp.reshape(init_hstate, (1, config["NUM_ACTORS"], -1))
                 batch = (
                     init_hstate,
                     traj_batch,
@@ -378,7 +395,7 @@ def make_train(config):
 
             update_state = (
                 train_state,
-                initial_hstate,
+                init_hstate,
                 traj_batch,
                 advantages,
                 targets,
@@ -388,6 +405,7 @@ def make_train(config):
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
             train_state = update_state[0]
+
             metric = traj_batch.info
             metric = jax.tree.map(
                 lambda x: x.reshape(
@@ -395,7 +413,7 @@ def make_train(config):
                 ),
                 traj_batch.info,
             )
-            ratio_0 = loss_info[1][3].at[0,0].get().mean()
+            ratio_0 = loss_info[1][3].at[0, 0].get().mean()
             loss_info = jax.tree.map(lambda x: x.mean(), loss_info)
             metric["loss"] = {
                 "total_loss": loss_info[0],
@@ -407,7 +425,7 @@ def make_train(config):
                 "approx_kl": loss_info[1][4],
                 "clip_frac": loss_info[1][5],
             }
-            
+
             rng = update_state[-1]
 
             def callback(metric):
@@ -453,17 +471,23 @@ def make_train(config):
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_smax")
 def main(config):
-    config = OmegaConf.to_container(config)
+
+    config = cast(dict[str, Any], OmegaConf.to_container(config))
+    entity = config["ENTITY"]
+    print("entity:", entity)
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "RNN"],
+        tags=[t for t in os.environ.get("WANDB_TAGS", "").split(",") if t],
+        group=os.environ.get("WANDB_RUN_GROUP") or None,
+        name=os.environ.get("WANDB_NAME") or None,
         config=config,
         mode=config["WANDB_MODE"],
     )
     rng = jax.random.PRNGKey(config["SEED"])
+    rngs = jax.random.split(rng, int(config["NUM_SEEDS"]))
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
-    out = train_jit(rng)
+    jax.vmap(train_jit)(rngs)
 
 
 if __name__ == "__main__":

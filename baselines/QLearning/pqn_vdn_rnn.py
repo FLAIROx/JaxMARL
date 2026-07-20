@@ -1,32 +1,31 @@
-import os
 import copy
-import jax
-import jax.numpy as jnp
-import numpy as np
+import os
 from functools import partial
 from typing import Any
 
 import chex
-import optax
 import flax.linen as nn
-from flax.training.train_state import TrainState
 import hydra
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from flax.training.train_state import TrainState
 from omegaconf import OmegaConf
-import wandb
 
+import wandb
 from jaxmarl import make
+from jaxmarl.environments.overcooked import overcooked_layouts
 from jaxmarl.environments.smax import map_name_to_scenario
 from jaxmarl.wrappers.baselines import (
-    SMAXLogWrapper,
-    MPELogWrapper,
-    LogWrapper,
     CTRolloutManager,
+    LogWrapper,
+    MPELogWrapper,
+    SMAXLogWrapper,
 )
-from jaxmarl.environments.overcooked import overcooked_layouts
 
 
 class ScannedRNN(nn.Module):
-
     @partial(
         nn.scan,
         variable_broadcast="params",
@@ -67,19 +66,25 @@ class QNetwork(nn.Module):
     @nn.compact
     def __call__(self, hidden, x, dones, train: bool = False):
         if self.norm_type == "layer_norm":
-            normalize = lambda x: nn.LayerNorm()(x)
+
+            def normalize(x):
+                return nn.LayerNorm()(x)
         elif self.norm_type == "batch_norm":
-            normalize = lambda x: nn.BatchNorm(use_running_average=not train)(x)
+
+            def normalize(x):
+                return nn.BatchNorm(use_running_average=not train)(x)
         else:
-            normalize = lambda x: x
+
+            def normalize(x):
+                return x
 
         if self.norm_input:
             x = nn.BatchNorm(use_running_average=not train)(x)
         else:
             # dummy normalize input in any case for global compatibility
-            x_dummy = nn.BatchNorm(use_running_average=not train)(x)
+            _ = nn.BatchNorm(use_running_average=not train)(x)
 
-        for l in range(self.num_layers):
+        for _ in range(self.num_layers):
             x = nn.Dense(self.hidden_size)(x)
             x = normalize(x)
             x = nn.relu(x)
@@ -118,9 +123,9 @@ class CustomTrainState(TrainState):
 
 def make_train(config, env):
 
-    assert (
-        config["NUM_ENVS"] % config["NUM_MINIBATCHES"] == 0
-    ), "NUM_ENVS must be divisible by NUM_MINIBATCHES"
+    assert config["NUM_ENVS"] % config["NUM_MINIBATCHES"] == 0, (
+        "NUM_ENVS must be divisible by NUM_MINIBATCHES"
+    )
 
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -354,12 +359,14 @@ def make_train(config, env):
                             )
                             lambda_returns = (1 - done) * lambda_returns + done * reward
                             next_q = jnp.max(q, axis=-1)
-                            next_q = jnp.sum(next_q, axis=0) # sum over agents
+                            next_q = jnp.sum(next_q, axis=0)  # sum over agents
                             return (lambda_returns, next_q), lambda_returns
 
-                        lambda_returns = reward[-1] + config["GAMMA"] * (1 - done[-1]) * last_q
+                        lambda_returns = (
+                            reward[-1] + config["GAMMA"] * (1 - done[-1]) * last_q
+                        )
                         last_q = jnp.max(q_vals[-1], axis=-1)
-                        last_q = jnp.sum(last_q, axis=0) # sum over agents
+                        last_q = jnp.sum(last_q, axis=0)  # sum over agents
                         _, targets = jax.lax.scan(
                             _get_target,
                             (lambda_returns, last_q),
@@ -387,28 +394,22 @@ def make_train(config, env):
 
                         # lambda returns are computed using NUM_STEPS as the horizon, and optimizing from t=0 to NUM_STEPS-1
                         last_q = valid_q_vals[-1].max(axis=-1)
-                        last_q = last_q.sum(axis=0) # sum over agents
+                        last_q = last_q.sum(axis=0)  # sum over agents
                         target = _compute_targets(
                             last_q,  # q_vals at t=NUM_STEPS-1
                             valid_q_vals[:-1],
                             minibatch.reward[:-1, 0],  # _all_
                             minibatch.done[:-1, 0],  # _all_
-                        ).reshape(
-                            -1
-                        )  # (num_steps-1*batch_size,)
+                        ).reshape(-1)  # (num_steps-1*batch_size,)
 
                         chosen_action_qvals = jnp.take_along_axis(
                             q_vals,
                             jnp.expand_dims(minibatch.action, axis=-1),
                             axis=-1,
-                        ).squeeze(
-                            axis=-1
-                        )  # (num_steps, num_agents, batch_size,)
+                        ).squeeze(axis=-1)  # (num_steps, num_agents, batch_size,)
                         vdn_chosen_action_qvals = jnp.sum(chosen_action_qvals, axis=1)[
                             :-1
-                        ].reshape(
-                            -1
-                        )  # (num_steps-1*batch_size,)
+                        ].reshape(-1)  # (num_steps-1*batch_size,)
 
                         loss = jnp.mean(
                             (vdn_chosen_action_qvals - jax.lax.stop_gradient(target))
@@ -435,8 +436,8 @@ def make_train(config, env):
                     x = x.reshape(
                         *x.shape[:2], config["NUM_MINIBATCHES"], -1, *x.shape[3:]
                     )  # num_steps, num_agents, minibatches, batch_size/num_minbatches,
-                    new_order = [2, 0, 1, 3] + list(
-                        range(4, x.ndim)
+                    new_order = (
+                        [2, 0, 1, 3] + list(range(4, x.ndim))
                     )  # (minibatches, num_steps, num_agents, batch_size/num_minbatches, ...)
                     x = jnp.transpose(x, new_order)
                     return x
@@ -711,7 +712,7 @@ def single_run(config):
         OmegaConf.save(
             config,
             os.path.join(
-                save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
+                save_dir, f"{alg_name}_{env_name}_seed{config['SEED']}_config.yaml"
             ),
         )
 
@@ -719,7 +720,7 @@ def single_run(config):
             params = jax.tree.map(lambda x: x[i], model_state.params)
             save_path = os.path.join(
                 save_dir,
-                f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
+                f"{alg_name}_{env_name}_seed{config['SEED']}_vmap{i}.safetensors",
             )
             save_params(params, save_path)
 
@@ -747,7 +748,7 @@ def tune(default_config):
         rng = jax.random.PRNGKey(config["SEED"])
         rngs = jax.random.split(rng, config["NUM_SEEDS"])
         train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-        outs = jax.block_until_ready(train_vjit(rngs))
+        jax.block_until_ready(train_vjit(rngs))
 
     sweep_config = {
         "name": f"{alg_name}_{env_name}",

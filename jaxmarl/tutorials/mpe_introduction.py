@@ -2,7 +2,8 @@
 Introduction running and visualising the MPE environments using random actions.
 """
 
-import jax 
+import jax
+
 from jaxmarl import make
 from jaxmarl.environments.mpe import MPEVisualizer
 
@@ -12,14 +13,17 @@ key = jax.random.PRNGKey(0)
 key, key_r, key_a = jax.random.split(key, 3)
 
 # Instantiate environment
-env = make('MPE_simple_reference_v3')
+env = make("MPE_simple_reference_v3")
 obs, state = env.reset(key_r)
-print('list of agents in environment', env.agents)
+print("list of agents in environment", env.agents)
 
 # Sample random actions
 key_a = jax.random.split(key_a, env.num_agents)
-actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
-print('example action dict', actions)
+actions = {
+    agent: env.action_space(agent).sample(key_a[i])
+    for i, agent in enumerate(env.agents)
+}
+print("example action dict", actions)
 
 
 state_seq = []
@@ -28,7 +32,10 @@ for _ in range(max_steps):
     # Iterate random keys and sample actions
     key, key_s, key_a = jax.random.split(key, 3)
     key_a = jax.random.split(key_a, env.num_agents)
-    actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
+    actions = {
+        agent: env.action_space(agent).sample(key_a[i])
+        for i, agent in enumerate(env.agents)
+    }
 
     # Step environment
     obs, state, rewards, dones, infos = env.step(key_s, state, actions)
