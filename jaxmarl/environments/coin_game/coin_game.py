@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Tuple
 
 import chex
 import jax
@@ -27,7 +27,7 @@ class EnvState(BaseState):
     blue_pos: chex.Array
     red_coin_pos: chex.Array
     blue_coin_pos: chex.Array
-    outer_t: int
+    outer_t: jnp.ndarray
     # stats
     red_coop: chex.Array
     red_defect: chex.Array
@@ -75,7 +75,7 @@ class CoinGame(MultiAgentEnv):
         cnn: bool = False,
         egocentric: bool = False,
         shared_rewards: bool = False,
-        payoff_matrix=[[1, 1, -2], [1, 1, -2]],
+        payoff_matrix: List[List[float]] = [[1, 1, -2], [1, 1, -2]],
     ):
 
         super().__init__(num_agents=2)
@@ -93,7 +93,7 @@ class CoinGame(MultiAgentEnv):
             br: jnp.ndarray,
             bb: jnp.ndarray,
         ):
-            def state2idx(s: jnp.ndarray) -> int:
+            def state2idx(s: chex.Array) -> chex.Array:
                 idx = 0
                 idx = jnp.where((s == jnp.array([1, 1])).all(), 1, idx)
                 idx = jnp.where((s == jnp.array([1, 2])).all(), 2, idx)
@@ -131,7 +131,7 @@ class CoinGame(MultiAgentEnv):
             convention = jnp.stack([convention_1, convention_2]).reshape(2)
             return counter, coop1, coop2, convention
 
-        def _abs_position(state: EnvState) -> jnp.ndarray:
+        def _abs_position(state: EnvState) -> Observations:
             obs1 = jnp.zeros((3, 3, 4), dtype=jnp.int8)
             obs2 = jnp.zeros((3, 3, 4), dtype=jnp.int8)
 
@@ -179,7 +179,7 @@ class CoinGame(MultiAgentEnv):
             obs = obs.at[rel_blue_coin[0], rel_blue_coin[1], 3].set(1)
             return obs
 
-        def _state_to_obs(state: EnvState) -> jnp.ndarray:
+        def _state_to_obs(state: EnvState) -> Observations:
             if egocentric:
                 obs1 = _relative_position(state)
 
@@ -190,9 +190,9 @@ class CoinGame(MultiAgentEnv):
                         blue_pos=state.red_pos,
                         red_coin_pos=state.blue_coin_pos,
                         blue_coin_pos=state.red_coin_pos,
-                        step=0,
-                        outer_t=0,
-                        done=False,
+                        step=state.step,
+                        outer_t=state.outer_t,
+                        done=state.done,
                         red_coop=state.blue_coop,
                         red_defect=state.blue_defect,
                         blue_coop=state.red_coop,
@@ -304,7 +304,7 @@ class CoinGame(MultiAgentEnv):
                 blue_coin_pos=new_blue_coin_pos,
                 step=state.step + 1,
                 outer_t=state.outer_t,
-                done=False,
+                done=state.done,
                 red_coop=next_red_coop,
                 red_defect=next_red_defect,
                 blue_coop=next_blue_coop,
@@ -370,16 +370,8 @@ class CoinGame(MultiAgentEnv):
 
             if shared_rewards:
                 # shared reward (social welfare\sum of agents individual rewards)
-                rewards = {
-                    agent: reward
-                    for agent, reward in zip(
-                        self.agents,
-                        (
-                            sum((red_reward, blue_reward)),
-                            sum((red_reward, blue_reward)),
-                        ),
-                    )
-                }
+                shared_reward = red_reward + blue_reward
+                rewards = {agent: shared_reward for agent in self.agents}
             else:
                 # individual reward
                 rewards = {
@@ -487,10 +479,15 @@ class CoinGame(MultiAgentEnv):
         ax.set_xticks(jnp.arange(1, 4))
         ax.set_yticks(jnp.arange(1, 4))
         ax.grid()
-        red_pos = jnp.squeeze(state.red_pos)
-        blue_pos = jnp.squeeze(state.blue_pos)
-        red_coin_pos = jnp.squeeze(state.red_coin_pos)
-        blue_coin_pos = jnp.squeeze(state.blue_coin_pos)
+
+        def _xy(pos: chex.Array) -> Tuple[float, float]:
+            pos = jnp.squeeze(pos)
+            return float(pos[0]), float(pos[1])
+
+        red_pos = _xy(state.red_pos)
+        blue_pos = _xy(state.blue_pos)
+        red_coin_pos = _xy(state.red_coin_pos)
+        blue_coin_pos = _xy(state.blue_coin_pos)
         ax.annotate(
             "R",
             fontsize=20,
