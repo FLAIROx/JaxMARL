@@ -4,7 +4,6 @@ import math
 from functools import partial
 from typing import Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from flax.struct import dataclass
@@ -34,24 +33,24 @@ class State(BaseState):
     """SMAX game state.
 
     From BaseState:
-        done: bool  # episode terminated
-        step: int   # current timestep (formerly 'time')
+        done: jax.Array  # episode terminated
+        step: jax.Array  # current timestep (formerly 'time')
 
     """
 
-    unit_positions: chex.Array
-    unit_alive: chex.Array
-    unit_teams: chex.Array
-    unit_health: chex.Array
-    unit_types: chex.Array
-    unit_weapon_cooldowns: chex.Array
-    prev_movement_actions: chex.Array
-    prev_attack_actions: chex.Array
+    unit_positions: jax.Array
+    unit_alive: jax.Array
+    unit_teams: jax.Array
+    unit_health: jax.Array
+    unit_types: jax.Array
+    unit_weapon_cooldowns: jax.Array
+    prev_movement_actions: jax.Array
+    prev_attack_actions: jax.Array
 
 
 @dataclass
 class Scenario:
-    unit_types: chex.Array
+    unit_types: jax.Array
     num_allies: int
     num_enemies: int
     smacv2_position_generation: bool
@@ -328,8 +327,8 @@ class SMAX(MultiAgentEnv):
             unit_types=unit_types,
             prev_movement_actions=jnp.zeros((self.num_agents, 2)),
             prev_attack_actions=jnp.zeros((self.num_agents,), dtype=jnp.int32),
-            step=0,
-            done=False,
+            step=jnp.array(0),
+            done=jnp.array(False),
             unit_weapon_cooldowns=unit_weapon_cooldowns,
         )
         state = self._push_units_away(state)
@@ -356,7 +355,7 @@ class SMAX(MultiAgentEnv):
         self,
         key: PRNGKeyArray,
         state: State,
-        actions: Tuple[chex.Array, chex.Array],
+        actions: Tuple[jax.Array, jax.Array],
         get_state_sequence: bool = False,
     ) -> Tuple[Observations, State, Rewards, Dones, Infos]:
         """Environment-specific step transition."""
@@ -518,8 +517,8 @@ class SMAX(MultiAgentEnv):
             self.unit_type_radiuses[state.unit_types][:, None]
             + self.unit_type_radiuses[state.unit_types][None, :]
         )
-        overlap_term = jnp.where(
-            alive_pair, jax.nn.relu(radius_matrix / dist_matrix - 1.0), 0.0
+        overlap_term = jnp.asarray(
+            jnp.where(alive_pair, jax.nn.relu(radius_matrix / dist_matrix - 1.0), 0.0)
         )
         unit_positions = (
             state.unit_positions
@@ -533,8 +532,8 @@ class SMAX(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=(0,))
     def _decode_actions(
-        self, key, state: State, actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, key, state: State, actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         if self.action_type == "discrete":
             return self._decode_discrete_actions(actions)
         elif self.action_type == "continuous":
@@ -544,8 +543,8 @@ class SMAX(MultiAgentEnv):
             raise ValueError("Invalid Action Type")
 
     def _decode_discrete_actions(
-        self, actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         def _decode_movement_action(action):
             vec = jax.lax.cond(
                 # action is an attack action OR stop (action 4)
@@ -575,8 +574,8 @@ class SMAX(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=(0,))
     def _decode_continuous_actions(
-        self, key, state: State, actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, key, state: State, actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         shoot_last_idx = self.continuous_action_dims.index("shoot_last_enemy")
         action_idx = self.continuous_action_dims.index("do_shoot")
         theta_idx = self.continuous_action_dims.index("coordinate_2")
@@ -659,7 +658,7 @@ class SMAX(MultiAgentEnv):
         self,
         key: PRNGKeyArray,
         state: State,
-        actions: Tuple[chex.Array, chex.Array],
+        actions: Tuple[jax.Array, jax.Array],
     ) -> State:
         def update_position(idx, vec):
             # Compute the movements slightly strangely.
@@ -776,9 +775,9 @@ class SMAX(MultiAgentEnv):
         )
         return state
 
-    def get_world_state(self, state: State) -> chex.Array:
+    def get_world_state(self, state: State) -> jax.Array:
         # get the features of every unit, as well as the teams that they belong to.
-        def get_features(i):
+        def get_features(i: jax.Array):
             empty_features = jnp.zeros(shape=(len(self.own_features),))
             features = empty_features.at[0].set(
                 state.unit_health[i] / self.unit_type_health[state.unit_types[i]]
@@ -807,13 +806,13 @@ class SMAX(MultiAgentEnv):
         )
 
     def get_obs_conic(self, state: State) -> Observations:
-        def get_features(i: int):
+        def get_features(i: jax.Array):
             relative_pos = (
                 state.unit_positions - state.unit_positions[i]
             ) / self.unit_type_sight_ranges[state.unit_types[i]]
             visible = jnp.linalg.norm(relative_pos, axis=-1) < 1
 
-            def get_segment(j: int):
+            def get_segment(j: jax.Array):
                 #
                 angle = (
                     jnp.arctan(relative_pos[:, 1] / (relative_pos[:, 0] + 1e-8))
@@ -837,9 +836,9 @@ class SMAX(MultiAgentEnv):
                     size=self.max_units_per_section,
                     fill_value=-1,
                 )[0]
-                features = jax.vmap(self._observe_features, in_axes=(None, None, 0))(
-                    state, i, idxes
-                )
+                features: jax.Array = jax.vmap(
+                    self._observe_features, in_axes=(None, None, 0)
+                )(state, i, idxes)
                 empty_features = jnp.zeros_like(features)
                 features = jnp.where(
                     ((idxes == -1) | jnp.logical_not(state.unit_alive[i]))[:, None],
@@ -859,7 +858,7 @@ class SMAX(MultiAgentEnv):
         return {agent: obs[self.agent_ids[agent]] for agent in self.agents}
 
     @partial(jax.jit, static_argnums=(0,))
-    def _observe_features(self, state: State, i: int, j_idx: int):
+    def _observe_features(self, state: State, i: jax.Array, j_idx: jax.Array):
         team_i_idx = (i >= self.num_allies).astype(jnp.int32)
         team_j_idx = (j_idx >= self.num_allies).astype(jnp.int32)
         empty_features = jnp.zeros(shape=(len(self.unit_features),))
@@ -899,7 +898,7 @@ class SMAX(MultiAgentEnv):
         return features
 
     @partial(jax.jit, static_argnums=(0,))
-    def _get_own_features(self, state: State, i: int):
+    def _get_own_features(self, state: State, i: jax.Array):
         empty_features = jnp.zeros(shape=(len(self.own_features),))
         features = empty_features.at[0].set(
             state.unit_health[i] / self.unit_type_health[state.unit_types[i]]
@@ -923,7 +922,7 @@ class SMAX(MultiAgentEnv):
     def get_obs_unit_list(self, state: State) -> Observations:
         """Applies observation function to state."""
 
-        def get_features(i, j):
+        def get_features(i: jax.Array, j: jax.Array):
             """Get features of unit j as seen from unit i"""
             # Can just keep them symmetrical for now.
             # j here means 'the jth unit that is not i'
@@ -966,7 +965,7 @@ class SMAX(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0,))
     def get_avail_actions(self, state: State) -> AvailActions:
         @partial(jax.jit, static_argnums=(1,))
-        def get_individual_avail_actions(i, team):
+        def get_individual_avail_actions(i: jax.Array, team: int):
             num_actions = {0: self.num_ally_actions, 1: self.num_enemy_actions}[team]
             is_alive = state.unit_alive[i]
             mask = jnp.zeros((num_actions,), dtype=jnp.uint8)
@@ -1074,7 +1073,7 @@ class SMAX(MultiAgentEnv):
                 color = "blue" if i not in attacked_agents else "cornflowerblue"
                 c = Circle(
                     state.unit_positions[i],
-                    self.unit_type_radiuses[state.unit_types[i]],
+                    float(self.unit_type_radiuses[state.unit_types[i]]),
                     color=color,
                 )
                 ax.add_patch(c)
@@ -1095,7 +1094,7 @@ class SMAX(MultiAgentEnv):
                 color = "green" if idx not in attacked_agents else "limegreen"
                 c = Circle(
                     state.unit_positions[idx],
-                    self.unit_type_radiuses[state.unit_types[idx]],
+                    float(self.unit_type_radiuses[state.unit_types[idx]]),
                     color=color,
                 )
                 ax.add_patch(c)

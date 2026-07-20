@@ -55,7 +55,7 @@ class ReflectPositionDistribution(Distribution):
 
 class SurroundPositionDistribution(Distribution):
     @partial(jax.jit, static_argnums=(0,))
-    def generate(self, key):
+    def generate(self, key: PRNGKeyArray):
         # issue: want to randomly decide the centre and outside teams.
         # issue: don't know what that mean
         def draw_positions(key_, n_inside, n_outside):
@@ -124,7 +124,7 @@ class SurroundAndReflectPositionDistribution(Distribution):
             n_allies, n_enemies, map_width, map_height
         )
 
-    def generate(self, key):
+    def generate(self, key: PRNGKeyArray):
         key_draw, key_surround, key_reflect = jax.random.split(key, num=3)
         val = jax.random.uniform(key_draw)
         return jax.lax.select(
@@ -139,7 +139,7 @@ class UniformUnitTypeDistribution(Distribution):
         super().__init__(n_allies, n_enemies, map_width, map_height)
         self.n_unit_types = n_unit_types
 
-    def generate(self, key):
+    def generate(self, key: PRNGKeyArray):
         enemy_key, ally_key = jax.random.split(key)
         ally_unit_types = jax.random.categorical(
             ally_key,

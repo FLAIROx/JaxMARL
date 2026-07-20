@@ -61,10 +61,10 @@ class EnemySMAX(MultiAgentEnv):
         new_obs["world_state"] = obs["world_state"]
         return new_obs, State(state=state, enemy_policy_state=enemy_policy_state)
 
-    def get_enemy_actions(self, key, enemy_policy_state, enemy_obs):
+    def get_enemy_actions(self, key: PRNGKeyArray, enemy_policy_state, enemy_obs):
         raise NotImplementedError
 
-    def get_enemy_policy_initial_state(self, key):
+    def get_enemy_policy_initial_state(self, key: PRNGKeyArray):
         raise NotImplementedError
 
     @partial(jax.jit, static_argnums=(0, 4))
@@ -84,13 +84,13 @@ class EnemySMAX(MultiAgentEnv):
             action_key, state.enemy_policy_state, enemy_obs
         )
         enemy_actions = jnp.array([enemy_actions[i] for i in self.enemy_agents])
-        actions = jnp.array([actions[i] for i in self.agents])
+        actions_arr = jnp.array([actions[i] for i in self.agents])
         enemy_movement_actions, enemy_attack_actions = (
             self._env._decode_discrete_actions(enemy_actions)
         )
         if self._env.action_type == "continuous":
             cont_actions = jnp.zeros((len(self.all_agents), 4))
-            cont_actions = cont_actions.at[: self.num_allies].set(actions)
+            cont_actions = cont_actions.at[: self.num_allies].set(actions_arr)
             key, action_key = jax.random.split(key)
             ally_movement_actions, ally_attack_actions = (
                 self._env._decode_continuous_actions(
@@ -101,7 +101,7 @@ class EnemySMAX(MultiAgentEnv):
             ally_attack_actions = ally_attack_actions[: self.num_allies]
         else:
             ally_movement_actions, ally_attack_actions = (
-                self._env._decode_discrete_actions(actions)
+                self._env._decode_discrete_actions(actions_arr)
             )
 
         movement_actions = jnp.concatenate(
@@ -193,13 +193,13 @@ class HeuristicEnemySMAX(EnemySMAX):
             self._env, 1, shoot=self.enemy_shoots, attack_mode=self.attack_mode
         )
 
-    def get_enemy_policy_initial_state(self, key):
+    def get_enemy_policy_initial_state(self, key: PRNGKeyArray):
         return jax.tree.map(
             lambda *xs: jnp.stack(xs),
             *([get_heuristic_policy_initial_state()] * self.num_enemies),
         )
 
-    def get_enemy_actions(self, key, policy_state, enemy_obs):
+    def get_enemy_actions(self, key: PRNGKeyArray, policy_state, enemy_obs):
         heuristic_action_key = jax.random.split(key, num=self.num_enemies)
         enemy_actions, policy_state = jax.vmap(self.heuristic_policy)(
             heuristic_action_key, policy_state, enemy_obs
@@ -217,10 +217,10 @@ class LearnedPolicyEnemySMAX(EnemySMAX):
         self.policy = policy
         self.params = params
 
-    def get_enemy_policy_initial_state(self, key):
+    def get_enemy_policy_initial_state(self, key: PRNGKeyArray):
         return self.params
 
-    def get_enemy_actions(self, key, policy_state, enemy_obs):
+    def get_enemy_actions(self, key: PRNGKeyArray, policy_state, enemy_obs):
         pi, _ = self.policy.apply(policy_state, enemy_obs)
         enemy_actions = pi.sample(seed=key)
         enemy_actions = {
