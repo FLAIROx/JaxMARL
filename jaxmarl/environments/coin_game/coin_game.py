@@ -1,6 +1,5 @@
 from typing import List, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from flax import struct
@@ -23,20 +22,20 @@ class EnvState(BaseState):
     # From BaseState:
     #   step: Int[Array, ""]  -- current step within the inner episode
     #   done: Bool[Array, ""] -- True when the outer (meta) episode ends
-    red_pos: chex.Array
-    blue_pos: chex.Array
-    red_coin_pos: chex.Array
-    blue_coin_pos: chex.Array
-    outer_t: jnp.ndarray
+    red_pos: jax.Array
+    blue_pos: jax.Array
+    red_coin_pos: jax.Array
+    blue_coin_pos: jax.Array
+    outer_t: jax.Array
     # stats
-    red_coop: chex.Array
-    red_defect: chex.Array
-    blue_coop: chex.Array
-    blue_defect: chex.Array
-    counter: chex.Array  # 9
-    coop1: chex.Array  # 9
-    coop2: chex.Array  # 9
-    last_state: chex.Array  # 2
+    red_coop: jax.Array
+    red_defect: jax.Array
+    blue_coop: jax.Array
+    blue_defect: jax.Array
+    counter: jax.Array  # 9
+    coop1: jax.Array  # 9
+    coop2: jax.Array  # 9
+    last_state: jax.Array  # 2
 
 
 STATES = jnp.array(
@@ -88,12 +87,12 @@ class CoinGame(MultiAgentEnv):
         # helper functions
         def _update_stats(
             state: EnvState,
-            rr: jnp.ndarray,
-            rb: jnp.ndarray,
-            br: jnp.ndarray,
-            bb: jnp.ndarray,
-        ):
-            def state2idx(s: chex.Array) -> chex.Array:
+            rr: jax.Array,
+            rb: jax.Array,
+            br: jax.Array,
+            bb: jax.Array,
+        ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+            def state2idx(s: jax.Array) -> jax.Array:
                 idx = 0
                 idx = jnp.where((s == jnp.array([1, 1])).all(), 1, idx)
                 idx = jnp.where((s == jnp.array([1, 2])).all(), 2, idx)
@@ -149,7 +148,7 @@ class CoinGame(MultiAgentEnv):
             obs = {self.agents[0]: obs1, self.agents[1]: obs2}
             return obs
 
-        def _relative_position(state: EnvState) -> jnp.ndarray:
+        def _relative_position(state: EnvState) -> jax.Array:
             """Assume canonical agent is red player"""
             # (x) redplayer at (2, 2)
             # (y) redcoin at   (0 ,0)
@@ -480,9 +479,9 @@ class CoinGame(MultiAgentEnv):
         ax.set_yticks(jnp.arange(1, 4))
         ax.grid()
 
-        def _xy(pos: chex.Array) -> Tuple[float, float]:
-            pos = jnp.squeeze(pos)
-            return float(pos[0]), float(pos[1])
+        def _xy(pos: jax.Array) -> Tuple[float, float]:
+            squeezed = jnp.squeeze(pos)
+            return float(squeezed[0]), float(squeezed[1])
 
         red_pos = _xy(state.red_pos)
         blue_pos = _xy(state.blue_pos)
