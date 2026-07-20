@@ -1,5 +1,6 @@
 import math
 from functools import partial
+from typing import Optional
 
 import imageio
 import jax
@@ -69,26 +70,26 @@ class OvercookedV2Visualizer:
     tile_cache = {}
 
     def __init__(self, tile_size=TILE_PIXELS, subdivs=3):
-        self.window = None
+        self.window: Optional[Window] = None
 
         self.tile_size = tile_size
         self.subdivs = subdivs
 
-    def _lazy_init_window(self):
+    def _lazy_init_window(self) -> Window:
         if self.window is None:
             self.window = Window("Overcooked V2")
+        return self.window
 
     def show(self, block=False):
-        self._lazy_init_window()
-        self.window.show(block=block)
+        self._lazy_init_window().show(block=block)
 
     def render(self, state, agent_view_size=None):
         """Method for rendering the state in a window. Esp. useful for interactive mode."""
-        self._lazy_init_window()
+        window = self._lazy_init_window()
 
         img = self._render_state(state, agent_view_size)
 
-        self.window.show_img(img)
+        window.show_img(img)
 
     def animate(self, state_seq, filename="animation.gif", agent_view_size=None):
         """Animate a gif give a state sequence and save if to file."""
@@ -507,4 +508,5 @@ class OvercookedV2Visualizer:
         return big_image
 
     def close(self):
-        self.window.close()
+        if self.window is not None:
+            self.window.close()

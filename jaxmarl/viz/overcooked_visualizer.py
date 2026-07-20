@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 import numpy as np
 
@@ -24,15 +25,15 @@ class OvercookedVisualizer:
     tile_cache = {}
 
     def __init__(self):
-        self.window = None
+        self.window: Optional[Window] = None
 
-    def _lazy_init_window(self):
+    def _lazy_init_window(self) -> Window:
         if self.window is None:
             self.window = Window("minimax")
+        return self.window
 
     def show(self, block=False):
-        self._lazy_init_window()
-        self.window.show(block=block)
+        self._lazy_init_window().show(block=block)
 
     def render(self, agent_view_size, state, highlight=True, tile_size=TILE_PIXELS):
         """Method for rendering the state in a window. Esp. useful for interactive mode."""
@@ -61,7 +62,7 @@ class OvercookedVisualizer:
         imageio.mimsave(filename, frame_seq, "GIF", duration=0.5)
 
     def render_grid(self, grid, tile_size=TILE_PIXELS, k_rot90=0, agent_dir_idx=None):
-        self._lazy_init_window()
+        window = self._lazy_init_window()
 
         img = OvercookedVisualizer._render_grid(
             grid,
@@ -73,7 +74,7 @@ class OvercookedVisualizer:
         if k_rot90 > 0:
             img = np.rot90(img, k=k_rot90)
 
-        self.window.show_img(img)
+        window.show_img(img)
 
     def _render_state(
         self, agent_view_size, state, highlight=True, tile_size=TILE_PIXELS
@@ -81,7 +82,7 @@ class OvercookedVisualizer:
         """
         Render the state
         """
-        self._lazy_init_window()
+        window = self._lazy_init_window()
 
         padding = agent_view_size - 2  # show
         grid = np.asarray(state.maze_map[padding:-padding, padding:-padding, :])
@@ -126,7 +127,7 @@ class OvercookedVisualizer:
             agent_dir_idx=state.agent_dir_idx,
             agent_inv=state.agent_inv,
         )
-        self.window.show_img(img)
+        window.show_img(img)
 
     @classmethod
     def _render_obj(cls, obj, img):
@@ -414,4 +415,5 @@ class OvercookedVisualizer:
         return img
 
     def close(self):
-        self.window.close()
+        if self.window is not None:
+            self.window.close()
