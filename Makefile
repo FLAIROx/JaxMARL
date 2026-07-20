@@ -36,7 +36,7 @@ local-test:
 
 workflow-test:
 	# without -it flag; JAX_PLATFORMS=cpu prevents the CUDA plugin from segfaulting when no GPU driver is present
-	docker run --rm -e JAX_PLATFORMS=cpu -v ${PWD}:/home/workdir --shm-size 20G $(IMAGE) /bin/bash -c "pytest ./tests/"
+	docker run --rm -e JAX_PLATFORMS=cpu -v ${PWD}:/home/$(MYUSER) --shm-size 20G $(IMAGE) /bin/bash -c "pytest ./tests/"
 
 run-baseline-set:
 	$(DOCKER_RUN_DETACHED) python baselines/run_minimal_baseline_set.py $(ARGS)

@@ -14,7 +14,7 @@ USER ${MYUSER}
 
 # default workdir
 WORKDIR /home/${MYUSER}/
-COPY --chown=${MYUSER} --chmod=644 . .
+COPY --chown=${MYUSER} . .
 
 USER root
 
