@@ -1,6 +1,5 @@
 from typing import Optional, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from jaxtyping import PRNGKeyArray
@@ -109,8 +108,8 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=False,
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
             goal=g_idx,
         )
 
@@ -126,8 +125,8 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
     def _decode_continuous_action(
         self,
         a_idx: Optional[int],
-        action: chex.Array,
-    ) -> Tuple[chex.Array, chex.Array]:
+        action: jax.Array,
+    ) -> Tuple[jax.Array, jax.Array]:
         u = jnp.zeros((self.num_agents, self.dim_p))
         c = jnp.zeros((self.num_agents, self.dim_c))
         c = c.at[0].set(action[SPEAKER])
@@ -142,8 +141,8 @@ class SimpleSpeakerListenerMPE(SimpleMPE):
     def _decode_discrete_action(
         self,
         a_idx: Optional[int],
-        action: chex.Array,
-    ) -> Tuple[chex.Array, chex.Array]:
+        action: jax.Array,
+    ) -> Tuple[jax.Array, jax.Array]:
         u = jnp.zeros((self.num_agents, self.dim_p))
         c = jnp.zeros((self.num_agents, self.dim_c))
 

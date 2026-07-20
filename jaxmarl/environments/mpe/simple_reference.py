@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from jaxtyping import PRNGKeyArray
@@ -88,8 +87,8 @@ class SimpleReferenceMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=False,
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
             goal=g_idx,
         )
 
@@ -100,7 +99,7 @@ class SimpleReferenceMPE(SimpleMPE):
         state: State,
     ) -> Observations:
         @partial(jax.vmap, in_axes=(0, None))
-        def _common_stats(aidx: int, state: State):
+        def _common_stats(aidx: jax.Array, state: State):
             """Values needed in all observations"""
 
             landmark_pos = (
@@ -132,8 +131,8 @@ class SimpleReferenceMPE(SimpleMPE):
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_discrete_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         u = jnp.zeros((self.dim_p,))
         c = jnp.zeros((self.dim_c,))
         u_act = jnp.mod(action, 5)
@@ -150,7 +149,7 @@ class SimpleReferenceMPE(SimpleMPE):
         assert goal is not None
 
         @partial(jax.vmap, in_axes=(0, None))
-        def _agent(aidx, state):
+        def _agent(aidx: jax.Array, state: State):
             other_idx = (aidx + 1) % 2
             return -1 * jnp.linalg.norm(
                 state.p_pos[other_idx] - state.p_pos[self.num_agents + goal[other_idx]]

@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Optional, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 
@@ -144,8 +143,8 @@ class SimpleWorldCommMPE(SimpleMPE):
         return self.action_decoder(None, actions)  # type: ignore[arg-type]
 
     def _decode_discrete_action(
-        self, a_idx: Optional[int], actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: Optional[int], actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def u_decoder(a_idx, a):
             u = jnp.zeros((self.dim_p))
@@ -173,8 +172,8 @@ class SimpleWorldCommMPE(SimpleMPE):
         return u, c
 
     def _decode_continuous_action(
-        self, a_idx: Optional[int], actions: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: Optional[int], actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         @partial(jax.vmap, in_axes=[0, 0])
         def _set_u(a_idx, action):
             u = jnp.array([action[2] - action[1], action[4] - action[3]])
@@ -195,7 +194,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         """Returns observations of all agents"""
 
         @partial(jax.vmap, in_axes=(0, None))
-        def _in_forest(idx: int, state: State) -> chex.Array:
+        def _in_forest(idx: jax.Array, state: State) -> jax.Array:
             """Collision check for all forests with agent `idx`"""
             dist = jnp.linalg.norm(
                 state.p_pos[self.num_agents + self.num_obs + self.num_food :]
@@ -206,7 +205,7 @@ class SimpleWorldCommMPE(SimpleMPE):
             return dist < dist_min
 
         @partial(jax.vmap, in_axes=(0, None, None))
-        def _common_stats(aidx: int, forest: chex.Array, state: State):
+        def _common_stats(aidx: jax.Array, forest: jax.Array, state: State):
             """Values needed in all observations"""
 
             landmark_pos = (
@@ -301,7 +300,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         """Computes rewards for all agents"""
 
         @partial(jax.vmap, in_axes=[0, None])
-        def _reward(aidx: int, state: State):
+        def _reward(aidx: jax.Array, state: State):
             return jax.lax.cond(
                 aidx < self.num_adversaries,
                 self.adversary_reward,
@@ -312,7 +311,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         r = _reward(self.agent_range, state)
         return {agent: r[i] for i, agent in enumerate(self.agents)}
 
-    def agent_reward(self, aidx: int, state: State):
+    def agent_reward(self, aidx: jax.Array, state: State):
         """Reward for good agents."""
 
         @partial(jax.vmap, in_axes=(0,))
@@ -356,7 +355,7 @@ class SimpleWorldCommMPE(SimpleMPE):
         )
         return rew
 
-    def adversary_reward(self, aidx: int, state: State):
+    def adversary_reward(self, aidx: jax.Array, state: State):
         """Reward for adversary agents."""
 
         @partial(jax.vmap, in_axes=[0, 0, None, None])

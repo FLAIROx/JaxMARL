@@ -1,7 +1,6 @@
 from functools import partial
-from typing import Tuple
+from typing import Optional, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from flax import struct
@@ -29,8 +28,8 @@ OBS_COLOUR = jnp.array([[255, 0, 0, 0], [0, 255, 0, 0]])
 class CryptoState(State):
     """State for the simple crypto environment."""
 
-    goal_colour: chex.Array = None
-    private_key: chex.Array = None
+    goal_colour: Optional[jax.Array] = None
+    private_key: Optional[jax.Array] = None
 
 
 class SimpleCryptoMPE(SimpleMPE):
@@ -136,8 +135,8 @@ class SimpleCryptoMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=False,
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
             goal_colour=jnp.array(
                 OBS_COLOUR[g_idx], dtype=jnp.float32
             ).flatten(),  # set to float to be same as zoo env
@@ -148,8 +147,8 @@ class SimpleCryptoMPE(SimpleMPE):
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_continuous_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         """Communication action"""
         u = jnp.zeros((self.dim_p,))
         c = action
@@ -157,8 +156,8 @@ class SimpleCryptoMPE(SimpleMPE):
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_discrete_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         """Communication action"""
         u = jnp.zeros((self.dim_p,))
         c = jnp.zeros((self.dim_c,))
@@ -167,20 +166,23 @@ class SimpleCryptoMPE(SimpleMPE):
 
     def get_obs(self, state: CryptoState) -> Observations:
         goal_colour = state.goal_colour
+        private_key = state.private_key
+        assert goal_colour is not None
+        assert private_key is not None
         comm = state.c[SPEAKER_IDX]
 
         def _speaker():
             return jnp.concatenate(
                 [
                     goal_colour,
-                    state.private_key,
+                    private_key,
                 ]
             )
 
         def _listener():
             return jnp.concatenate(
                 [
-                    state.private_key.flatten(),
+                    private_key.flatten(),
                     comm,
                 ]
             )
@@ -192,6 +194,7 @@ class SimpleCryptoMPE(SimpleMPE):
         return obs
 
     def rewards(self, state: CryptoState) -> Rewards:
+        assert state.goal_colour is not None
         comm_diff = jnp.sum(
             jnp.square(jnp.subtract(state.c, state.goal_colour)), axis=1
         )  # check axis

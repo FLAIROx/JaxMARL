@@ -7,7 +7,6 @@ TODO: viz for communication env, e.g. crypto
 from functools import partial
 from typing import Dict, Optional, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from flax import struct
@@ -43,15 +42,15 @@ class State(BaseState):
     """Basic MPE State
 
     From BaseState:
-        done: chex.Array  # bool
-        step: int  # current step
+        done: jax.Array  # bool
+        step: jax.Array  # current step
 
     """
 
-    p_pos: chex.Array  # [num_entities, [x, y]]
-    p_vel: chex.Array  # [n, [x, y]]
-    c: chex.Array  # communication state [num_agents, [dim_c]]
-    goal: Optional[chex.Array] = (
+    p_pos: jax.Array  # [num_entities, [x, y]]
+    p_vel: jax.Array  # [n, [x, y]]
+    c: jax.Array  # communication state [num_agents, [dim_c]]
+    goal: Optional[jax.Array] = (
         None  # index of target landmark, used in: SimpleSpeakerListenerMPE, SimpleReferenceMPE, SimplePushMPE, SimpleAdversaryMPE
     )
 
@@ -314,8 +313,8 @@ class SimpleMPE(MultiAgentEnv):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=False,
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
         )
 
         return self.get_obs(state), state
@@ -325,7 +324,7 @@ class SimpleMPE(MultiAgentEnv):
         """Return dictionary of agent observations"""
 
         @partial(jax.vmap, in_axes=[0, None])
-        def _observation(aidx: int, state: State) -> jnp.ndarray:
+        def _observation(aidx: jax.Array, state: State) -> jax.Array:
             """Return observation for agent i."""
             landmark_rel_pos = state.p_pos[self.num_agents :] - state.p_pos[aidx]
 
@@ -340,7 +339,7 @@ class SimpleMPE(MultiAgentEnv):
         """Assign rewards for all agents"""
 
         @partial(jax.vmap, in_axes=[0, None])
-        def _reward(aidx: int, state: State):
+        def _reward(aidx: jax.Array, state: State):
             return -1 * jnp.sum(
                 jnp.square(state.p_pos[aidx] - state.p_pos[self.num_agents :])
             )
@@ -348,19 +347,19 @@ class SimpleMPE(MultiAgentEnv):
         r = _reward(self.agent_range, state)
         return {agent: r[i] for i, agent in enumerate(self.agents)}
 
-    def set_actions(self, actions: Actions) -> Tuple[chex.Array, chex.Array]:
+    def set_actions(self, actions: Actions) -> Tuple[jax.Array, jax.Array]:
         """Extract u and c actions for all agents from actions Dict."""
 
-        actions = jnp.array([actions[i] for i in self.agents]).reshape(
+        actions_arr = jnp.array([actions[i] for i in self.agents]).reshape(
             (self.num_agents, -1)
         )
 
-        return self.action_decoder(self.agent_range, actions)
+        return self.action_decoder(self.agent_range, actions_arr)
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_continuous_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         u = jnp.array([action[2] - action[1], action[4] - action[3]])
         u = u * self.accel[a_idx] * self.moveable[a_idx]
         c = action[5:]
@@ -368,8 +367,8 @@ class SimpleMPE(MultiAgentEnv):
 
     @partial(jax.vmap, in_axes=[None, 0, 0])
     def _decode_discrete_action(
-        self, a_idx: int, action: chex.Array
-    ) -> Tuple[chex.Array, chex.Array]:
+        self, a_idx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         u = jnp.zeros((self.dim_p,))
         idx = jax.lax.select(action <= 2, 0, 1)
         u_val = jax.lax.select(jnp.mod(action, 2) == 0, 1.0, -1.0) * (action != 0)
@@ -377,7 +376,7 @@ class SimpleMPE(MultiAgentEnv):
         u = u * self.accel[a_idx] * self.moveable[a_idx]
         return u, jnp.zeros((self.dim_c,))
 
-    def _world_step(self, key: PRNGKeyArray, state: State, u: chex.Array):
+    def _world_step(self, key: PRNGKeyArray, state: State, u: jax.Array):
         p_force = jnp.zeros((self.num_agents, 2))
 
         # apply agent physical controls
@@ -402,8 +401,8 @@ class SimpleMPE(MultiAgentEnv):
 
     @partial(jax.vmap, in_axes=[None, 0, 0, 0, 0])
     def _apply_comm_action(
-        self, key: PRNGKeyArray, c: chex.Array, c_noise: int, silent: int
-    ) -> chex.Array:
+        self, key: PRNGKeyArray, c: jax.Array, c_noise: jax.Array, silent: jax.Array
+    ) -> jax.Array:
         silence = jnp.zeros(c.shape)
         noise = jax.random.normal(key, shape=c.shape) * c_noise
         return jax.lax.select(silent, silence, c + noise)
@@ -413,21 +412,21 @@ class SimpleMPE(MultiAgentEnv):
     def _apply_action_force(
         self,
         key: PRNGKeyArray,
-        p_force: chex.Array,
-        u: chex.Array,
-        u_noise: int,
-        moveable: bool,
+        p_force: jax.Array,
+        u: jax.Array,
+        u_noise: jax.Array,
+        moveable: jax.Array,
     ):
         noise = jax.random.normal(key, shape=u.shape) * u_noise
         return jax.lax.select(moveable, u + noise, p_force)
 
-    def _apply_environment_force(self, p_force_all: chex.Array, state: State):
+    def _apply_environment_force(self, p_force_all: jax.Array, state: State):
         """gather physical forces acting on entities"""
 
         @partial(jax.vmap, in_axes=[0])
-        def __env_force_outer(idx: int):
+        def __env_force_outer(idx: jax.Array):
             @partial(jax.vmap, in_axes=[None, 0])
-            def __env_force_inner(idx_a: int, idx_b: int):
+            def __env_force_inner(idx_a: jax.Array, idx_b: jax.Array):
                 skip = idx_b <= idx_a
                 l_a = jnp.zeros((2, 2))
 
@@ -469,7 +468,7 @@ class SimpleMPE(MultiAgentEnv):
         return p_pos, p_vel
 
     # get collision forces for any contact between two entities BUG
-    def _get_collision_force(self, idx_a: int, idx_b: int, state: State):
+    def _get_collision_force(self, idx_a: jax.Array, idx_b: jax.Array, state: State):
         dist_min = self.rad[idx_a] + self.rad[idx_b]
         delta_pos = state.p_pos[idx_a] - state.p_pos[idx_b]
 
@@ -508,7 +507,7 @@ class SimpleMPE(MultiAgentEnv):
         return self.classes
 
     ### === UTILITIES === ###
-    def is_collision(self, a: int, b: int, state: State):
+    def is_collision(self, a: jax.Array, b: jax.Array, state: State):
         """check if two entities are colliding"""
         dist_min = self.rad[a] + self.rad[b]
         delta_pos = state.p_pos[a] - state.p_pos[b]
@@ -516,7 +515,7 @@ class SimpleMPE(MultiAgentEnv):
         return (dist < dist_min) & (self.collide[a] & self.collide[b]) & (a != b)
 
     @partial(jax.vmap, in_axes=(None, 0))
-    def map_bounds_reward(self, x: float):
+    def map_bounds_reward(self, x: jax.Array):
         """vmap over x, y coodinates"""
         w = x < 0.9
         m = x < 1.0

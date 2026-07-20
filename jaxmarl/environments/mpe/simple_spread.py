@@ -1,6 +1,5 @@
 from functools import partial
 
-import chex
 import jax
 import jax.numpy as jnp
 
@@ -66,7 +65,7 @@ class SimpleSpreadMPE(SimpleMPE):
 
     def get_obs(self, state: State) -> Observations:
         @partial(jax.vmap, in_axes=(0))
-        def _common_stats(aidx: int):
+        def _common_stats(aidx: jax.Array):
             """Values needed in all observations"""
 
             landmark_pos = (
@@ -107,7 +106,7 @@ class SimpleSpreadMPE(SimpleMPE):
 
     def rewards(self, state: State) -> Rewards:
         @partial(jax.vmap, in_axes=(0, None))
-        def _collisions(agent_idx: int, other_idx: int):
+        def _collisions(agent_idx: jax.Array, other_idx: jax.Array):
             return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
                 agent_idx,
                 other_idx,
@@ -119,11 +118,11 @@ class SimpleSpreadMPE(SimpleMPE):
             self.agent_range,
         )  # [agent, agent, collison]
 
-        def _agent_rew(aidx: int, collisions: chex.Array):
+        def _agent_rew(aidx: int, collisions: jax.Array):
             rew = -1 * jnp.sum(collisions[aidx])
             return rew
 
-        def _land(land_pos: chex.Array):
+        def _land(land_pos: jax.Array):
             d = state.p_pos[: self.num_agents] - land_pos
             return -1 * jnp.min(jnp.linalg.norm(d, axis=1))
 

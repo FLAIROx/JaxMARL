@@ -89,8 +89,8 @@ class SimpleAdversaryMPE(SimpleMPE):
             p_pos=p_pos,
             p_vel=jnp.zeros((self.num_entities, self.dim_p)),
             c=jnp.zeros((self.num_agents, self.dim_c)),
-            done=False,
-            step=0,
+            done=jnp.array(False),
+            step=jnp.array(0),
             goal=g_idx,
         )
 
@@ -98,7 +98,7 @@ class SimpleAdversaryMPE(SimpleMPE):
 
     def get_obs(self, state: State) -> Observations:
         @partial(jax.vmap, in_axes=(0, None))
-        def _common_stats(aidx, state: State):
+        def _common_stats(aidx: jax.Array, state: State):
             """Values needed in all observations"""
 
             landmark_pos = (

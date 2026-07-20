@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 from jaxtyping import PRNGKeyArray
@@ -138,7 +137,7 @@ class SimpleFacmacMPE(SimpleMPE):
 
     def rewards(self, state: State) -> Rewards:
         @partial(jax.vmap, in_axes=(0, None))
-        def _collisions(agent_idx: int, other_idx: int):
+        def _collisions(agent_idx: jax.Array, other_idx: jax.Array):
             return jax.vmap(self.is_collision, in_axes=(None, 0, None))(
                 agent_idx,
                 other_idx,
@@ -150,7 +149,7 @@ class SimpleFacmacMPE(SimpleMPE):
             jnp.arange(self.num_adversaries),
         )  # [agent, adversary, collison]
 
-        def _good(aidx: int, collisions: chex.Array):
+        def _good(aidx: int, collisions: jax.Array):
             rew = -10 * jnp.sum(collisions[aidx])
 
             mr = jnp.sum(self.map_bounds_reward(jnp.abs(state.p_pos[aidx])))
@@ -275,7 +274,7 @@ class SimpleFacmacMPE(SimpleMPE):
 
     def get_obs(self, state: State) -> Observations:
         @partial(jax.vmap, in_axes=(0))
-        def _common_stats(aidx):
+        def _common_stats(aidx: jax.Array):
             """Values needed in all observations"""
 
             landmark_pos = (
@@ -341,7 +340,7 @@ class SimpleFacmacMPE(SimpleMPE):
 
     def get_world_state(self, state: State):
         @partial(jax.vmap, in_axes=(0))
-        def _common_stats(aidx):
+        def _common_stats(aidx: jax.Array):
             """Values needed in all observations"""
 
             landmark_pos = (
