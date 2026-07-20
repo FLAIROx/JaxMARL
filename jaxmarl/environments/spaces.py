@@ -91,8 +91,8 @@ class Box(Space):
 
     def __init__(
         self,
-        low: float,
-        high: float,
+        low: jax.typing.ArrayLike,
+        high: jax.typing.ArrayLike,
         shape: tuple[int, ...],
         dtype: jnp.dtype = jnp.float32,
     ):
