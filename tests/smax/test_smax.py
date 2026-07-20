@@ -538,18 +538,36 @@ def test_obs_function(do_jit):
         key = jax.random.PRNGKey(0)
         key, key_reset = jax.random.split(key)
         env, obs, state = create_env(key_reset)
+        # Pin the unit positions rather than relying on the ones drawn at reset.
+        # The reset draw differs between JAX PRNG implementations (the
+        # jax_threefry_partitionable default flipped in newer JAX), which made
+        # the expected observations below depend on the installed JAX version.
+        # Allies are clustered around (8, 16) and enemies 16 units to their
+        # right, so the two teams stay outside each other's sight range (4.0).
+        ally_positions = jnp.array(
+            [[8.0, 16.0], [9.0, 17.0], [8.0, 18.0], [7.0, 17.0], [9.0, 15.0]]
+        )
+        start_positions = jnp.concatenate(
+            [ally_positions, ally_positions + jnp.array([16.0, 0.0])]
+        )
+        state = state.replace(unit_positions=start_positions)
+        obs = env.get_obs(state)
+
         first_enemy_idx = (env.num_allies - 1) * len(env.unit_features)
+        # ally_0's first observed unit is ally_1, one unit up and right of it,
+        # scaled by the sight range of 4.0
         assert jnp.allclose(
             obs["ally_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, 0.547233, -0.20625567, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.25, 0.25, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["ally_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
             jnp.zeros((len(env.unit_features),)),
         )
+        # enemies count in reverse, so enemy_0's first observed unit is enemy_4
         assert jnp.allclose(
             obs["enemy_0"][0 : len(env.unit_features)],
-            jnp.array([1.0, -0.3168292, -0.4374621, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+            jnp.array([1.0, 0.25, -0.25, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
         )
         assert jnp.allclose(
             obs["enemy_0"][first_enemy_idx : first_enemy_idx + len(env.unit_features)],
