@@ -25,7 +25,7 @@ class InteractiveOvercookedV2:
     def _run(self):
         self._reset()
 
-        self.viz.window.reg_key_handler(self._handle_input)
+        self.viz._lazy_init_window().reg_key_handler(self._handle_input)
         self.viz.show(block=True)
 
     def _handle_input(self, event):
@@ -43,7 +43,7 @@ class InteractiveOvercookedV2:
 
         match event.key:
             case "escape":
-                self.viz.window.close()
+                self.viz.close()
                 return
             case "backspace":
                 self._reset()

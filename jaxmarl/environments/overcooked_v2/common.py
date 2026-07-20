@@ -159,8 +159,8 @@ DIR_TO_VEC = jnp.array(
 
 @chex.dataclass
 class Position:
-    x: jnp.ndarray
-    y: jnp.ndarray
+    x: jax.Array
+    y: jax.Array
 
     @staticmethod
     def from_tuple(t):
@@ -195,8 +195,8 @@ class Position:
 @chex.dataclass
 class Agent:
     pos: Position
-    dir: jnp.ndarray
-    inventory: jnp.ndarray
+    dir: jax.Array
+    inventory: jax.Array
 
     def get_fwd_pos(self):
         return self.pos.move(self.dir)

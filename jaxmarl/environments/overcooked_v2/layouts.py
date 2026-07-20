@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -275,7 +275,7 @@ class Layout:
         row_lens = [len(row) for row in rows]
         static_objects = np.zeros((len(rows), max(row_lens)), dtype=int)
 
-        char_to_static_item = {
+        char_to_static_item: Dict[str, int] = {
             " ": StaticObject.EMPTY,
             "W": StaticObject.WALL,
             "X": StaticObject.GOAL,
