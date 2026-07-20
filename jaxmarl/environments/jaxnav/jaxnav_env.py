@@ -3,9 +3,8 @@
 """
 
 from functools import partial
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
-import chex
 import jax
 import jax.numpy as jnp
 import matplotlib.axes._axes as axes
@@ -35,8 +34,8 @@ REWARD_COMPONENT_DENSE = 1
 
 @struct.dataclass
 class Reward:
-    sparse: jnp.ndarray
-    dense: jnp.ndarray
+    sparse: jax.Array
+    dense: jax.Array
 
 
 def listify_reward(
@@ -53,27 +52,29 @@ def listify_reward(
 
 @struct.dataclass
 class State(BaseState):
-    pos: chex.Array  # [n, [x, y, theta]]
-    theta: chex.Array  # [n, theta]
-    vel: chex.Array  # [n, [speed, omega]]
-    done: chex.Array  # [n, bool] whether an agent has terminated
-    term: chex.Array  # [n, bool] whether an agent acted in this step
-    goal_reached: chex.Array  # [n, bool] whether an agent has reached goal
-    move_term: chex.Array  # [n, bool] whether an agent has crashed
+    pos: jax.Array  # [n, [x, y, theta]]
+    theta: jax.Array  # [n, theta]
+    vel: jax.Array  # [n, [speed, omega]]
+    done: jax.Array  # [n, bool] whether an agent has terminated
+    term: jax.Array  # [n, bool] whether an agent acted in this step
+    goal_reached: jax.Array  # [n, bool] whether an agent has reached goal
+    move_term: jax.Array  # [n, bool] whether an agent has crashed
     step: int  # step count
     ep_done: bool  # whether epsiode has terminated
-    goal: chex.Array  # [n, x, y]
-    map_data: chex.Array  # occupancy grid for environment map
-    rew_lambda: float  # linear interpolation between individual and team rewards
+    goal: jax.Array  # [n, x, y]
+    map_data: jax.Array  # occupancy grid for environment map
+    rew_lambda: Union[
+        float, jax.Array
+    ]  # linear interpolation between individual and team rewards
 
 
 @struct.dataclass
 class EnvInstance:
-    agent_pos: chex.Array
-    agent_theta: chex.Array
-    goal_pos: chex.Array
-    map_data: chex.Array
-    rew_lambda: chex.Array
+    agent_pos: jax.Array
+    agent_theta: jax.Array
+    goal_pos: jax.Array
+    map_data: jax.Array
+    rew_lambda: jax.Array
 
 
 ### ---- Discrete action constants ----
@@ -100,7 +101,7 @@ DISCRETE_ACTS = jnp.array(
 
 
 @partial(jax.vmap, in_axes=[0])
-def discrete_act_map(action: int) -> jnp.ndarray:
+def discrete_act_map(action: jax.Array) -> jax.Array:
     print("action", action, action.shape)
     return DISCRETE_ACTS[action]
 
@@ -401,7 +402,7 @@ class JaxNav(MultiAgentEnv):
         else:
             return obs, agent_states, rew, dones, info
 
-    def _lidar_sense(self, idx: int, state: State) -> chex.Array:
+    def _lidar_sense(self, idx: jax.Array, state: State) -> jax.Array:
         """Return observation for an agent given the current world state"""
 
         pos = state.pos[idx]
@@ -447,7 +448,7 @@ class JaxNav(MultiAgentEnv):
     ):
         """Compute lidar collisions with other robots, vectorised across other agent indicies
         Returns:
-            chex.Array: index of lidar particle for which the hit occured, direction to goal in global frame,
+            jax.Array: index of lidar particle for which the hit occured, direction to goal in global frame,
                         distance to goal
         """
 
@@ -502,12 +503,12 @@ class JaxNav(MultiAgentEnv):
 
     @partial(jax.vmap, in_axes=(None, 0, 0, None))
     def _check_map_collisions(
-        self, pos: chex.Array, theta: chex.Array, map_data: chex.Array
-    ) -> bool:
+        self, pos: jax.Array, theta: jax.Array, map_data: jax.Array
+    ) -> jax.Array:
         return self._map_obj.check_agent_map_collision(pos, theta, map_data)
 
     @partial(jax.vmap, in_axes=(None, 0, 0))
-    def _check_goal_reached(self, pos: chex.Array, goal_pos: chex.Array) -> bool:
+    def _check_goal_reached(self, pos: jax.Array, goal_pos: jax.Array) -> jax.Array:
         return jnp.sqrt(jnp.sum(jnp.subtract(pos, goal_pos) ** 2)) <= self.goal_radius
 
     @partial(jax.jit, static_argnums=[0])
@@ -516,14 +517,14 @@ class JaxNav(MultiAgentEnv):
         return {a: obs_batch[i] for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
-    def _get_obs(self, state: State) -> chex.Array:
+    def _get_obs(self, state: State) -> jax.Array:
         """Return observation for an agent given the current world state
 
         obs: [lidar (num lidar beams), speeds (2), goal (2), lambda (1)]
         """
 
         @partial(jax.vmap, in_axes=[0, None])
-        def _observation(idx: int, state: State) -> jnp.ndarray:
+        def _observation(idx: jax.Array, state: State) -> jax.Array:
             """Return observation for agent i."""
 
             lidar = self._lidar_sense(idx, state).squeeze()
@@ -555,7 +556,7 @@ class JaxNav(MultiAgentEnv):
         return _observation(self.agent_range, state)
 
     @partial(jax.jit, static_argnums=[0])
-    def get_world_state(self, state: State) -> chex.Array:
+    def get_world_state(self, state: State) -> jax.Array:
         walls = state.map_data.at[1:-1, 1:-1].get().flatten()
         pos = (
             state.pos / jnp.array([self._map_obj.width, self._map_obj.height]) - 0.5
@@ -578,12 +579,12 @@ class JaxNav(MultiAgentEnv):
     @partial(jax.vmap, in_axes=(None, 0, 0, 0, 0, 0))
     def update_state(
         self,
-        pos: chex.Array,
-        theta: chex.Array,
-        speed: chex.Array,
-        action: chex.Array,
-        done: chex.Array,
-    ) -> Tuple[chex.Array, chex.Array, chex.Array]:
+        pos: jax.Array,
+        theta: jax.Array,
+        speed: jax.Array,
+        action: jax.Array,
+        done: jax.Array,
+    ) -> Tuple[jax.Array, jax.Array, jax.Array]:
         """Update agent's state, if `done` the current position and velocity are returned"""
         if self.evaporating:
             out_done = (
@@ -691,8 +692,8 @@ class JaxNav(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=(0))
     def reset_to_level(
-        self, level: Tuple[chex.Array, chex.Array]
-    ) -> Tuple[chex.Array, State]:
+        self, level: Tuple[jax.Array, jax.Array]
+    ) -> Tuple[Observations, State]:
         print(
             " ** WARNING ** reset_to_level in JaxNav is deprecated, use set_state instead"
         )
@@ -718,7 +719,7 @@ class JaxNav(MultiAgentEnv):
         self,
         key: PRNGKeyArray,
         state: State,
-        actions: chex.Array,
+        actions: jax.Array,
         level: Tuple,
     ):
         """Resets to PLR level rather than a random one."""
@@ -737,7 +738,7 @@ class JaxNav(MultiAgentEnv):
         return obs, state, rewards, dones, infos
 
     @partial(jax.jit, static_argnums=[0])
-    def unnormalise_obs(self, obs_batch: chex.Array) -> chex.Array:
+    def unnormalise_obs(self, obs_batch: jax.Array) -> jax.Array:
         lidar = self.unnormalise_lidar(obs_batch[:, : self.lidar_num_beams])
         vel_obs = (
             obs_batch[:, self.lidar_num_beams : self.lidar_num_beams + 2]
@@ -821,9 +822,9 @@ class JaxNav(MultiAgentEnv):
 
         @partial(jax.vmap, in_axes=(0, 0, 0, None))
         def lidar_scatter(
-            pos: chex.Array,
-            theta: chex.Array,
-            lidar_ranges: chex.Array,
+            pos: jax.Array,
+            theta: jax.Array,
+            lidar_ranges: jax.Array,
             idx,
         ):
             """Return lidar ranges as points ready to be plotted with `ax.scatter()`
@@ -831,7 +832,7 @@ class JaxNav(MultiAgentEnv):
             Args:
                 state (EnvSingleAState): agent state
                 params (EnvParams): environment parameters
-                ranges (chex.Array): reported lidar ranges
+                ranges (jax.Array): reported lidar ranges
 
             Returns:
                 Tuple[List, List]: lists of x and y coordinates respectively of lidar ranges for plotting
@@ -917,5 +918,6 @@ class JaxNav(MultiAgentEnv):
             ax.set_xticks([])
             ax.set_yticks([])
 
+        assert ax.figure is not None
         canvas = ax.figure.canvas
         canvas.draw()

@@ -25,6 +25,7 @@ def make_map(
         )
     if map_id == "Grid-Buffer":
         return GridMapFromBuffer(num_agents=num_agents, rad=rad, **map_kwargs)
+    raise ValueError(f"Map: {map_id} not registered!")
 
 
 registered_maps = [

@@ -15,9 +15,9 @@ class JaxNavVisualizer(object):
         env: JaxNav,
         obs_seq: List,
         state_seq: List[State],
-        reward_seq: List = None,
+        reward_seq: Optional[List] = None,
         done_frames=None,
-        title_text: str = None,
+        title_text: Optional[str] = None,
         plot_lidar=True,
         plot_path=True,
         plot_agent=True,
@@ -72,7 +72,7 @@ class JaxNavVisualizer(object):
             plt.pause(3)
             plt.close()
 
-    def init(self):
+    def init(self) -> list:
         self.env.init_render(
             self.ax,
             self.state_seq[0],
@@ -81,8 +81,9 @@ class JaxNavVisualizer(object):
             agent=self.plot_agent,
             goal=False,
         )
+        return []
 
-    def update(self, frame):
+    def update(self, frame) -> list:
         self.ax.cla()
         if self.plot_path:
             for a in range(self.env.num_agents):
@@ -107,6 +108,7 @@ class JaxNavVisualizer(object):
         txt_to_plot.append(f"Time: {frame * self.env.dt:.2f} s")
         # self.ax.text(0.05, 0.95, f"Time: {frame*self.env.dt:.2f} s", transform=self.ax.transAxes, fontsize=12, verticalalignment='top', c='w')
         if self.plot_reward:
+            assert self.reward_seq is not None
             self.reward += self.reward_seq[frame]
             txt_to_plot.append(f"R: {self.reward:.2f}")
         if self.title_text is not None:
@@ -127,3 +129,4 @@ class JaxNavVisualizer(object):
         #         y = jnp.concatenate([self.state_seq[plot_frame].pos[a, 1][None], self.state_seq[plot_frame].goal[a, 1][None]])                self.ax.plot(,
         #                      jnp.concatenate([self.state_seq[plot_frame].pos[a, 1][None], self.state_seq[plot_frame].goal[a, 1][None]]),
         #                      color='gray', alpha=0.4)
+        return []

@@ -4,18 +4,18 @@ from enum import IntEnum
 from functools import partial
 from typing import List, Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 import matplotlib.axes._axes as axes
 import numpy as np
+from jaxtyping import PRNGKeyArray
 
 import jaxmarl.environments.jaxnav.jaxnav_graph_utils as _graph_utils
 
 from .map import Map
 
 
-def rotation_matrix(theta: float) -> jnp.ndarray:
+def rotation_matrix(theta: float) -> jax.Array:
     """Rotate about the z axis. Assume theta in radians"""
     return jnp.array(
         [[jnp.cos(theta), -jnp.sin(theta)], [jnp.sin(theta), jnp.cos(theta)]]
@@ -65,7 +65,7 @@ class GridMapCircleAgents(Map):
         self.n_clutter = jnp.floor(self.free_grids * self.fill).astype(int)
 
     @partial(jax.jit, static_argnums=[0])
-    def sample_test_case(self, rng: chex.PRNGKey):
+    def sample_test_case(self, rng: PRNGKeyArray):
 
         return jax.lax.switch(
             self.sample_test_case_type,
@@ -76,7 +76,7 @@ class GridMapCircleAgents(Map):
             rng,
         )
 
-    def grid_sample_test_case(self, key):
+    def grid_sample_test_case(self, key: PRNGKeyArray):
         """NOTE this won't throw an error if it's not possible, will just loop forever"""
         assert self.cell_size == 1.0
 
@@ -307,13 +307,13 @@ class GridMapCircleAgents(Map):
         return map_grid.at[pos[1], pos[0]].get() == 1
 
     def check_all_agent_agent_collisions(
-        self, agent_positions: chex.Array, agent_theta: chex.Array
-    ) -> chex.Array:
+        self, agent_positions: jax.Array, agent_theta: jax.Array
+    ) -> jax.Array:
 
         @partial(jax.vmap, in_axes=(0, None))
         def _check_agent_collisions(
-            agent_idx: int, agent_positions: chex.Array
-        ) -> bool:
+            agent_idx: jax.Array, agent_positions: jax.Array
+        ) -> jax.Array:
             # TODO this function is a little clunky FIX
             z = jnp.zeros(agent_positions.shape)
             z = z.at[agent_idx, :].set(jnp.ones(2) * self.rad * 2.1)
@@ -324,7 +324,7 @@ class GridMapCircleAgents(Map):
             )
 
         return _check_agent_collisions(
-            jnp.arange(agent_positions.shape[0]), agent_positions
+            jnp.arange(jnp.shape(agent_positions)[0]), agent_positions
         )
 
     @partial(jax.jit, static_argnums=[0])
@@ -456,12 +456,13 @@ class GridMapCircleAgents(Map):
         return valid, jax.lax.select(valid, d, 0.0)
 
     ### === VISUALIZATION === ###
-    def plot_map(self, ax: axes.Axes, map_grid: jnp.ndarray):
+    def plot_map(self, ax: axes.Axes, map_grid: jax.Array):
         """Plot map grid and scale xticks"""
         # print('plotting map of size ', map_grid.shape, 'with cell size', self.cell_size)
+        map_height, map_width = jnp.shape(map_grid)
         ax.imshow(
             map_grid,
-            extent=(0, map_grid.shape[1], 0, map_grid.shape[0]),
+            extent=(0, map_width, 0, map_height),
             origin="lower",
             cmap="binary",
             zorder=0,
@@ -471,8 +472,8 @@ class GridMapCircleAgents(Map):
 
         # set ticks to be scaled for grid size
         step_size = 1 / self.cell_size
-        x_range = jnp.arange(0, map_grid.shape[1] + 1, step_size)
-        y_range = jnp.arange(0, map_grid.shape[0] + 1, step_size)
+        x_range = jnp.arange(0, map_width + 1, step_size)
+        y_range = jnp.arange(0, map_height + 1, step_size)
         ax.set_xticks(x_range)
         ax.set_xticklabels(x_range * self.cell_size)
         ax.set_yticks(y_range)
@@ -485,10 +486,10 @@ class GridMapCircleAgents(Map):
     def plot_agents(
         self,
         ax: axes.Axes,
-        pos: jnp.ndarray,
-        theta: jnp.ndarray,
-        goal: jnp.ndarray,
-        done: jnp.ndarray,
+        pos: jax.Array,
+        theta: jax.Array,
+        goal: jax.Array,
+        done: jax.Array,
         plot_line_to_goal=True,
         colour_agents_by_idx=False,
         rad=None,
@@ -510,7 +511,8 @@ class GridMapCircleAgents(Map):
             "grey",
             "cyan",
         ]
-        if (done.shape[0] > len(colors)) and colour_agents_by_idx:
+        num_agents = jnp.shape(done)[0]
+        if (num_agents > len(colors)) and colour_agents_by_idx:
             print("Too many agents to colour by index")
             colour_agents_by_idx = False
 
@@ -518,8 +520,10 @@ class GridMapCircleAgents(Map):
         if colour_agents_by_idx:
             colours = ["black" if done else colors[i] for i, done in enumerate(done)]
 
-        for i in range(done.shape[0]):
-            circle = Circle(pos[i], rad, facecolor=colours[i])
+        for i in range(num_agents):
+            circle = Circle(
+                (float(pos[i][0]), float(pos[i][1])), rad, facecolor=colours[i]
+            )
             ax.add_patch(circle)
 
             x = pos[i][0] + rad * np.cos(theta[i])
@@ -537,8 +541,8 @@ class GridMapCircleAgents(Map):
     def plot_agent_path(
         self,
         ax: axes.Axes,
-        x_seq: jnp.ndarray,
-        y_seq: jnp.ndarray,
+        x_seq: jax.Array,
+        y_seq: jax.Array,
     ):
         """Plot agent path"""
         x = self.scale_coords(x_seq)
@@ -771,8 +775,8 @@ class GridMapPolygonAgents(GridMapCircleAgents):
 
     @partial(jax.jit, static_argnums=[0])
     def check_all_agent_agent_collisions(
-        self, agent_positions: chex.Array, agent_theta: chex.Array, agent_coords=None
-    ) -> chex.Array:
+        self, agent_positions: jax.Array, agent_theta: jax.Array, agent_coords=None
+    ) -> jax.Array:
         """Use Separating Axis Theorem (SAT) to check for collisions between convex polygon agents.
 
         Separating Axis Theorem TL;DR: Searches for a line that separates two convex polygons. If no line is found, the polygons are colliding.
@@ -880,10 +884,10 @@ class GridMapPolygonAgents(GridMapCircleAgents):
     def plot_agents(
         self,
         ax: axes.Axes,
-        pos: jnp.ndarray,
-        theta: jnp.ndarray,
-        goal: jnp.ndarray,
-        done: jnp.ndarray,
+        pos: jax.Array,
+        theta: jax.Array,
+        goal: jax.Array,
+        done: jax.Array,
         plot_line_to_goal=True,
         agent_coords=None,
         middle_line=None,
@@ -908,7 +912,8 @@ class GridMapPolygonAgents(GridMapCircleAgents):
             "grey",
             "cyan",
         ]
-        if (done.shape[0] > len(colors)) and colour_agents_by_idx:
+        num_agents = jnp.shape(done)[0]
+        if (num_agents > len(colors)) and colour_agents_by_idx:
             print("Too many agents to colour by index")
             colour_agents_by_idx = False
 
@@ -916,7 +921,7 @@ class GridMapPolygonAgents(GridMapCircleAgents):
         if colour_agents_by_idx:
             colours = ["black" if done else colors[i] for i, done in enumerate(done)]
 
-        for i in range(done.shape[0]):
+        for i in range(num_agents):
             transformed_coords = (
                 self.transform_coords(pos[i], theta[i], agent_coords) / self.cell_size
             )
@@ -1029,7 +1034,7 @@ class GridMapBarn(GridMapPolygonAgents):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def sample_test_case(self, rng: chex.PRNGKey):
+    def sample_test_case(self, rng: PRNGKeyArray):
 
         return self.sample_barn_test_case(rng)
 

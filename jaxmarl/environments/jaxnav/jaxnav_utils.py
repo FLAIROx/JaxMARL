@@ -2,26 +2,25 @@
 Utility functions for simulators
 """
 
-import chex
 import jax
 import jax.numpy as jnp
 
 
 ### --- MATHS UTILS ---
-def pol2cart(rho: float, phi: float) -> chex.Array:
+def pol2cart(rho: float, phi: float) -> jax.Array:
     """Convert polar coordinates into cartesian"""
     x = rho * jnp.cos(phi)
     y = rho * jnp.sin(phi)
     return jnp.array([x, y])
 
 
-def cart2pol(x, y) -> chex.Array:
+def cart2pol(x, y) -> jax.Array:
     rho = jnp.sqrt(x**2 + y**2)
     phi = jnp.arctan2(y, x)
     return jnp.array([rho, phi])
 
 
-def unitvec(theta) -> chex.Array:
+def unitvec(theta) -> jax.Array:
     return jnp.array([jnp.cos(theta), jnp.sin(theta)])
 
 

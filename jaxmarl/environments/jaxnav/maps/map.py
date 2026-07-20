@@ -1,10 +1,11 @@
 import warnings
 from functools import partial
+from typing import Optional
 
-import chex
 import jax
 import matplotlib.axes._axes as axes
 from jax import numpy as jnp
+from jaxtyping import PRNGKeyArray
 
 
 class Map(object):
@@ -15,8 +16,8 @@ class Map(object):
         num_agents,
         rad,
         map_size,
-        min_dist_to_goal: float = None,
-        max_dist_to_goal: float = None,
+        min_dist_to_goal: Optional[float] = None,
+        max_dist_to_goal: Optional[float] = None,
         start_pad=1.5,
         valid_path_check=False,
     ):
@@ -70,7 +71,7 @@ class Map(object):
         map_data = self.sample_map(_key)
         radii = jnp.array([self.rad * self.start_pad, self.goal_radius])
 
-        def _sample_pair(key: chex.PRNGKey):
+        def _sample_pair(key: PRNGKeyArray):
             """Sample a start and goal pose for an agent"""
             key_s, key_g, key_t, key_d, key_angle = jax.random.split(key, 5)
 
@@ -543,17 +544,17 @@ class Map(object):
     def plot_map(
         self,
         ax: axes.Axes,
-        map_data: jnp.ndarray,
+        map_data: jax.Array,
     ) -> None:
         raise NotImplementedError
 
     def plot_agents(
         self,
         ax: axes.Axes,
-        pos: jnp.ndarray,
-        theta: jnp.ndarray,
-        goal: jnp.ndarray,
-        done: jnp.ndarray,
+        pos: jax.Array,
+        theta: jax.Array,
+        goal: jax.Array,
+        done: jax.Array,
         plot_line_to_goal=True,
         colour_agents_by_idx=False,
     ) -> None:
@@ -562,8 +563,8 @@ class Map(object):
     def plot_agent_path(
         self,
         ax: axes.Axes,
-        x_seq: jnp.ndarray,
-        y_seq: jnp.ndarray,
+        x_seq: jax.Array,
+        y_seq: jax.Array,
     ) -> None:
         raise NotImplementedError
 
