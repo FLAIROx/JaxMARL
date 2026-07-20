@@ -5,7 +5,6 @@ This class models the game dynamics of Hanabi (reset and step of the game).
 from functools import partial
 from typing import Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -29,24 +28,24 @@ class State(BaseState):
 
     """
 
-    deck: chex.Array
-    discard_pile: chex.Array
-    fireworks: chex.Array
-    player_hands: chex.Array
-    info_tokens: chex.Array
-    terminal: bool
-    life_tokens: chex.Array
-    card_knowledge: chex.Array
-    colors_revealed: chex.Array
-    ranks_revealed: chex.Array
-    num_cards_dealt: int
-    num_cards_discarded: int
-    cur_player_idx: chex.Array
-    out_of_lives: bool
-    last_round_count: int
-    bombed: bool
-    remaining_deck_size: chex.Array
-    score: int
+    deck: jax.Array
+    discard_pile: jax.Array
+    fireworks: jax.Array
+    player_hands: jax.Array
+    info_tokens: jax.Array
+    terminal: jax.Array
+    life_tokens: jax.Array
+    card_knowledge: jax.Array
+    colors_revealed: jax.Array
+    ranks_revealed: jax.Array
+    num_cards_dealt: jax.Array
+    num_cards_discarded: jax.Array
+    cur_player_idx: jax.Array
+    out_of_lives: jax.Array
+    last_round_count: jax.Array
+    bombed: jax.Array
+    remaining_deck_size: jax.Array
+    score: jax.Array
 
 
 class HanabiGame(MultiAgentEnv):
@@ -87,20 +86,24 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def get_first_state(self, deck: chex.Array) -> State:
+    def get_first_state(self, deck: jax.Array) -> State:
         """Get the initial state of the game"""
 
-        def _deal_cards(aidx, unused):
+        deck_arr: jax.Array = jnp.asarray(deck)
+
+        def _deal_cards(aidx: jax.Array, unused: None) -> Tuple[jax.Array, jax.Array]:
             """Deals cards to players from top of deck"""
             # top of deck is first array element
             start = aidx * self.hand_size
             hand = lax.dynamic_slice(
-                deck, (start, 0, 0), (self.hand_size, self.num_colors, self.num_ranks)
+                deck_arr,
+                (start, 0, 0),
+                (self.hand_size, self.num_colors, self.num_ranks),
             )
 
             return aidx + 1, hand
 
-        _, hands = lax.scan(_deal_cards, 0, None, self.num_agents)
+        _, hands = lax.scan(_deal_cards, jnp.array(0), None, self.num_agents)
         num_cards_dealt = self.num_agents * self.hand_size
 
         # start off with all (color, rank) combinations being possible for all cards
@@ -111,11 +114,11 @@ class HanabiGame(MultiAgentEnv):
         ranks_revealed = jnp.zeros((self.num_agents, self.hand_size, self.num_ranks))
 
         # init discard pile
-        discard_pile = jnp.zeros_like(deck)
+        discard_pile = jnp.zeros_like(deck_arr)
         num_cards_discarded = 0
 
         # remove dealt cards from deck
-        deck = deck.at[:num_cards_dealt].set(
+        deck_arr = deck_arr.at[:num_cards_dealt].set(
             jnp.zeros((self.num_colors, self.num_ranks))
         )
         remaining_deck_size = jnp.zeros(self.deck_size).at[:-num_cards_dealt].set(1)
@@ -127,15 +130,15 @@ class HanabiGame(MultiAgentEnv):
 
         # other state variable inits
         cur_player_idx = jnp.zeros(self.num_agents).at[0].set(1)
-        terminal = False
-        out_of_lives = False
-        bombed = False
+        terminal = jnp.array(False)
+        out_of_lives = jnp.array(False)
+        bombed = jnp.array(False)
         last_round_count = 0
 
         state = State(
-            done=False,
-            step=0,
-            deck=deck,
+            done=jnp.array(False),
+            step=jnp.array(0),
+            deck=deck_arr,
             discard_pile=discard_pile,
             fireworks=fireworks,
             player_hands=hands,
@@ -145,14 +148,15 @@ class HanabiGame(MultiAgentEnv):
             card_knowledge=card_knowledge,
             colors_revealed=colors_revealed,
             ranks_revealed=ranks_revealed,
-            num_cards_dealt=num_cards_dealt,
-            num_cards_discarded=num_cards_discarded,
+            # kept as Python ints above because they index static slices of the deck
+            num_cards_dealt=jnp.array(num_cards_dealt),
+            num_cards_discarded=jnp.array(num_cards_discarded),
             cur_player_idx=cur_player_idx,
             out_of_lives=out_of_lives,
-            last_round_count=last_round_count,
+            last_round_count=jnp.array(last_round_count),
             bombed=bombed,
             remaining_deck_size=remaining_deck_size,
-            score=0,
+            score=jnp.array(0),
         )
 
         return state
@@ -174,12 +178,12 @@ class HanabiGame(MultiAgentEnv):
         return self.get_first_state(deck)
 
     @partial(jax.jit, static_argnums=[0])
-    def reset_game_from_deck(self, deck: chex.Array) -> State:
+    def reset_game_from_deck(self, deck: jax.Array) -> State:
         """Reset the game from a given deck of one-hot encoded cards."""
         return self.get_first_state(deck)
 
     @partial(jax.jit, static_argnums=[0])
-    def reset_game_from_deck_of_pairs(self, deck_of_pairs: chex.Array):
+    def reset_game_from_deck_of_pairs(self, deck_of_pairs: jax.Array) -> State:
         """Reset the game from a given deck of (color, value) pairs."""
         deck = self._one_hot_encode_deck(deck_of_pairs)
         return self.get_first_state(deck)
@@ -188,9 +192,9 @@ class HanabiGame(MultiAgentEnv):
     def step_game(
         self,
         state: State,
-        aidx: int,
-        action: int,
-    ) -> Tuple[State, int]:
+        aidx: jax.Array,
+        action: jax.Array,
+    ) -> Tuple[State, jax.Array]:
         """
         Execute the current player's action and its consequences
         """
@@ -200,7 +204,7 @@ class HanabiGame(MultiAgentEnv):
         # initialise reward for move
         reward = 0
 
-        def _discard_play_fn(state: State, action: int):
+        def _discard_play_fn(state: State, action: jax.Array) -> State:
             """Discard or play selected card according to action selection"""
             # get hand and card info
             hand_before = state.player_hands.at[aidx].get()
@@ -332,7 +336,7 @@ class HanabiGame(MultiAgentEnv):
                 remaining_deck_size=remaining_deck_size,
             )
 
-        def _hint_fn(state: State, action: int):
+        def _hint_fn(state: State, action: jax.Array) -> State:
             is_color_hint = self._is_hint_color(action)
             is_rank_hint = self._is_hint_rank(action)
 
@@ -469,21 +473,23 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def _one_hot_encode_deck(self, deck_of_pairs: chex.Array) -> chex.Array:
+    def _one_hot_encode_deck(self, deck_of_pairs: jax.Array) -> jax.Array:
         """Generates one-hot card encodings given (color, rank) pairs."""
 
-        def _gen_cards(aidx, _):
+        def _gen_cards(aidx: jax.Array, _: None) -> Tuple[jax.Array, jax.Array]:
             color, rank = deck_of_pairs[aidx]
             card = jnp.zeros((self.num_colors, self.num_ranks))
             card = card.at[color, rank].set(1)
 
             return aidx + 1, card
 
-        _, deck = lax.scan(_gen_cards, 0, None, self.deck_size)
+        _, deck = lax.scan(_gen_cards, jnp.array(0), None, self.deck_size)
         return deck
 
     @partial(jax.jit, static_argnums=[0])
-    def _get_target_player_and_hint_index(self, aidx: int, action: chex.Array):
+    def _get_target_player_and_hint_index(
+        self, aidx: jax.Array, action: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
         """
         Determines the target player and the hint index based on the action of the current agent.
         In case you need a one hot encoded representation use:
@@ -536,7 +542,7 @@ class HanabiGame(MultiAgentEnv):
         return target_player, hint_idx
 
     @partial(jax.jit, static_argnums=[0])
-    def _is_discard(self, action: chex.Array):
+    def _is_discard(self, action: jax.Array) -> jax.Array:
         """
         Determines is the action is the discard action where action is the integer value of the action.
         The ranges are defined in `self.discard_action_range`.
@@ -547,7 +553,7 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def _is_play(self, action: chex.Array):
+    def _is_play(self, action: jax.Array) -> jax.Array:
         """
         Determines is the action is the discard action where action is the integer value of the action.
         The ranges are defined in `self.play_action_range`.
@@ -558,7 +564,7 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def _is_hint_color(self, action: chex.Array):
+    def _is_hint_color(self, action: jax.Array) -> jax.Array:
         """
         Determines is the action is the play action where action is the integer value of the action.
         The ranges are defined in `self.color_action_range`.
@@ -569,7 +575,7 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def _is_hint_rank(self, action: chex.Array):
+    def _is_hint_rank(self, action: jax.Array) -> jax.Array:
         """
         Determines is the action is the play action where action is the integer value of the action.
         The ranges are defined in `self.rank_action_range`.
@@ -580,7 +586,7 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def _is_hint(self, action: chex.Array):
+    def _is_hint(self, action: jax.Array) -> jax.Array:
         """
         Determines is the action is the hint action where action is the integer value of the action.
         """
@@ -590,7 +596,7 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def _is_play_or_discard(self, action: chex.Array):
+    def _is_play_or_discard(self, action: jax.Array) -> jax.Array:
         """
         Determines if the action is either a play or discard action. Action is in the integer representation.
         """

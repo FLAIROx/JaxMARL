@@ -7,7 +7,7 @@ is kept as minimal as possible.
 """
 
 from functools import partial
-from typing import Tuple
+from typing import Any, Tuple, cast
 
 import flax.linen as nn
 import jax
@@ -95,7 +95,9 @@ class OBLAgentR2D2(nn.Module):
         priv_s = obs
         publ_s = obs[..., 125:]
 
-        carry, adv = self.apply(params, carry, (priv_s, publ_s))
+        carry, adv = cast(
+            Tuple[Any, Array], self.apply(params, carry, (priv_s, publ_s))
+        )
 
         legal_adv = (1 + adv - adv.min()) * legal_move
         greedy_action = jnp.argmax(legal_adv, axis=-1)
