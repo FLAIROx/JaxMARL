@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 
@@ -125,7 +127,8 @@ def layout_grid_to_dict(grid):
         "P": "pot_idx",
     }
 
-    layout_dict = {key: [] for key in keys}
+    # values are heterogeneous: index lists that become arrays, plus int dims
+    layout_dict: Dict[str, Any] = {key: [] for key in keys}
     layout_dict["height"] = len(rows)
     layout_dict["width"] = len(rows[0])
     width = len(rows[0])

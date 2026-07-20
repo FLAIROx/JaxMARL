@@ -1,8 +1,7 @@
 import warnings
 from enum import IntEnum
-from typing import Tuple
+from typing import Any, Tuple, cast
 
-import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -63,14 +62,14 @@ class State(BaseState):
 
     """
 
-    agent_pos: chex.Array
-    agent_dir: chex.Array
-    agent_dir_idx: chex.Array
-    agent_inv: chex.Array
-    goal_pos: chex.Array
-    pot_pos: chex.Array
-    wall_map: chex.Array
-    maze_map: chex.Array
+    agent_pos: jax.Array
+    agent_dir: jax.Array
+    agent_dir_idx: jax.Array
+    agent_inv: jax.Array
+    goal_pos: jax.Array
+    pot_pos: jax.Array
+    wall_map: jax.Array
+    maze_map: jax.Array
 
 
 # Pot status indicated by an integer, which ranges from 23 to 0
@@ -88,7 +87,7 @@ class Overcooked(MultiAgentEnv):
 
     def __init__(
         self,
-        layout=FrozenDict(layouts["cramped_room"]),
+        layout: FrozenDict[str, Any] = FrozenDict(layouts["cramped_room"]),
         random_reset: bool = False,
         max_steps: int = 400,
     ):
@@ -104,8 +103,10 @@ class Overcooked(MultiAgentEnv):
 
         # self.obs_shape = (agent_view_size, agent_view_size, 3)
         # Observations given by 26 channels, most of which are boolean masks
-        self.height = layout["height"]
-        self.width = layout["width"]
+        # FrozenDict.__getitem__ is untyped, so narrow the layout dimensions
+        # explicitly, they are Python ints that feed static shapes downstream
+        self.height = cast(int, layout["height"])
+        self.width = cast(int, layout["width"])
         self.obs_shape = (self.width, self.height, 26)
 
         self.agent_view_size = (
@@ -189,7 +190,7 @@ class Overcooked(MultiAgentEnv):
         num_agents = self.num_agents
         all_pos = np.arange(np.prod([h, w]), dtype=jnp.uint32)
 
-        wall_idx = layout.get("wall_idx")
+        wall_idx = jnp.asarray(layout["wall_idx"])
 
         occupied_mask = jnp.zeros_like(all_pos)
         occupied_mask = occupied_mask.at[wall_idx].set(1)
@@ -224,25 +225,25 @@ class Overcooked(MultiAgentEnv):
         empty_table_mask = jnp.zeros_like(all_pos)
         empty_table_mask = empty_table_mask.at[wall_idx].set(1)
 
-        goal_idx = layout.get("goal_idx")
+        goal_idx = jnp.asarray(layout["goal_idx"])
         goal_pos = jnp.array(
             [goal_idx % w, goal_idx // w], dtype=jnp.uint32
         ).transpose()
         empty_table_mask = empty_table_mask.at[goal_idx].set(0)
 
-        onion_pile_idx = layout.get("onion_pile_idx")
+        onion_pile_idx = jnp.asarray(layout["onion_pile_idx"])
         onion_pile_pos = jnp.array(
             [onion_pile_idx % w, onion_pile_idx // w], dtype=jnp.uint32
         ).transpose()
         empty_table_mask = empty_table_mask.at[onion_pile_idx].set(0)
 
-        plate_pile_idx = layout.get("plate_pile_idx")
+        plate_pile_idx = jnp.asarray(layout["plate_pile_idx"])
         plate_pile_pos = jnp.array(
             [plate_pile_idx % w, plate_pile_idx // w], dtype=jnp.uint32
         ).transpose()
         empty_table_mask = empty_table_mask.at[plate_pile_idx].set(0)
 
-        pot_idx = layout.get("pot_idx")
+        pot_idx = jnp.asarray(layout["pot_idx"])
         pot_pos = jnp.array([pot_idx % w, pot_idx // w], dtype=jnp.uint32).transpose()
         empty_table_mask = empty_table_mask.at[pot_idx].set(0)
 
@@ -302,8 +303,8 @@ class Overcooked(MultiAgentEnv):
             pot_pos=pot_pos,
             wall_map=wall_map.astype(jnp.bool_),
             maze_map=maze_map,
-            step=0,
-            done=False,
+            step=jnp.array(0),
+            done=jnp.array(False),
         )
 
         obs = self.get_obs(state)
@@ -462,8 +463,8 @@ class Overcooked(MultiAgentEnv):
         self,
         key: PRNGKeyArray,
         state: State,
-        action: chex.Array,
-    ) -> Tuple[State, chex.Array, Tuple[chex.Array, chex.Array]]:
+        action: jax.Array,
+    ) -> Tuple[State, jax.Array, Tuple[jax.Array, jax.Array]]:
 
         # Update agent position (forward action)
         is_move_action = jnp.logical_and(
@@ -623,7 +624,7 @@ class Overcooked(MultiAgentEnv):
                 agent_dir=agent_dir,
                 agent_inv=agent_inv,
                 maze_map=maze_map,
-                done=False,
+                done=jnp.array(False),
             ),
             reward,
             (alice_shaped_reward, bob_shaped_reward),
@@ -631,12 +632,12 @@ class Overcooked(MultiAgentEnv):
 
     def process_interact(
         self,
-        maze_map: chex.Array,
-        wall_map: chex.Array,
-        fwd_pos_all: chex.Array,
-        inventory_all: chex.Array,
+        maze_map: jax.Array,
+        wall_map: jax.Array,
+        fwd_pos_all: jax.Array,
+        inventory_all: jax.Array,
         player_idx: int,
-    ):
+    ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         """Assume agent took interact actions. Result depends on what agent is facing and what it is holding."""
 
         fwd_pos = fwd_pos_all[player_idx]
@@ -800,7 +801,7 @@ class Overcooked(MultiAgentEnv):
         reward = jnp.array(successful_delivery, dtype=float) * DELIVERY_REWARD
         return maze_map, inventory, reward, shaped_reward
 
-    def is_terminal(self, state: State) -> bool:
+    def is_terminal(self, state: State) -> jax.Array:
         """Check whether state is terminal."""
         done_steps = state.step >= self.max_steps
         return done_steps | state.done

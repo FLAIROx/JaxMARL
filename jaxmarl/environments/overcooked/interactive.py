@@ -276,9 +276,11 @@ if __name__ == "__main__":
             "debug": args.debug,
         }
 
+        # the render call above lazily created the window
+        window = viz._lazy_init_window()
         if args.env == "Overcooked":
-            viz.window.reg_key_handler(partial(key_handler_overcooked, env, extras))
+            window.reg_key_handler(partial(key_handler_overcooked, env, extras))
             viz.show(block=True)
         else:
-            viz.window.reg_key_handler(partial(key_handler, env, extras))
+            window.reg_key_handler(partial(key_handler, env, extras))
             viz.show(block=True)
