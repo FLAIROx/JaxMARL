@@ -222,7 +222,10 @@ def test_injected_deck_reset_keeps_fixed_seat_order_and_dealt_cards():
 
 def test_shuffled_player_order_routes_current_seat_action_to_assigned_agent_key():
     env = HanabiEnv(num_agents=2)
-    _, state = env.reset(jax.random.PRNGKey(42))
+    # inject the deal rather than drawing one: the assertion below turns on the
+    # first card being unplayable, and which card a key deals depends on the JAX
+    # PRNG implementation (see the test_obs_function fix in tests/smax)
+    _, state = env.reset_from_deck_of_pairs(deck_with_first_card(0, 1))  # R2
     state = seated(state, SHUFFLED_SEAT_ORDERS[2])  # agent_1 holds the acting seat
 
     assert int(jnp.argmax(state.cur_player_idx)) == 0
