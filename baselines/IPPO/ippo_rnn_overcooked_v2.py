@@ -182,7 +182,7 @@ class ActorCritic(nn.Module):
         actor_mean = activation(actor_mean)
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
-        )(embedding)
+        )(actor_mean)
         pi = distrax.Categorical(logits=actor_mean)
 
         critic = nn.Dense(
