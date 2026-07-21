@@ -139,7 +139,7 @@ def test_fixed_player_order_preserves_legacy_deck_mapping():
 
 
 def test_shuffled_player_order_is_deterministic_and_keeps_agent_keys_stable():
-    env = HanabiEnv(num_agents=4)
+    env = HanabiEnv(num_agents=4, shuffle_player_order=True)
     key = jax.random.PRNGKey(42)
 
     obs, state = env.reset(key)
@@ -167,7 +167,7 @@ def test_injected_deck_reset_keeps_fixed_seat_order_and_dealt_cards():
 
 
 def test_shuffled_player_order_routes_current_seat_action_to_assigned_agent_key():
-    env = HanabiEnv(num_agents=2)
+    env = HanabiEnv(num_agents=2, shuffle_player_order=True)
     _, state = env.reset(jax.random.PRNGKey(42))
 
     assert jnp.array_equal(state.seat_order, jnp.array([1, 0]))
@@ -186,7 +186,7 @@ def test_shuffled_player_order_routes_current_seat_action_to_assigned_agent_key(
 
 
 def test_shuffled_player_order_routes_legal_moves_to_assigned_agent_key():
-    env = HanabiEnv(num_agents=2)
+    env = HanabiEnv(num_agents=2, shuffle_player_order=True)
     _, state = env.reset(jax.random.PRNGKey(42))
 
     legal_moves = env.get_legal_moves(state)
@@ -199,7 +199,7 @@ def test_shuffled_player_order_routes_legal_moves_to_assigned_agent_key():
 
 
 def test_shuffled_player_order_routes_observations_to_assigned_agent_key():
-    env = HanabiEnv(num_agents=2)
+    env = HanabiEnv(num_agents=2, shuffle_player_order=True)
     obs, state = env.reset(jax.random.PRNGKey(42))
     physical_seat_state = state.replace(seat_order=jnp.arange(env.num_agents))
     physical_seat_obs = env.get_obs(

@@ -60,7 +60,7 @@ class HanabiGame(MultiAgentEnv):
         max_life_tokens=3,
         num_cards_of_rank=np.array([3, 2, 2, 2, 1]),
         color_map=["R", "Y", "G", "W", "B"],
-        shuffle_player_order=True,
+        shuffle_player_order=False,
     ):
         super().__init__(num_agents)
 

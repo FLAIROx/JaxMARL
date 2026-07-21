@@ -65,7 +65,9 @@ def main(argv):
         legal_moves_dict = env.get_legal_moves(env_state)
         legal_moves = batchify(legal_moves_dict, env.agents)
 
-        cur_player = jnp.where(env_state.cur_player_idx == 1)[0][0]
+        # cur_player_idx is seat-indexed; map it to the agent holding that seat
+        cur_seat = jnp.where(env_state.cur_player_idx == 1)[0][0]
+        cur_player = env_state.seat_order[cur_seat]
         cur_player_legal_moves = legal_moves[cur_player]
 
         print("Legal moves for current player:")

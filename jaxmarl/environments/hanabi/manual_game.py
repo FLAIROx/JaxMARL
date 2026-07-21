@@ -133,7 +133,9 @@ def play_game(args):
         while not done:
             env.render(env_state)
 
-            curr_player = np.where(env_state.cur_player_idx == 1)[0][0]
+            # cur_player_idx is seat-indexed; map it to the agent holding that seat
+            curr_seat = np.where(env_state.cur_player_idx == 1)[0][0]
+            curr_player = int(env_state.seat_order[curr_seat])
             actions_all = [
                 agents[i].act(obs, legal_moves, curr_player)
                 for i in range(len(env.agents))

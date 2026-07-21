@@ -38,7 +38,7 @@ class HanabiEnv(HanabiGame):
         action_spaces=None,
         observation_spaces=None,
         num_moves=None,
-        shuffle_player_order=True,
+        shuffle_player_order=False,
     ):
         # default hand size is 5 for 2-3 players and 4 for 4-5 players
         if hand_size is None:
