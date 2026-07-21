@@ -140,6 +140,14 @@ SHUFFLED_SEAT_ORDERS = {
 }
 
 
+def states_equal(a, b):
+    """Whether two states agree on every array field."""
+    return all(
+        jnp.array_equal(x, y)
+        for x, y in zip(jax.tree_util.tree_leaves(a), jax.tree_util.tree_leaves(b))
+    )
+
+
 def seated(state, seat_order):
     """Put agents in an explicit seat order.
 
@@ -510,8 +518,17 @@ def test_multi_player_reset_and_step(num_agents, shuffled):
     assert "__all__" in dones
     assert "__all__" in rewards
 
-    # the acting agent's move was actually executed, so play passed to the next seat
+    # play passed to the next seat
     assert int(jnp.argmax(state2.cur_player_idx)) == (acting_seat + 1) % num_agents
+
+    # ...and the move that got executed was the acting agent's, not some other
+    # agent's noop. The turn advances either way, so compare against the state
+    # reached when every agent noops: routing the action by seat instead of by
+    # agent would pick up agent_{acting_seat}'s noop and land here instead.
+    _, all_noop_state, _, _, _ = env_mp.step(
+        key, state, {agent: noop for agent in env_mp.agents}
+    )
+    assert not states_equal(state2, all_noop_state)
 
 
 def main():
