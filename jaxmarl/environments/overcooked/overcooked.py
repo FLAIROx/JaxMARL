@@ -560,8 +560,13 @@ class Overcooked(MultiAgentEnv):
         alice_reward = jax.lax.select(alice_interact, alice_reward, 0.0)
         alice_shaped_reward = jax.lax.select(alice_interact, alice_shaped_reward, 0.0)
 
+        # Bob acts on the map Alice left behind, so he must also see her updated
+        # inventory (it feeds the plate pickup shaping)
+        agent_inv_after_alice = state.agent_inv.at[0].set(alice_inv)
         candidate_maze_map, bob_inv, bob_reward, bob_shaped_reward = (
-            self.process_interact(maze_map, state.wall_map, fwd_pos, state.agent_inv, 1)
+            self.process_interact(
+                maze_map, state.wall_map, fwd_pos, agent_inv_after_alice, 1
+            )
         )
         maze_map = jax.lax.select(bob_interact, candidate_maze_map, maze_map)
         bob_inv = jax.lax.select(bob_interact, bob_inv, state.agent_inv[1])
@@ -759,18 +764,21 @@ class Overcooked(MultiAgentEnv):
             new_object_in_inv == OBJECT_TO_INDEX["plate"]
         )
 
-        # number of plates in player hands < number ready/cooking/partially full pot
-        num_plates_in_inv = jnp.sum(inventory == OBJECT_TO_INDEX["plate"])
+        # number of plates in all player hands < number ready/cooking/partially full pot
+        num_plates_in_inv = jnp.sum(inventory_all == OBJECT_TO_INDEX["plate"])
+        object_layer = maze_map[padding:-padding, padding:-padding, 0]
         pot_loc_layer = jnp.array(
-            maze_map[padding:-padding, padding:-padding, 0] == OBJECT_TO_INDEX["pot"],
+            object_layer == OBJECT_TO_INDEX["pot"],
             dtype=jnp.uint8,
         )
         padded_map = maze_map[padding:-padding, padding:-padding, 2]
         num_notempty_pots = jnp.sum((padded_map != POT_EMPTY_STATUS) * pot_loc_layer)
         is_dish_picku_useful = num_plates_in_inv < num_notempty_pots
 
+        # only the object channel encodes plates, the colour channel of a wall
+        # shares the index of a plate
         plate_loc_layer = jnp.array(
-            maze_map == OBJECT_TO_INDEX["plate"], dtype=jnp.uint8
+            object_layer == OBJECT_TO_INDEX["plate"], dtype=jnp.uint8
         )
         no_plates_on_counters = jnp.sum(plate_loc_layer) == 0
 
