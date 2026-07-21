@@ -422,27 +422,55 @@ def test_last_round_terminates_game():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("shuffle_player_order", [False, True])
 @pytest.mark.parametrize("num_agents", [2, 3, 4, 5])
-def test_multi_player_reset_and_step(num_agents):
-    """reset and step work for all valid player counts; obs shapes are correct."""
-    env_mp = HanabiEnv(num_agents=num_agents)
-    key = jax.random.PRNGKey(0)
+def test_multi_player_reset_and_step(num_agents, shuffle_player_order):
+    """reset and step work for all valid player counts; obs shapes are correct.
+
+    Run with seat shuffling both off and on: with a non-identity seat order,
+    get_legal_moves and step_env must still agree on which agent key is acting.
+    """
+    env_mp = HanabiEnv(num_agents=num_agents, shuffle_player_order=shuffle_player_order)
+    # seed 2 seats a different agent in the acting seat for every player count
+    # tested; a permutation that happened to fix that seat would leave the
+    # routing assertions below passing even with seat mapping removed
+    key = jax.random.PRNGKey(2)
     obs, state = env_mp.reset(key)
 
     assert len(obs) == num_agents
     for agent in env_mp.agents:
         assert obs[agent].shape == (env_mp.obs_size,)
 
+    identity = jnp.arange(num_agents)
+    assert jnp.array_equal(jnp.sort(state.seat_order), identity)
+    if not shuffle_player_order:
+        assert jnp.array_equal(state.seat_order, identity)
+
     acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
     acting_idx = int(state.seat_order[acting_seat])
-    actions = {agent: env_mp.num_moves - 1 for agent in env_mp.agents}
-    actions[env_mp.agents[acting_idx]] = 2 * env_mp.hand_size  # first color hint
+    acting_agent = env_mp.agents[acting_idx]
 
-    obs2, _, rewards, dones, _ = env_mp.step(key, state, actions)
+    if shuffle_player_order:
+        assert acting_idx != acting_seat, "seat mapping is untested for this seed"
+
+    # legal moves must be keyed by agent, not seat: exactly the acting agent is
+    # barred from noop, and every other agent is restricted to it
+    noop = env_mp.num_moves - 1
+    legal = env_mp.get_legal_moves(state)
+    for agent in env_mp.agents:
+        assert bool(legal[agent][noop]) == (agent != acting_agent)
+
+    actions = {agent: noop for agent in env_mp.agents}
+    actions[acting_agent] = int(jnp.argmax(legal[acting_agent]))  # first legal move
+
+    obs2, state2, rewards, dones, _ = env_mp.step(key, state, actions)
 
     assert len(obs2) == num_agents
     assert "__all__" in dones
     assert "__all__" in rewards
+
+    # the acting agent's move was actually executed, so play passed to the next seat
+    assert int(jnp.argmax(state2.cur_player_idx)) == (acting_seat + 1) % num_agents
 
 
 def main():
