@@ -115,6 +115,157 @@ def single_life_actions(env):
     }
 
 
+def legacy_reset_deck(env, key):
+    colors = jnp.arange(env.num_colors)
+    ranks = jnp.arange(env.num_ranks)
+    ranks = jnp.repeat(ranks, env.num_cards_of_rank)
+    color_rank_pairs = jnp.dstack(jnp.meshgrid(colors, ranks)).reshape(-1, 2)
+    _, deck_key = jax.random.split(key)
+    shuffled_pairs = jax.random.permutation(deck_key, color_rank_pairs, axis=0)
+    deck = env._one_hot_encode_deck(shuffled_pairs)
+    return deck.at[: env.num_agents * env.hand_size].set(
+        jnp.zeros((env.num_colors, env.num_ranks))
+    )
+
+
+# Seat orders used by the routing tests. Seat 0 is the acting seat at reset, so
+# every entry puts some agent other than agent_0 there: a permutation that left
+# that seat alone would satisfy the routing assertions even with the seat
+# mapping removed entirely.
+SHUFFLED_SEAT_ORDERS = {
+    2: [1, 0],
+    3: [1, 2, 0],
+    4: [3, 2, 0, 1],
+    5: [3, 4, 2, 0, 1],
+}
+
+
+def states_equal(a, b):
+    """Whether two states agree on every array field."""
+    return all(
+        jnp.array_equal(x, y)
+        for x, y in zip(jax.tree_util.tree_leaves(a), jax.tree_util.tree_leaves(b))
+    )
+
+
+def seated(state, seat_order):
+    """Put agents in an explicit seat order.
+
+    seat_order only maps seats to agent keys, and cards are dealt to seats
+    independently of it, so overriding it yields exactly the state a shuffled
+    reset would produce -- without depending on what the RNG happens to permute.
+    """
+    return state.replace(seat_order=jnp.array(seat_order))
+
+
+def test_fixed_player_order_preserves_legacy_deck_mapping():
+    env = HanabiEnv(shuffle_player_order=False)
+    key = jax.random.PRNGKey(42)
+
+    _, state = env.reset(key)
+
+    assert jnp.array_equal(state.seat_order, jnp.arange(env.num_agents))
+    assert jnp.array_equal(state.deck, legacy_reset_deck(env, key))
+
+
+@pytest.mark.parametrize("num_agents", [2, 3, 4, 5])
+def test_shuffled_player_order_is_deterministic_and_keeps_agent_keys_stable(num_agents):
+    """The shuffled reset yields a valid permutation, reproducibly.
+
+    Which permutation a given key produces is left to the RNG; the routing
+    tests pin the orders they need explicitly instead of asserting on it.
+    """
+    env = HanabiEnv(num_agents=num_agents, shuffle_player_order=True)
+    key = jax.random.PRNGKey(42)
+
+    obs, state = env.reset(key)
+    obs_again, state_again = env.reset(key)
+    legal_moves = env.get_legal_moves(state)
+
+    assert env.agents == [f"agent_{i}" for i in range(num_agents)]
+    assert list(obs.keys()) == env.agents
+    assert list(obs_again.keys()) == env.agents
+    assert list(legal_moves.keys()) == env.agents
+    assert list(env.action_spaces.keys()) == env.agents
+    assert jnp.array_equal(state.seat_order, state_again.seat_order)
+    assert jnp.array_equal(jnp.sort(state.seat_order), jnp.arange(num_agents))
+
+
+@pytest.mark.parametrize("num_agents", [2, 3, 4, 5])
+def test_shuffling_only_reassigns_seats_and_leaves_the_deal_untouched(num_agents):
+    """A shuffled reset differs from a fixed one only in seat_order.
+
+    This is what lets the routing tests below build a shuffled state by
+    overriding seat_order rather than fishing for a seed.
+    """
+    key = jax.random.PRNGKey(42)
+    _, fixed = HanabiEnv(num_agents=num_agents).reset(key)
+    _, shuffled = HanabiEnv(num_agents=num_agents, shuffle_player_order=True).reset(key)
+
+    assert jnp.array_equal(shuffled.deck, fixed.deck)
+    assert jnp.array_equal(shuffled.player_hands, fixed.player_hands)
+    assert jnp.array_equal(shuffled.cur_player_idx, fixed.cur_player_idx)
+    assert jnp.array_equal(
+        seated(fixed, shuffled.seat_order).seat_order, shuffled.seat_order
+    )
+
+
+def test_injected_deck_reset_keeps_fixed_seat_order_and_dealt_cards():
+    env = HanabiEnv()
+    deck = get_decks()[0]
+
+    _, state = env.reset_from_deck(deck)
+
+    assert jnp.array_equal(state.seat_order, jnp.arange(env.num_agents))
+    assert jnp.array_equal(state.player_hands[0], deck[: env.hand_size])
+
+
+def test_shuffled_player_order_routes_current_seat_action_to_assigned_agent_key():
+    env = HanabiEnv(num_agents=2)
+    # inject the deal rather than drawing one: the assertion below turns on the
+    # first card being unplayable, and which card a key deals depends on the JAX
+    # PRNG implementation (see the test_obs_function fix in tests/smax)
+    _, state = env.reset_from_deck_of_pairs(deck_with_first_card(0, 1))  # R2
+    state = seated(state, SHUFFLED_SEAT_ORDERS[2])  # agent_1 holds the acting seat
+
+    assert int(jnp.argmax(state.cur_player_idx)) == 0
+
+    _, next_state, _, _, _ = env.step_env(
+        jax.random.PRNGKey(0),
+        state,
+        {
+            "agent_0": 0,  # discard slot 0, wrong player for current seat
+            "agent_1": env.hand_size,  # play slot 0, assigned to current seat
+        },
+    )
+
+    assert int(jnp.sum(next_state.life_tokens)) == env.max_life_tokens - 1
+
+
+def test_shuffled_player_order_routes_legal_moves_to_assigned_agent_key():
+    env = HanabiEnv(num_agents=2)
+    _, state = env.reset(jax.random.PRNGKey(42))
+    state = seated(state, SHUFFLED_SEAT_ORDERS[2])  # agent_1 holds the acting seat
+
+    legal_moves = env.get_legal_moves(state)
+
+    assert bool(legal_moves["agent_1"][env.play_action_range].any())
+    assert not bool(legal_moves["agent_1"][-1])
+    assert not bool(legal_moves["agent_0"][env.play_action_range].any())
+    assert bool(legal_moves["agent_0"][-1])
+
+
+def test_shuffled_player_order_routes_observations_to_assigned_agent_key():
+    env = HanabiEnv(num_agents=2)
+    physical_seat_obs, state = env.reset(jax.random.PRNGKey(42))
+
+    shuffled = seated(state, SHUFFLED_SEAT_ORDERS[2])  # agent_1 holds the acting seat
+    obs = env.get_obs(shuffled, shuffled, action=env.num_moves - 1)
+
+    assert jnp.array_equal(obs["agent_1"], physical_seat_obs["agent_0"])
+    assert jnp.array_equal(obs["agent_0"], physical_seat_obs["agent_1"])
+
+
 def test_step_game_terminates_immediately_when_last_life_is_lost():
     env = make_single_life_env()
     state = env.reset_game_from_deck_of_pairs(single_life_loss_deck())
@@ -271,8 +422,8 @@ def test_discard_is_illegal_when_info_tokens_full():
     key = jax.random.PRNGKey(0)
     _, state = env.reset(key)
     legal = env.get_legal_moves(state)
-    acting_idx = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
-    acting_player = env.agents[acting_idx]
+    acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_player = env.agents[int(state.seat_order[acting_seat])]
     assert not bool(legal[acting_player][env.discard_action_range].any())
 
 
@@ -282,7 +433,8 @@ def test_noop_is_legal_only_for_non_acting_player():
     _, state = env.reset(key)
     legal = env.get_legal_moves(state)
     noop = env.num_moves - 1
-    acting_idx = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_idx = int(state.seat_order[acting_seat])
     for i, agent in enumerate(env.agents):
         if i == acting_idx:
             assert not bool(legal[agent][noop])
@@ -323,26 +475,63 @@ def test_last_round_terminates_game():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("shuffled", [False, True])
 @pytest.mark.parametrize("num_agents", [2, 3, 4, 5])
-def test_multi_player_reset_and_step(num_agents):
-    """reset and step work for all valid player counts; obs shapes are correct."""
+def test_multi_player_reset_and_step(num_agents, shuffled):
+    """reset and step work for all valid player counts; obs shapes are correct.
+
+    Run with seats in order and permuted: under a non-identity seat order,
+    get_legal_moves and step_env must still agree on which agent key is acting.
+    """
     env_mp = HanabiEnv(num_agents=num_agents)
     key = jax.random.PRNGKey(0)
     obs, state = env_mp.reset(key)
+
+    if shuffled:
+        state = seated(state, SHUFFLED_SEAT_ORDERS[num_agents])
+        obs = env_mp.get_obs(state, state, action=env_mp.num_moves - 1)
 
     assert len(obs) == num_agents
     for agent in env_mp.agents:
         assert obs[agent].shape == (env_mp.obs_size,)
 
-    acting_idx = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
-    actions = {agent: env_mp.num_moves - 1 for agent in env_mp.agents}
-    actions[env_mp.agents[acting_idx]] = 2 * env_mp.hand_size  # first color hint
+    assert jnp.array_equal(jnp.sort(state.seat_order), jnp.arange(num_agents))
 
-    obs2, _, rewards, dones, _ = env_mp.step(key, state, actions)
+    acting_seat = int(jnp.nonzero(state.cur_player_idx, size=1)[0][0])
+    acting_idx = int(state.seat_order[acting_seat])
+    acting_agent = env_mp.agents[acting_idx]
+
+    # the table must move the acting seat, or the assertions below would hold
+    # even if seat mapping were dropped entirely
+    assert (acting_idx != acting_seat) == shuffled
+
+    # legal moves must be keyed by agent, not seat: exactly the acting agent is
+    # barred from noop, and every other agent is restricted to it
+    noop = env_mp.num_moves - 1
+    legal = env_mp.get_legal_moves(state)
+    for agent in env_mp.agents:
+        assert bool(legal[agent][noop]) == (agent != acting_agent)
+
+    actions = {agent: noop for agent in env_mp.agents}
+    actions[acting_agent] = int(jnp.argmax(legal[acting_agent]))  # first legal move
+
+    obs2, state2, rewards, dones, _ = env_mp.step(key, state, actions)
 
     assert len(obs2) == num_agents
     assert "__all__" in dones
     assert "__all__" in rewards
+
+    # play passed to the next seat
+    assert int(jnp.argmax(state2.cur_player_idx)) == (acting_seat + 1) % num_agents
+
+    # ...and the move that got executed was the acting agent's, not some other
+    # agent's noop. The turn advances either way, so compare against the state
+    # reached when every agent noops: routing the action by seat instead of by
+    # agent would pick up agent_{acting_seat}'s noop and land here instead.
+    _, all_noop_state, _, _, _ = env_mp.step(
+        key, state, {agent: noop for agent in env_mp.agents}
+    )
+    assert not states_equal(state2, all_noop_state)
 
 
 def main():

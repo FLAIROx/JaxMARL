@@ -6,7 +6,8 @@ NOTE: We use effort-based-versioning
 
 #### Breaking Changes
 **Hanabi**:
- - `HanabiState` now inherits from `BaseState`; `turn` field renamed to `step` and `done` field added (`terminal | out_of_lives`). Code accessing `state.turn` must be updated to `state.step`
+ - `HanabiState` now inherits from `BaseState`; `turn` field renamed to `step` and `done` field added (`terminal | out_of_lives`). Code accessing `state.turn` must be updated to `state.step`.
+ - `State` gains a `seat_order` field, and `get_first_state` now takes it as a second argument. Direct callers of `get_first_state(deck)` must pass a seat order, `self.agent_range` reproduces the previous behaviour.
 **SMAX**:
  - Dead units no longer move or participate in collision resolution, `update_position` freezes dead unit positions; `_push_units_away` gates the overlap term by an alive-alive pair mask and preserves dead unit positions;
  - stale hardcoded test values updated to reflect both fixes and JAX PRNG changes (`test_obs_function` was subsequently made PRNG-independent, see Fixed).
@@ -50,8 +51,10 @@ JAX: `jax<=0.4.38` upper cap removed, floor set to `>=0.4.25` (`jax.tree` became
 - `.github/workflows/docs.yml`: auto-deploy MkDocs docs to GitHub Pages on push to `main`
 - GitHub issue templates (bug report, feature request) and PR checklist
 - `make local-test` target for running tests without Docker
+- **Hanabi** `shuffle_player_order` (default `False`): randomises which agent key holds which seat at reset, for ad-hoc / zero-shot coordination work. `state.seat_order` maps seats to agent indices; observations, legal moves and actions stay keyed by stable agent names. Note that `state.cur_player_idx` remains **seat**-indexed, so the acting agent is `env.agents[state.seat_order[seat]]`, not `env.agents[seat]`. With the default `False` the seat order is the identity and the deck is unchanged from v0.1.0 (seat shuffling draws from a separate key), so existing results and baselines are unaffected.
 
 #### Fixed
+- **Hanabi** seat/agent index conflation exposed by seat shuffling: `render()` indexed `self.agents` with the seat taken from `cur_player_idx`, and `manual_game.py` / `manual_game_human_agents.py` derived the current player the same way before indexing agent-ordered legal moves and action arrays. Under a non-identity seat order this selected the wrong player — the human was offered the non-acting agent's move list, whose only legal move is noop. All three now map through `state.seat_order`.
 - `docs/index.md` environment count: 9 → 11
 - `Dict.contains` in `spaces.py`: `getattr(x, k)` → `x[k]`
 - `tests/brax/test_brax_rand_acts.py`: skipped due to native double-free crash in legacy brax environments (unmaintained, incompatible with current jaxlib)

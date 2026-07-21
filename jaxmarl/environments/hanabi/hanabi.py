@@ -38,6 +38,7 @@ class HanabiEnv(HanabiGame):
         action_spaces=None,
         observation_spaces=None,
         num_moves=None,
+        shuffle_player_order=False,
     ):
         # default hand size is 5 for 2-3 players and 4 for 4-5 players
         if hand_size is None:
@@ -51,6 +52,7 @@ class HanabiEnv(HanabiGame):
             max_info_tokens=max_info_tokens,
             max_life_tokens=max_life_tokens,
             num_cards_of_rank=num_cards_of_rank,
+            shuffle_player_order=shuffle_player_order,
         )
 
         assert num_agents > 1 and num_agents <= 5, (
@@ -186,7 +188,8 @@ class HanabiEnv(HanabiGame):
         # get actions as array
         act_batch = jnp.array([actions[i] for i in self.agents])
         aidx = jnp.nonzero(state.cur_player_idx, size=1)[0][0]
-        action = act_batch.at[aidx].get()
+        agent_idx = state.seat_order.at[aidx].get()
+        action = act_batch.at[agent_idx].get()
 
         # execute the current player's action and its consequences
         old_state = state
@@ -255,7 +258,8 @@ class HanabiEnv(HanabiGame):
 
         obs = jax.vmap(_observe)(self.agent_range)
 
-        return {a: obs[i] for i, a in enumerate(self.agents)}
+        agent_to_seat = jnp.argsort(new_state.seat_order)
+        return {a: obs[agent_to_seat[i]] for i, a in enumerate(self.agents)}
 
     def get_legal_moves(self, state: State) -> Dict[str, jax.Array]:
         """Get all agents' legal moves"""
@@ -326,7 +330,8 @@ class HanabiEnv(HanabiGame):
 
         legal_moves = _legal_moves(self.agent_range, state)
 
-        return {a: legal_moves[i] for i, a in enumerate(self.agents)}
+        agent_to_seat = jnp.argsort(state.seat_order)
+        return {a: legal_moves[agent_to_seat[i]] for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
     def get_last_action_feats_(
@@ -865,7 +870,8 @@ class HanabiEnv(HanabiGame):
             output += f"Added Info: {card_added_info}\n"
 
         # available actions
-        legal_moves = self.get_legal_moves(new_state)[self.agents[current_player]]
+        acting_agent = self.agents[int(new_state.seat_order[current_player])]
+        legal_moves = self.get_legal_moves(new_state)[acting_agent]
         legal_actions = [self.action_encoding[int(a)] for a in np.where(legal_moves)[0]]
         output += f"Legal Actions: {legal_actions}\n"
 

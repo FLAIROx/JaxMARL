@@ -29,6 +29,7 @@ class State(BaseState):
     """
 
     deck: jax.Array
+    seat_order: jax.Array
     discard_pile: jax.Array
     fireworks: jax.Array
     player_hands: jax.Array
@@ -59,6 +60,7 @@ class HanabiGame(MultiAgentEnv):
         max_life_tokens=3,
         num_cards_of_rank=np.array([3, 2, 2, 2, 1]),
         color_map=["R", "Y", "G", "W", "B"],
+        shuffle_player_order=False,
     ):
         super().__init__(num_agents)
 
@@ -71,6 +73,7 @@ class HanabiGame(MultiAgentEnv):
         self.num_cards_of_rank = num_cards_of_rank
         self.deck_size = np.sum(num_cards_of_rank) * num_colors
         self.color_map = color_map
+        self.shuffle_player_order = shuffle_player_order
 
         # action ranges - useful to know
         self.discard_action_range = jnp.arange(0, self.hand_size)
@@ -86,7 +89,7 @@ class HanabiGame(MultiAgentEnv):
         )
 
     @partial(jax.jit, static_argnums=[0])
-    def get_first_state(self, deck: jax.Array) -> State:
+    def get_first_state(self, deck: jax.Array, seat_order: jax.Array) -> State:
         """Get the initial state of the game"""
 
         deck_arr: jax.Array = jnp.asarray(deck)
@@ -139,6 +142,7 @@ class HanabiGame(MultiAgentEnv):
             done=jnp.array(False),
             step=jnp.array(0),
             deck=deck_arr,
+            seat_order=seat_order,
             discard_pile=discard_pile,
             fireworks=fireworks,
             player_hands=hands,
@@ -173,20 +177,24 @@ class HanabiGame(MultiAgentEnv):
         # randomly shuffle (colour, rank) pairs
         key, _key = jax.random.split(key)
         shuffled_pairs = jax.random.permutation(_key, color_rank_pairs, axis=0)
+        if self.shuffle_player_order:
+            seat_order = jax.random.permutation(key, self.agent_range)
+        else:
+            seat_order = self.agent_range
         # generate one-hot encoded deck
         deck = self._one_hot_encode_deck(shuffled_pairs)
-        return self.get_first_state(deck)
+        return self.get_first_state(deck, seat_order)
 
     @partial(jax.jit, static_argnums=[0])
     def reset_game_from_deck(self, deck: jax.Array) -> State:
         """Reset the game from a given deck of one-hot encoded cards."""
-        return self.get_first_state(deck)
+        return self.get_first_state(deck, self.agent_range)
 
     @partial(jax.jit, static_argnums=[0])
     def reset_game_from_deck_of_pairs(self, deck_of_pairs: jax.Array) -> State:
         """Reset the game from a given deck of (color, value) pairs."""
         deck = self._one_hot_encode_deck(deck_of_pairs)
-        return self.get_first_state(deck)
+        return self.get_first_state(deck, self.agent_range)
 
     @partial(jax.jit, static_argnums=[0])
     def step_game(
