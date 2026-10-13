@@ -1202,7 +1202,7 @@ class OvercookedV2(MultiAgentEnv):
         """Assume agent took interact actions. Result depends on what agent is facing and what it is holding."""
 
         inventory = agent.inventory
-        fwd_pos = agent.get_fwd_pos()
+        fwd_pos, in_bounds = agent.pos.checked_move(agent.dir, self.width, self.height)
 
         shaped_reward = jnp.array(0, dtype=float)
 
@@ -1326,12 +1326,15 @@ class OvercookedV2(MultiAgentEnv):
 
         new_cell = jnp.array([interact_item, new_ingredients, new_extra])
 
-        new_grid = grid.at[fwd_pos.y, fwd_pos.x].set(new_cell)
+        new_grid = jnp.where(
+            in_bounds, grid.at[fwd_pos.y, fwd_pos.x].set(new_cell), grid
+        )
 
         new_inventory = (
             successful_pickup * (pile_ingredient + merged_ingredients)
             + no_effect * inventory
         )
+        new_inventory = jnp.where(in_bounds, new_inventory, inventory)
         # print("new_inventory: ", new_inventory)
         new_agent = agent.replace(inventory=new_inventory)
 
@@ -1371,7 +1374,9 @@ class OvercookedV2(MultiAgentEnv):
             * SHAPED_REWARDS["PLATE_PICKUP"]
         )
 
-        correct_delivery = successful_delivery & is_correct_recipe
+        correct_delivery = successful_delivery & is_correct_recipe & in_bounds
+        reward = jnp.where(in_bounds, reward, 0)
+        shaped_reward = jnp.where(in_bounds, shaped_reward, 0)
         return new_grid, new_agent, correct_delivery, reward, shaped_reward
 
     def is_terminal(self, state: State) -> jax.Array:
