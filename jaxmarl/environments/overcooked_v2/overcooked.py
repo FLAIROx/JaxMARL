@@ -1202,7 +1202,7 @@ class OvercookedV2(MultiAgentEnv):
         """Assume agent took interact actions. Result depends on what agent is facing and what it is holding."""
 
         inventory = agent.inventory
-        fwd_pos = agent.get_fwd_pos()
+        fwd_pos, in_bounds = agent.pos.checked_move(agent.dir, self.width, self.height)
 
         shaped_reward = jnp.array(0, dtype=float)
 
@@ -1214,14 +1214,16 @@ class OvercookedV2(MultiAgentEnv):
         plated_recipe = recipe | DynamicObject.PLATE | DynamicObject.COOKED
 
         # Booleans depending on what the object is
-        object_is_plate_pile = interact_item == StaticObject.PLATE_PILE
-        object_is_ingredient_pile = StaticObject.is_ingredient_pile(interact_item)
+        object_is_plate_pile = in_bounds & (interact_item == StaticObject.PLATE_PILE)
+        object_is_ingredient_pile = in_bounds & StaticObject.is_ingredient_pile(
+            interact_item
+        )
 
         object_is_pile = object_is_plate_pile | object_is_ingredient_pile
-        object_is_pot = interact_item == StaticObject.POT
-        object_is_goal = interact_item == StaticObject.GOAL
-        object_is_wall = interact_item == StaticObject.WALL
-        onject_is_button_recipe_indicator = (
+        object_is_pot = in_bounds & (interact_item == StaticObject.POT)
+        object_is_goal = in_bounds & (interact_item == StaticObject.GOAL)
+        object_is_wall = in_bounds & (interact_item == StaticObject.WALL)
+        onject_is_button_recipe_indicator = in_bounds & (
             interact_item == StaticObject.BUTTON_RECIPE_INDICATOR
         )
 
