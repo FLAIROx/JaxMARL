@@ -1093,11 +1093,11 @@ class OvercookedV2(MultiAgentEnv):
 
         # Interact action:
         def _interact_wrapper(carry, x):
-            agent, action = x
+            agent, action, idx = x
             is_interact = action == OvercookedActionsEnum.interact
 
             def _interact(carry, agent):
-                grid, correct_delivery, reward = carry
+                grid, correct_delivery, reward, inventories = carry
 
                 (
                     new_grid,
@@ -1105,14 +1105,16 @@ class OvercookedV2(MultiAgentEnv):
                     new_correct_delivery,
                     interact_reward,
                     shaped_reward,
-                ) = self.process_interact(
-                    grid, agent, new_agents.inventory, state.recipe
-                )
+                ) = self.process_interact(grid, agent, inventories, state.recipe)
 
+                # Agents interact in index order on the grid the previous ones
+                # left behind, so they must also see their post-interact
+                # inventories (used by the plate pickup shaping).
                 carry = (
                     new_grid,
                     correct_delivery | new_correct_delivery,
                     reward + interact_reward,
+                    inventories.at[idx].set(new_agent.inventory),
                 )
                 return carry, (new_agent, shaped_reward)
 
@@ -1120,9 +1122,9 @@ class OvercookedV2(MultiAgentEnv):
                 is_interact, _interact, lambda c, a: (c, (a, 0.0)), carry, agent
             )
 
-        carry = (grid, jnp.array(False), jnp.array(0.0))
-        xs = (new_agents, actions)
-        (new_grid, new_correct_delivery, reward), (new_agents, shaped_rewards) = (
+        carry = (grid, jnp.array(False), jnp.array(0.0), new_agents.inventory)
+        xs = (new_agents, actions, jnp.arange(self.num_agents))
+        (new_grid, new_correct_delivery, reward, _), (new_agents, shaped_rewards) = (
             jax.lax.scan(_interact_wrapper, carry, xs)
         )
 
