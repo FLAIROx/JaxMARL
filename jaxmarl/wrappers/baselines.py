@@ -429,11 +429,13 @@ class CTRolloutManager(JaxMARLWrapper):
                 {agent: obs_[agent] for agent in self.agents},
                 self.agents_one_hot,
             )
+            # zero the obs of agents that are done before the episode ends; once it
+            # ends, the env has reset and obs is the first of the next episode
             obs = jax.tree.map(
-                lambda d, o: jnp.where(d, 0.0, o),
+                lambda d, o: jnp.where(d & ~done["__all__"], 0.0, o),
                 {agent: done[agent] for agent in self.agents},
                 obs,
-            )  # ensure that the obs are 0s for done agents
+            )
         else:
             obs = obs_
         obs["__all__"] = self.global_state(obs_, state)
