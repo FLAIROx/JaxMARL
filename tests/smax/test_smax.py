@@ -658,3 +658,19 @@ def test_world_state(do_jit):
         end_idx = idx + env.num_enemies
         world_state = world_state.at[idx:end_idx].set(jnp.ones((env.num_enemies,)))
         assert jnp.allclose(obs["world_state"], world_state)
+
+
+@pytest.mark.parametrize("max_steps", [1, 5])
+def test_episode_lasts_max_steps(max_steps):
+    # Every unit stops, so nobody takes damage and only the time limit ends the
+    # episode.
+    env = make("SMAX", max_steps=max_steps)
+    key = jax.random.PRNGKey(0)
+    _, state = env.reset(key)
+    stop = {agent: jnp.array(4) for agent in env.agents}
+    for t in range(1, max_steps + 1):
+        key, key_step = jax.random.split(key)
+        _, state, _, dones, _ = env.step_env(key_step, state, stop)
+        assert bool(dones["__all__"]) == (t == max_steps), (
+            f"done={bool(dones['__all__'])} after {t} of {max_steps} steps"
+        )
