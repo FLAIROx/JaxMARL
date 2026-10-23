@@ -217,6 +217,7 @@ def make_train(config):
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                 done_batch = batchify(done, env.agents, config["NUM_ACTORS"]).squeeze()
                 transition = Transition(
+                    jnp.tile(done["__all__"], env.num_agents),
                     last_done,
                     action.squeeze(),
                     value.squeeze(),
