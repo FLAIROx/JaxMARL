@@ -384,12 +384,14 @@ class SMAX(MultiAgentEnv):
             length=self.world_steps_per_env_step,
         )
         health_after = state.unit_health
+        # Count this step before checking the time limit, so an episode lasts at
+        # most max_steps steps.
         state = state.replace(
-            done=self.is_terminal(state),
             prev_movement_actions=actions[0],
             prev_attack_actions=actions[1],
             step=state.step + 1,
         )
+        state = state.replace(done=self.is_terminal(state))
         obs = self.get_obs(state)
         dones = {
             agent: ~state.unit_alive[self.agent_ids[agent]] for agent in self.agents

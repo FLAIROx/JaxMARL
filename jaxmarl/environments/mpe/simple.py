@@ -271,14 +271,17 @@ class SimpleMPE(MultiAgentEnv):
 
         key_c = jax.random.split(key, self.num_agents)
         c = self._apply_comm_action(key_c, c, self.c_noise, self.silent)
-        done = state.step >= self.max_steps
+        # Count this step before checking the limit, so an episode lasts
+        # max_steps steps, as in PettingZoo's max_cycles.
+        step = state.step + 1
+        done = step >= self.max_steps
 
         state = state.replace(
             p_pos=p_pos,
             p_vel=p_vel,
             c=c,
             done=done,
-            step=state.step + 1,
+            step=step,
         )
 
         reward = self.rewards(state)

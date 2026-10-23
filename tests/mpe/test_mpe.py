@@ -155,9 +155,14 @@ def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
             }
             state = np_state_to_jax(env_zoo, env_jax)
 
-            obs_zoo, rew_zoo, done_zoo, _, _ = env_zoo.step(actions)
+            obs_zoo, rew_zoo, term_zoo, trunc_zoo, _ = env_zoo.step(actions)
+            # JaxMARL's done covers both termination and the time limit, which
+            # PettingZoo reports as truncation.
+            done_zoo = {a: term_zoo[a] or trunc_zoo[a] for a in term_zoo}
             key, key_step = jax.random.split(key)
-            obs_jax, state_jax, rew_jax, done_jax, _ = env_jax.step(
+            # step_env, not step, so the last step of the episode is compared
+            # before the automatic reset replaces its observation.
+            obs_jax, state_jax, rew_jax, done_jax, _ = env_jax.step_env(
                 key_step, state, actions
             )
 
@@ -167,6 +172,36 @@ def test_mpe_vs_pettingzoo(zoo_env_name, action_type):
                 assert_same_state(env_zoo, env_jax, state_jax)
 
     print(f"-- {zoo_env_name} all tests passed --")
+
+
+@pytest.mark.parametrize(
+    "env_name",
+    [
+        "MPE_simple_v3",
+        "MPE_simple_tag_v3",
+        "MPE_simple_world_comm_v3",
+        "MPE_simple_spread_v3",
+        "MPE_simple_crypto_v3",
+        "MPE_simple_speaker_listener_v4",
+        "MPE_simple_push_v3",
+        "MPE_simple_adversary_v3",
+        "MPE_simple_reference_v3",
+        "MPE_simple_facmac_v1",
+        "MPE_simple_facmac_3a_v1",
+    ],
+)
+def test_episode_lasts_max_steps(env_name):
+    env = make(env_name)
+    key = jax.random.PRNGKey(0)
+    _, state = env.reset(key)
+    step_env = jax.jit(env.step_env)
+    actions = {a: env.action_space(a).sample(key) * 0 for a in env.agents}
+    for t in range(1, env.max_steps + 1):
+        key, key_step = jax.random.split(key)
+        _, state, _, dones, _ = step_env(key_step, state, actions)
+        assert bool(dones["__all__"]) == (t == env.max_steps), (
+            f"{env_name}: done={bool(dones['__all__'])} after {t} of {env.max_steps} steps"
+        )
 
 
 zoo_mpe_env_mapper = {
