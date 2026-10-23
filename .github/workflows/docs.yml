@@ -6,6 +6,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push the generated documentation to gh-pages.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
